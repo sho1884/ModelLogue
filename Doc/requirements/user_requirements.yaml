@@ -1,0 +1,136 @@
+# ModelLogue - User Requirements
+# Language: English
+# Writing Style: Task expressions (Value Engineering)
+# Version: 1.0
+# Date: 2026-02-08
+
+metadata:
+  project: ModelLogue
+  version: "1.0"
+  date: "2026-02-08"
+  status: draft
+
+roles:
+  - id: reviewer
+    name: Reviewer
+    description: Reviews model diagrams and provides feedback
+  - id: author
+    name: Model Author
+    description: Creates PlantUML source and requests reviews
+  - id: ai
+    name: AI Assistant (Gemini)
+    description: System actor that proposes improvements through dialogue
+
+user_requirements:
+  # Phase 1 (MVP)
+  - id: UR-1.1
+    title: Edit PlantUML source
+    description: Edit PlantUML source code with syntax highlighting in the browser
+    phase: 1
+    role: author
+    acceptance_criteria:
+      - Type PlantUML source directly in the editor
+      - Paste PlantUML source from clipboard
+      - View syntax highlighting while editing
+
+  - id: UR-1.2
+    title: Preview the model diagram
+    description: Preview the PlantUML diagram as SVG in real-time while editing
+    phase: 1
+    role: author
+    acceptance_criteria:
+      - See the diagram update automatically after editing (with debounce)
+      - Pan and zoom the SVG preview
+      - See error messages when rendering fails
+      - Understand that the preview is session-only (not persisted)
+
+  - id: UR-1.3
+    title: Discuss the model with AI
+    description: Have a natural language conversation with AI about the model diagram
+    phase: 1
+    role: reviewer
+    acceptance_criteria:
+      - Send and receive messages in a chat UI
+      - AI understands the current PlantUML source as context
+      - AI provides improvement suggestions with PlantUML source diffs
+      - Conversation history is retained within the session
+
+  - id: UR-1.4
+    title: Apply AI suggestions
+    description: Apply AI-proposed PlantUML modifications with one click
+    phase: 1
+    role: author
+    acceptance_criteria:
+      - See an "Apply" button on AI modification proposals
+      - Source and preview update automatically when applied
+      - Undo an applied change to restore previous state
+
+  - id: UR-1.5
+    title: Review dialogue history
+    description: Browse the full dialogue history of the current session
+    phase: 1
+    role: reviewer
+    acceptance_criteria:
+      - View dialogue in chronological order
+      - Each message has a timestamp
+      - Track which proposals were applied to the source
+
+  - id: UR-1.6
+    title: Export the review session
+    description: Export the review session (PlantUML source + dialogue log) as a file
+    phase: 1
+    role: author
+    acceptance_criteria:
+      - Export as JSON (source code + full dialogue log)
+      - Export file includes timestamps and participant info
+
+  # Phase 2 (Collaborative)
+  - id: UR-2.1
+    title: Interact with diagram elements
+    description: Select and interact with individual elements of the model diagram
+    phase: 2
+    role: reviewer
+    acceptance_criteria:
+      - Select individual elements (classes, relationships, etc.)
+      - Attach comments/feedback to selected elements
+      - Start AI dialogue about a specific element
+
+  - id: UR-2.2
+    title: Point and review
+    description: Point at specific diagram elements to leave review comments
+    phase: 2
+    role: reviewer
+    acceptance_criteria:
+      - Click an element to open comment input UI
+      - Comments are anchored to the element visually
+      - View a list of all review comments
+
+  - id: UR-2.3
+    title: Provide feedback via Slack
+    description: Send feedback on models asynchronously through Slack
+    phase: 2
+    role: reviewer
+    acceptance_criteria:
+      - Feedback from Slack channels is automatically collected
+      - AI aggregates feedback, extracts contradictions and unresolved items
+      - Aggregated results are reflected as drafts on the model in ModelLogue
+
+  # Phase 3 (Enterprise)
+  - id: UR-3.1
+    title: Publish review to GitHub
+    description: Automatically commit model source and dialogue log to GitHub upon approval
+    phase: 3
+    role: author
+    acceptance_criteria:
+      - "Approve" action triggers auto-commit to GitHub repository
+      - Commit includes modified PlantUML source + review evidence (dialogue log JSON)
+      - Commit message includes review summary
+
+  - id: UR-3.2
+    title: Integrate with business workflows
+    description: Integrate the review process with existing business workflows via n8n
+    phase: 3
+    role: author
+    acceptance_criteria:
+      - Review start/complete events are notified to n8n
+      - n8n can trigger actions in ModelLogue (e.g., review request)

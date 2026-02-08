@@ -1,0 +1,374 @@
+# ModelLogue - System Requirements
+# Language: English
+# Writing Style: Verb + Object (Value Engineering)
+# Version: 1.0
+# Date: 2026-02-08
+
+metadata:
+  project: ModelLogue
+  version: "1.0"
+  date: "2026-02-08"
+  status: draft
+
+# ============================================================
+# Functional Requirements
+# ============================================================
+functional_requirements:
+  # --- Phase 1 (MVP) ---
+
+  - id: FR-1.1
+    title: Render PlantUML editor with syntax highlighting
+    description: Display a code editor component with PlantUML syntax highlighting
+    phase: 1
+    traces_to: UR-1.1
+    function: PlantUmlEditor
+    acceptance_criteria:
+      - Render CodeMirror editor with PlantUML language mode
+      - Emit source change events on user input
+      - Support paste from clipboard
+
+  - id: FR-1.2
+    title: Encode PlantUML source for server request
+    description: Encode PlantUML source using Deflate + Base64 for PlantUML Server API
+    phase: 1
+    traces_to: UR-1.2
+    function: encodePlantUml
+    acceptance_criteria:
+      - Accept raw PlantUML source string
+      - Return encoded string compatible with PlantUML Server URL format
+
+  - id: FR-1.3
+    title: Fetch SVG from PlantUML Server
+    description: Send encoded PlantUML source to PlantUML Server and retrieve SVG
+    phase: 1
+    traces_to: UR-1.2
+    function: PlantUmlService.renderSvg
+    acceptance_criteria:
+      - Send GET request to PlantUML Server with encoded source
+      - Return SVG string on success
+      - Return error message on server error or network failure
+      - Debounce requests (500ms after last source change)
+
+  - id: FR-1.4
+    title: Display SVG preview with pan and zoom
+    description: Render SVG in a viewport with pan and zoom controls
+    phase: 1
+    traces_to: UR-1.2
+    function: SvgPreview
+    acceptance_criteria:
+      - Render SVG from PlantUML Server response
+      - Support mouse drag for panning
+      - Support mouse wheel for zooming
+      - Display error overlay when rendering fails
+
+  - id: FR-1.5
+    title: Send chat message to AI via n8n
+    description: Send user message with PlantUML context to Gemini API via n8n webhook
+    phase: 1
+    traces_to: UR-1.3
+    function: N8nService.chat
+    acceptance_criteria:
+      - Send request to n8n webhook endpoint with current PlantUML source
+      - Include conversation history in request
+      - Stream response tokens via SSE
+      - Handle n8n/API errors gracefully
+
+  - id: FR-1.6
+    title: Render chat message list
+    description: Display chronological list of user and AI messages
+    phase: 1
+    traces_to: [UR-1.3, UR-1.5]
+    function: MessageList
+    acceptance_criteria:
+      - Render user messages and AI messages with distinct styles
+      - Display timestamp on each message
+      - Auto-scroll to latest message
+
+  - id: FR-1.7
+    title: Extract PlantUML source from AI response
+    description: Parse AI response to detect proposed PlantUML source modifications
+    phase: 1
+    traces_to: UR-1.4
+    function: parseAiResponse
+    acceptance_criteria:
+      - Detect ```plantuml``` code blocks in AI response
+      - Extract complete PlantUML source from code block
+      - Return null if no code block is found
+
+  - id: FR-1.8
+    title: Display source diff for AI proposals
+    description: Show visual diff between current source and AI-proposed source
+    phase: 1
+    traces_to: UR-1.4
+    function: SourceDiffView
+    acceptance_criteria:
+      - Render side-by-side or inline diff view
+      - Highlight added, removed, and changed lines
+      - Display "Apply" button alongside the diff
+
+  - id: FR-1.9
+    title: Apply proposed source modification
+    description: Replace current PlantUML source with AI-proposed source
+    phase: 1
+    traces_to: UR-1.4
+    function: SessionStore.applyProposal
+    acceptance_criteria:
+      - Replace currentSource in session store
+      - Record snapshot in sourceHistory
+      - Mark the ChatMessage as applied
+      - Trigger SVG preview re-render
+
+  - id: FR-1.10
+    title: Undo source modification
+    description: Revert PlantUML source to previous snapshot
+    phase: 1
+    traces_to: UR-1.4
+    function: SessionStore.undoSource
+    acceptance_criteria:
+      - Restore previous source from sourceHistory
+      - Trigger SVG preview re-render
+      - Disable undo when no history exists
+
+  - id: FR-1.11
+    title: Export session as JSON
+    description: Serialize review session data and trigger file download
+    phase: 1
+    traces_to: UR-1.6
+    function: ExportService.exportAsJson
+    acceptance_criteria:
+      - Serialize ReviewSession object to JSON string
+      - Include all messages, source history, and metadata
+      - Trigger browser file download with timestamped filename
+
+  - id: FR-1.12
+    title: Check PlantUML Server health
+    description: Verify PlantUML Server connectivity and display status
+    phase: 1
+    traces_to: UR-1.2
+    function: PlantUmlService.checkHealth
+    acceptance_criteria:
+      - Send health check request to PlantUML Server
+      - Update connection status in UI store
+      - Display status indicator in status bar
+
+  - id: FR-1.12b
+    title: Check n8n connectivity
+    description: Verify n8n webhook endpoint is reachable and display status
+    phase: 1
+    traces_to: UR-1.3
+    function: N8nService.checkHealth
+    acceptance_criteria:
+      - Send health check request to n8n
+      - Update n8n connection status in UI store
+      - Display n8n status indicator in status bar
+
+  - id: FR-1.13
+    title: Manage session state
+    description: Store and manage session data in browser memory
+    phase: 1
+    traces_to: [UR-1.1, UR-1.3, UR-1.5]
+    function: SessionStore
+    acceptance_criteria:
+      - Initialize session with unique ID and timestamp
+      - Store current PlantUML source
+      - Maintain source change history
+      - Session data lives only in browser memory (Volatile Canvas)
+
+  # --- Phase 2 (Collaborative) ---
+
+  - id: FR-2.1
+    title: Render model diagram as React Flow nodes
+    description: Convert PlantUML SVG elements into interactive React Flow nodes
+    phase: 2
+    traces_to: UR-2.1
+    function: ReactFlowCanvas
+    acceptance_criteria:
+      - Parse SVG elements into React Flow node/edge definitions
+      - Enable selection of individual nodes
+      - Emit selection events for comment attachment
+
+  - id: FR-2.2
+    title: Attach review comment to element
+    description: Create a review comment anchored to a specific diagram element
+    phase: 2
+    traces_to: UR-2.2
+    function: CommentStore.addComment
+    acceptance_criteria:
+      - Associate comment with element ID
+      - Display comment visually near the element
+      - List all comments in a comment panel
+
+  - id: FR-2.3
+    title: Collect feedback from chat apps via n8n
+    description: Receive and aggregate feedback from Slack/Teams/Discord via n8n workflows
+    phase: 2
+    traces_to: UR-2.3
+    function: N8nService.collectFeedback
+    acceptance_criteria:
+      - n8n collects messages from configured chat apps (Slack/Teams/Discord)
+      - AI aggregates and summarizes feedback
+      - Display aggregated feedback in ModelLogue
+
+  # --- Phase 3 (Enterprise) ---
+
+  - id: FR-3.1
+    title: Commit review evidence to GitHub via n8n
+    description: Auto-commit PlantUML source and dialogue log to GitHub via n8n on approval
+    phase: 3
+    traces_to: UR-3.1
+    function: N8nService.commitReviewEvidence
+    acceptance_criteria:
+      - Send approval event with session data to n8n
+      - n8n creates commit with PlantUML source file
+      - n8n includes dialogue log JSON as review evidence
+      - n8n sets commit message with review summary
+
+  - id: FR-3.2
+    title: Integrate review lifecycle with n8n workflows
+    description: Send review lifecycle events to n8n for business workflow integration
+    phase: 3
+    traces_to: UR-3.2
+    function: N8nService.notifyEvent
+    acceptance_criteria:
+      - Send webhook on review start, complete, and approve events
+      - Include session metadata in webhook payload
+      - n8n triggers configured downstream actions
+
+# ============================================================
+# Non-Functional Requirements
+# ============================================================
+non_functional_requirements:
+  - id: NFR-1
+    category: Performance
+    requirements:
+      - SVG preview update within 2 seconds of source change (including debounce)
+      - AI first response token within 5 seconds (streaming)
+      - UI interaction response within 100ms
+
+  - id: NFR-2
+    category: Security
+    requirements:
+      - Never embed API keys or secrets in frontend code
+      - Route all API calls through n8n orchestrator
+      - Sanitize user input before sending to APIs
+      - Validate PlantUML source to prevent injection
+      - Follow OWASP Top 10 guidelines
+      - Never use eval() or Function() with user input
+      - Never use dangerouslySetInnerHTML with user input
+
+  - id: NFR-3
+    category: Usability
+    requirements:
+      - Responsive design (desktop-first, tablet-compatible)
+      - Dark mode support
+      - Keyboard shortcut support for primary operations
+      - Bilingual UI (English and Japanese) via i18next
+
+  - id: NFR-4
+    category: Availability
+    requirements:
+      - Frontend deployable as static SPA
+      - Display PlantUML Server and n8n health check status
+      - Notify user when offline (PlantUML preview and AI disabled)
+      - Support self-hosted deployment (Docker Compose for PlantUML Server + n8n)
+
+  - id: NFR-5
+    category: Extensibility
+    requirements:
+      - Support all PlantUML diagram types (class, sequence, activity, etc.)
+      - Design for future diagram language extensions (e.g., Mermaid)
+      - Leave room for plugin architecture
+
+# ============================================================
+# Dependencies (MIT-compatible licenses only)
+# ============================================================
+dependencies:
+  runtime:
+    - name: react
+      version: "^19"
+      license: MIT
+      purpose: UI framework
+
+    - name: react-dom
+      version: "^19"
+      license: MIT
+      purpose: DOM rendering
+
+    - name: zustand
+      version: "^5"
+      license: MIT
+      purpose: State management
+
+    - name: plantuml-encoder
+      version: "^1"
+      license: MIT
+      purpose: PlantUML source encoding
+
+    - name: react-zoom-pan-pinch
+      version: "^3"
+      license: MIT
+      purpose: SVG pan/zoom
+
+    - name: i18next
+      version: "^24"
+      license: MIT
+      purpose: Internationalization framework
+
+    - name: react-i18next
+      version: "^15"
+      license: MIT
+      purpose: React bindings for i18next
+
+    - name: "@xyflow/react"
+      version: "^12"
+      license: MIT
+      purpose: React Flow (Phase 2)
+
+  dev:
+    - name: typescript
+      version: "^5"
+      license: Apache-2.0
+      purpose: Type system
+
+    - name: vite
+      version: "^6"
+      license: MIT
+      purpose: Build tool
+
+    - name: vitest
+      version: "^3"
+      license: MIT
+      purpose: Test runner
+
+    - name: "@testing-library/react"
+      version: "^16"
+      license: MIT
+      purpose: Component testing
+
+    - name: eslint
+      version: "^9"
+      license: MIT
+      purpose: Linting
+
+    - name: prettier
+      version: "^3"
+      license: MIT
+      purpose: Code formatting
+
+    - name: tailwindcss
+      version: "^4"
+      license: MIT
+      purpose: Utility-first CSS
+
+  infrastructure:
+    - name: plantuml-server
+      version: latest
+      license: GPL-3.0
+      purpose: PlantUML rendering (runs as separate Docker service, not bundled)
+      note: GPL is acceptable here because it runs as an independent network service, not linked into the codebase
+
+    - name: n8n
+      version: latest
+      license: Sustainable Use License (fair-code)
+      purpose: Orchestrator — AI chat relay, API key management, external service integration
+      note: Runs as a separate Docker service. Self-hostable. Not bundled into the codebase.
