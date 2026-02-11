@@ -1,7 +1,7 @@
 # ModelLogue Requirements Specification / 要求仕様書
 
-**Version / バージョン**: 1.0
-**Date / 作成日**: 2026-02-08
+**Version / バージョン**: 2.0
+**Date / 作成日**: 2026-02-11
 **Status / ステータス**: Draft / ドラフト
 
 > **Data source / データソース**: This document is a bilingual view of the YAML requirement files.
@@ -28,6 +28,7 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 - Model diagrams are "Volatile Canvas" — temporary, not the final deliverable / モデル図は「一時的な思考のキャンバス」であり最終成果物ではない
 - Human-AI "dialogue logs" are treated as the essential design asset / 人間とAIの「対話ログ」を設計の本質的な資産として扱う
 - "Lean architecture" — orchestrate external services, don't own functionality / 機能を抱え込まず外部サービスをオーケストレーションする「持たないアーキテクチャ」
+- Models have multiple representations: diagram, table, test cases, grammar / モデルは図・表・テストケース・文法など複数の表現を持つ
 
 ## 3. Roles / ユーザーとロール
 
@@ -37,38 +38,96 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 | Model Author / モデル作成者 | Creates PlantUML source and requests reviews / PlantUMLソースを作成・投入しレビューを依頼する |
 | AI (Gemini) | System actor that proposes improvements through dialogue / 対話を通じて改善案を提案するシステムアクター |
 
-## 4. User Requirements / ユーザー要求
+## 4. Screen Layout / 画面構成
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Header (Logo / Session Name / Export)                        │
+│  ヘッダー（ロゴ / セッション名 / エクスポート）                    │
+├──────────────────────────────────────┬───────────────────────┤
+│                                      │                       │
+│  Model Diagram (Primary View)        │  Chat / Review        │
+│  モデル図（主役、最大領域）             │  Panel                │
+│  (Pan / Zoom / Click)                │  チャット/レビュー      │
+│                                      │  パネル               │
+│                                      │                       │
+├─ ─ ─ ─ ─ drag to resize ─ ─ ─ ─ ─ ─┤                       │
+│  ▲ Analysis Panel (Pull-up, Tabbed)  │                       │
+│  ┌──────┬───────┬──────────┬───────┐ │                       │
+│  │Source│Table  │TestCases │EBNF   │ │                       │
+│  ├──────┴───────┴──────────┴───────┤ │                       │
+│  │  PlantUML source editor         │ │                       │
+│  │  or analysis table/test cases   │ │                       │
+│  └─────────────────────────────────┘ │                       │
+├──────────────────────────────────────┴───────────────────────┤
+│  Status Bar (PlantUML Server / n8n / AI Status)               │
+│  ステータスバー                                                │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Layout key points / レイアウトのポイント**:
+- Model diagram is the primary view (center, largest area) / モデル図が主役（中央、最大領域）
+- Analysis panel slides up from the bottom with tabs / 解析パネルは下からスライドアップ（タブ付き）
+- Chat panel spans full height on the right / チャットパネルは右側で全高さに渡る
+- Analysis panel is resizable and collapsible / 解析パネルはリサイズ・折りたたみ可能
+
+**Analysis Panel tabs / 解析パネルのタブ**:
+
+| Tab / タブ | Content / 内容 | Example / 例 |
+|---|---|---|
+| Source | PlantUML source editor / PlantUMLソースエディタ | Syntax-highlighted code editing |
+| Table | Model-related analysis table / モデル関連の解析表 | State transition table, factor/level table / 状態遷移表、因子・水準表 |
+| TestCases | Generated test cases / 生成されたテストケース | N-switch coverage / Nスイッチカバレッジ |
+| EBNF | Constrained PlantUML grammar / 制限されたPlantUML文法 | Model-type-optimized EBNF grammar |
+
+## 5. User Requirements / ユーザー要求
 
 > Writing style: Task expressions / 記述スタイル: タスク表現
 > Data source: [`user_requirements.yaml`](./user_requirements.yaml)
 
-### Phase 1 (MVP)
+### Phase 1 (MVP) — Core Review Platform / コアレビュー基盤
 
 | ID | Title / タイトル | Description / 説明 | Role |
 |---|---|---|---|
-| UR-1.1 | Edit PlantUML source / PlantUMLソースを編集する | Edit PlantUML source code with syntax highlighting in the browser / ブラウザでシンタックスハイライト付きのPlantUMLソースを編集する | Author |
-| UR-1.2 | Preview the model diagram / モデル図をプレビューする | Preview the PlantUML diagram as SVG in real-time while editing / 編集中にPlantUML図をリアルタイムでSVGプレビューする | Author |
-| UR-1.3 | Discuss the model with AI / AIとモデルについて対話する | Have a natural language conversation with AI about the model diagram / モデル図についてAIと自然言語で対話する | Reviewer |
-| UR-1.4 | Apply AI suggestions / AIの提案を適用する | Apply AI-proposed PlantUML modifications with one click / AIが提案したPlantUML修正をワンクリックで適用する | Author |
-| UR-1.5 | Review dialogue history / 対話履歴を確認する | Browse the full dialogue history of the current session / 現在のセッションの全対話履歴を閲覧する | Reviewer |
-| UR-1.6 | Export the review session / レビューセッションをエクスポートする | Export the review session as a file / レビューセッションをファイルとしてエクスポートする | Author |
+| UR-1.1 | Edit PlantUML source / PlantUMLソースを編集する | Edit source in the analysis panel's Source tab / 解析パネルのSourceタブでソースを編集する | Author |
+| UR-1.2 | Preview the model diagram / モデル図をプレビューする | Preview as SVG in the primary view area (center, largest) / 主要領域（中央、最大）でSVGプレビュー | Author |
+| UR-1.3 | Discuss the model with AI / AIとモデルについて対話する | Chat with AI in the right panel about diagram and analysis views / 右パネルで図と解析ビューについてAIと対話 | Reviewer |
+| UR-1.4 | Apply AI suggestions / AIの提案を適用する | Apply AI-proposed modifications with one click / AIの修正提案をワンクリックで適用 | Author |
+| UR-1.5 | Review dialogue history / 対話履歴を確認する | Browse full dialogue history of the session / セッションの全対話履歴を閲覧 | Reviewer |
+| UR-1.6 | Export the review session / セッションをエクスポートする | Export source + dialogue log + artifacts as JSON / ソース＋対話ログ＋成果物をJSONエクスポート | Author |
+| UR-1.7 | Resize the analysis panel / 解析パネルをリサイズする | Drag to resize, collapse/expand the bottom panel / ドラッグでリサイズ、折りたたみ/展開 | Reviewer |
 
-### Phase 2 (Collaborative)
-
-| ID | Title / タイトル | Description / 説明 | Role |
-|---|---|---|---|
-| UR-2.1 | Interact with diagram elements / 図の要素を操作する | Select and interact with individual elements of the model diagram / モデル図の個別要素を選択しインタラクションする | Reviewer |
-| UR-2.2 | Point and review / ポインティング・レビューする | Point at specific diagram elements to leave review comments / 図の要素を指差ししてレビューコメントを付ける | Reviewer |
-| UR-2.3 | Provide feedback via chat apps / チャットアプリ経由でフィードバックする | Send feedback asynchronously via Slack/Teams/Discord (n8n relay) / Slack/Teams/Discord経由で非同期にフィードバック（n8n中継） | Reviewer |
-
-### Phase 3 (Enterprise)
+### Phase 2 (Analytical Review) — Model Analysis + Interactive / モデル解析＋インタラクティブ
 
 | ID | Title / タイトル | Description / 説明 | Role |
 |---|---|---|---|
-| UR-3.1 | Publish review to GitHub / レビューをGitHubに公開する | Auto-commit model source and dialogue log to GitHub upon approval / 承認時にモデルソース＋対話ログをGitHubへ自動コミットする | Author |
-| UR-3.2 | Integrate with business workflows / 業務フローに統合する | Integrate the review process with existing workflows via n8n / n8n経由でレビュープロセスを業務フローに統合する | Author |
+| UR-2.1 | View analysis table / 解析表を見る | View tabular model representation (state transition table, factor/level table) in Table tab / Tableタブでモデルの表形式表現を表示 | Reviewer |
+| UR-2.2 | View generated test cases / テストケースを見る | View derived test cases (N-switch coverage, etc.) in TestCases tab / TestCasesタブで導出テストケースを表示 | Reviewer |
+| UR-2.3 | View EBNF grammar / EBNF文法を見る | View model-type-optimized constrained grammar in EBNF tab / EBNFタブでモデル種別最適化文法を表示 | Author |
+| UR-2.4 | Navigate between views / ビュー間をナビゲートする | Bidirectional highlight: click diagram → highlight table, and vice versa / 双方向ハイライト連動 | Reviewer |
+| UR-2.5 | Auto-detect model type / モデル種別を自動検出する | Auto-detect from PlantUML keywords and show relevant tabs / キーワードから自動検出し関連タブを表示 | Author |
+| UR-2.6 | Interact with elements / 要素を操作する | Select elements via React Flow, attach comments, start AI dialogue / React Flowで要素選択・コメント付与・AI対話 | Reviewer |
+| UR-2.7 | Point and review / ポインティング・レビューする | Point at elements to leave anchored review comments / 要素を指差ししてレビューコメント | Reviewer |
 
-## 5. System Requirements (Phase 1) / システム要求（Phase 1）
+### Phase 3 (Collaborative + Enterprise) / コラボレーション＋エンタープライズ
+
+| ID | Title / タイトル | Description / 説明 | Role |
+|---|---|---|---|
+| UR-3.1 | Feedback via chat apps / チャットアプリでフィードバック | Async feedback via Slack/Teams/Discord (n8n relay) / n8n中継でSlack/Teams/Discord非同期フィードバック | Reviewer |
+| UR-3.2 | Publish to GitHub / GitHubに公開する | Auto-commit source + dialogue log + artifacts via n8n / n8n経由で自動コミット | Author |
+| UR-3.3 | Business workflow integration / 業務フロー統合 | Integrate review process with workflows via n8n / n8n経由でレビュープロセスを業務フローに統合 | Author |
+
+## 6. Supported Model Types / 対応モデル種別
+
+| Model Type / モデル種別 | PlantUML | Analysis Table / 解析表 | Test Cases / テストケース |
+|---|---|---|---|
+| State Transition / 状態遷移 | `@startuml` (state) | State transition table / 状態遷移表 | N-switch coverage / Nスイッチカバレッジ |
+| Classification Tree / 分類ツリー | `@startmindmap` | Factor/level table / 因子・水準表 | Combinatorial tests / 組合せテスト |
+| Class Diagram / クラス図 | `@startuml` (class) | Responsibility matrix / 責務マトリクス | — |
+| Sequence Diagram / シーケンス図 | `@startuml` (sequence) | Message trace table / メッセージトレース表 | — |
+| Activity Diagram / アクティビティ図 | `@startuml` (activity) | Decision table / デシジョンテーブル | Path coverage / パスカバレッジ |
+
+## 7. System Requirements (Phase 1) / システム要求（Phase 1）
 
 > Writing style: Verb + Object / 記述スタイル: 動詞＋目的語
 > Data source: [`system_requirements.yaml`](./system_requirements.yaml)
@@ -89,8 +148,10 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 | FR-1.12 | Check PlantUML Server health | `PlantUmlService.checkHealth` | UR-1.2 |
 | FR-1.12b | Check n8n connectivity | `N8nService.checkHealth` | UR-1.3 |
 | FR-1.13 | Manage session state | `SessionStore` | UR-1.1, UR-1.3, UR-1.5 |
+| FR-1.14 | Render resizable analysis panel with tabs | `AnalysisPanel` | UR-1.1, UR-1.7 |
+| FR-1.15 | Render diagram as primary view | `DiagramView` | UR-1.2 |
 
-## 6. Non-Functional Requirements / 非機能要求
+## 8. Non-Functional Requirements / 非機能要求
 
 | ID | Category / カテゴリ | Key Requirements / 主要要件 |
 |---|---|---|
@@ -100,32 +161,7 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 | NFR-4 | Availability / 可用性 | Static SPA hosting, PlantUML/n8n health check, offline notification, self-hosted (Docker Compose) |
 | NFR-5 | Extensibility / 拡張性 | All PlantUML diagram types, future Mermaid support, plugin architecture |
 
-## 7. Screen Layout (Phase 1) / 画面構成（Phase 1）
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Header (Logo / Session Name / Export)                        │
-│  ヘッダー（ロゴ / セッション名 / エクスポート）                    │
-├────────────────┬──────────────────┬──────────────────────────┤
-│                │                  │                          │
-│  PlantUML      │  SVG Preview     │  AI Chat Panel           │
-│  Editor        │  (Pan/Zoom)      │  AIチャットパネル           │
-│  エディタ       │  SVGプレビュー    │                          │
-│                │                  │  ┌──────────────────┐    │
-│                │                  │  │ Message History   │    │
-│                │                  │  │ 対話履歴           │    │
-│                │                  │  │                    │    │
-│                │                  │  ├──────────────────┤    │
-│                │                  │  │ Input Area        │    │
-│                │                  │  │ 入力エリア         │    │
-│                │                  │  └──────────────────┘    │
-├────────────────┴──────────────────┴──────────────────────────┤
-│  Status Bar (PlantUML Server / n8n / AI Status)               │
-│  ステータスバー（PlantUML Server / n8n接続状態 / AI状態）        │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## 8. Data Model / データモデル
+## 9. Data Model / データモデル
 
 ```typescript
 interface ReviewSession {
@@ -155,16 +191,16 @@ interface SourceSnapshot {
 }
 ```
 
-## 9. External Interfaces / 外部インターフェース
+## 10. External Interfaces / 外部インターフェース
 
-### 9.1 PlantUML Server API
+### 10.1 PlantUML Server API
 
 - **Endpoint**: `http://localhost:8080/svg/{encoded}` (Docker local)
 - **Method**: GET
 - **Input**: PlantUML source encoded with Deflate + Base64
 - **Output**: SVG image
 
-### 9.2 n8n Webhook (Chat Relay)
+### 10.2 n8n Webhook (Chat Relay)
 
 - **Endpoint**: `{n8n_base_url}/webhook/modellogue-chat`
 - **Method**: POST
@@ -172,18 +208,21 @@ interface SourceSnapshot {
 - **Output**: AI text response (streaming via SSE)
 - **Note**: n8n internally calls Gemini 2.5 Flash API with API key managed on n8n side
 
-## 10. Constraints / 制約事項
+## 11. Constraints / 制約事項
 
 - No data persistence in the tool itself (Volatile Canvas philosophy) / 本ツール自体はデータの永続化を行わない
 - Session data lives only in browser memory / セッションデータはブラウザのメモリ上にのみ保持
 - Export (Phase 1) or GitHub (Phase 3) for persistence / 永続化にはエクスポートまたはGitHub連携を使用
 - Network connectivity to PlantUML Server and n8n is required / PlantUML Serverとn8nへのネットワーク接続が必須
 
-## 11. Glossary / 用語集
+## 12. Glossary / 用語集
 
 | Term / 用語 | Definition / 定義 |
 |---|---|
 | Volatile Canvas | Temporary thinking canvas. Diagrams exist only during the session / 一時的な思考のキャンバス。セッション中のみ存在 |
 | Review Evidence / レビュー証跡 | Set of model source + full dialogue log. Records the decision-making process / モデルソース＋全対話ログのセット |
 | Review Hub | ModelLogue frontend UI / ModelLogueのフロントエンドUI |
+| Analysis Panel / 解析パネル | Bottom pull-up panel with tabs for source, table, test cases, EBNF / 下からスライドアップするタブ付きパネル |
 | Pointing Review / ポインティング・レビュー | Review method by pointing at diagram elements / 図の要素を指差しして行うレビュー方式 |
+| Bidirectional Highlighting / 双方向ハイライト | Click diagram element → highlight table row, and vice versa / 図の要素クリック→表の行ハイライト、その逆も |
+| N-switch Coverage / Nスイッチカバレッジ | Test technique covering state transition sequences of length N / 長さNの状態遷移シーケンスをカバーするテスト技法 |

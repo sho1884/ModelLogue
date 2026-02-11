@@ -174,24 +174,123 @@ functional_requirements:
       - Maintain source change history
       - Session data lives only in browser memory (Volatile Canvas)
 
-  # --- Phase 2 (Collaborative) ---
+  - id: FR-1.14
+    title: Render resizable analysis panel with tabs
+    description: >
+      Display a bottom pull-up panel with tabbed views.
+      Phase 1 includes Source tab. Additional tabs (Table, TestCases, EBNF)
+      are added in Phase 2.
+    phase: 1
+    traces_to: [UR-1.1, UR-1.7]
+    function: AnalysisPanel
+    acceptance_criteria:
+      - Render a panel at the bottom of the diagram area with tab navigation
+      - Source tab contains the PlantUML editor (from FR-1.1)
+      - Panel is vertically resizable via drag handle
+      - Panel can be collapsed to maximize diagram area
+      - Panel can be expanded to show more content
+      - Panel state (size, active tab) persists within the session
+
+  - id: FR-1.15
+    title: Render diagram as primary view
+    description: >
+      Display the model diagram (SVG) as the dominant primary view area,
+      occupying the center and largest portion of the screen
+    phase: 1
+    traces_to: UR-1.2
+    function: DiagramView
+    acceptance_criteria:
+      - Diagram occupies the main screen area (above analysis panel, left of chat)
+      - Diagram area resizes proportionally when analysis panel resizes
+      - Diagram area maximizes when analysis panel is collapsed
+
+  # --- Phase 2 (Analytical Review) ---
 
   - id: FR-2.1
+    title: Generate analysis table from PlantUML source
+    description: >
+      Parse PlantUML source to generate a model-specific analysis table
+      (e.g., state transition table, factor/level table)
+    phase: 2
+    traces_to: UR-2.1
+    function: TableGenerator
+    acceptance_criteria:
+      - Parse state diagram source into state transition table
+        (states × events matrix or before/after state matrix)
+      - Parse classification tree (mindmap) into factor/level table
+      - Display table in the Table tab of analysis panel
+      - Table updates reactively when source changes
+
+  - id: FR-2.2
+    title: Generate test cases from model
+    description: >
+      Derive test cases from the analysis table
+      (e.g., N-switch coverage from state transition table)
+    phase: 2
+    traces_to: UR-2.2
+    function: TestCaseGenerator
+    acceptance_criteria:
+      - Generate N-switch coverage test cases from state transition table
+      - Display test cases in the TestCases tab
+      - Show coverage metrics
+
+  - id: FR-2.3
+    title: Display EBNF-constrained grammar
+    description: >
+      Show the EBNF grammar that constrains PlantUML syntax
+      for the current model type
+    phase: 2
+    traces_to: UR-2.3
+    function: EbnfView
+    acceptance_criteria:
+      - Display EBNF grammar in the EBNF tab
+      - Grammar is specific to the detected model type
+      - Syntax highlighting for EBNF notation
+
+  - id: FR-2.4
+    title: Highlight diagram-table correspondence bidirectionally
+    description: >
+      When user clicks an element in the diagram, highlight the
+      corresponding row in the table, and vice versa
+    phase: 2
+    traces_to: UR-2.4
+    function: BidirectionalHighlighter
+    acceptance_criteria:
+      - Click diagram element → highlight table row/cell
+      - Click table row/cell → highlight diagram element
+      - Visual highlight is immediate and clear
+      - Works for diagram ↔ table and diagram ↔ test cases
+
+  - id: FR-2.5
+    title: Detect model type from PlantUML source
+    description: >
+      Analyze PlantUML source keywords to detect the model type
+      and show/hide relevant analysis tabs
+    phase: 2
+    traces_to: UR-2.5
+    function: ModelTypeDetector
+    acceptance_criteria:
+      - Detect state diagram from 'state' keyword or '[*]' syntax
+      - Detect mindmap/classification tree from '@startmindmap'
+      - Show relevant tabs (Table, TestCases) based on detected type
+      - Allow manual override of auto-detected type
+
+  - id: FR-2.6
     title: Render model diagram as React Flow nodes
     description: Convert PlantUML SVG elements into interactive React Flow nodes
     phase: 2
-    traces_to: UR-2.1
+    traces_to: UR-2.6
     function: ReactFlowCanvas
     acceptance_criteria:
       - Parse SVG elements into React Flow node/edge definitions
       - Enable selection of individual nodes
       - Emit selection events for comment attachment
 
-  - id: FR-2.2
+  - id: FR-2.7
     title: Attach review comment to element
     description: Create a review comment anchored to a specific diagram element
     phase: 2
-    traces_to: UR-2.2
+    traces_to: UR-2.7
     function: CommentStore.addComment
     acceptance_criteria:
       - Associate comment with element ID

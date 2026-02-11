@@ -1,13 +1,13 @@
 # ModelLogue - User Requirements
 # Language: English
 # Writing Style: Task expressions (Value Engineering)
-# Version: 1.0
-# Date: 2026-02-08
+# Version: 2.0
+# Date: 2026-02-11
 
 metadata:
   project: ModelLogue
-  version: "1.0"
-  date: "2026-02-08"
+  version: "2.0"
+  date: "2026-02-11"
   status: draft
 
 roles:
@@ -21,39 +21,82 @@ roles:
     name: AI Assistant (Gemini)
     description: System actor that proposes improvements through dialogue
 
+# ============================================================
+# UI Layout Concept
+# ============================================================
+# The screen is divided into three main areas:
+#
+# 1. Model Diagram (Primary View) — Center, largest area
+#    The model diagram (SVG) dominates the screen. This is
+#    the main subject of review.
+#
+# 2. Analysis Panel (Pull-up, Tabbed) — Bottom of diagram area
+#    A resizable panel that slides up from the bottom.
+#    Contains tabs for:
+#    - Source: PlantUML source editor
+#    - Table: Model-related analysis table (e.g., state transition table)
+#    - TestCases: Generated test cases (e.g., N-switch coverage)
+#    - EBNF: Constrained PlantUML grammar for the model type
+#
+# 3. Chat / Review Panel — Right side
+#    AI chat and review comments panel.
+#    Spans the full height (alongside both diagram and analysis panel).
+#
+# ┌──────────────────────────────────┬──────────────┐
+# │  Model Diagram (Primary)        │  Chat/Review  │
+# │                                  │  Panel        │
+# ├─ ─ ─ drag to resize ─ ─ ─ ─ ─ ─┤              │
+# │  ▲ Analysis Panel [tabs]        │              │
+# │  [Source|Table|TestCases|EBNF]  │              │
+# ├──────────────────────────────────┴──────────────┤
+# │  Status Bar                                      │
+# └──────────────────────────────────────────────────┘
+
 user_requirements:
-  # Phase 1 (MVP)
+  # ============================================================
+  # Phase 1 (MVP) — Core Review Platform
+  # ============================================================
+
   - id: UR-1.1
     title: Edit PlantUML source
-    description: Edit PlantUML source code with syntax highlighting in the browser
+    description: >
+      Edit PlantUML source code with syntax highlighting
+      in the analysis panel's Source tab
     phase: 1
     role: author
     acceptance_criteria:
-      - Type PlantUML source directly in the editor
+      - Type PlantUML source directly in the Source tab editor
       - Paste PlantUML source from clipboard
       - View syntax highlighting while editing
+      - Source tab is located in the analysis panel (bottom pull-up area)
 
   - id: UR-1.2
     title: Preview the model diagram
-    description: Preview the PlantUML diagram as SVG in real-time while editing
+    description: >
+      Preview the PlantUML diagram as SVG in the primary view area
+      (center of screen, largest area) in real-time while editing
     phase: 1
     role: author
     acceptance_criteria:
-      - See the diagram update automatically after editing (with debounce)
+      - Model diagram occupies the main screen area (center, largest)
+      - Diagram updates automatically after editing (with debounce)
       - Pan and zoom the SVG preview
       - See error messages when rendering fails
-      - Understand that the preview is session-only (not persisted)
+      - Preview is session-only (not persisted — Volatile Canvas)
 
   - id: UR-1.3
     title: Discuss the model with AI
-    description: Have a natural language conversation with AI about the model diagram
+    description: >
+      Have a natural language conversation with AI about the model diagram
+      and its related analysis views (tables, test cases, grammar)
     phase: 1
     role: reviewer
     acceptance_criteria:
-      - Send and receive messages in a chat UI
+      - Send and receive messages in the chat panel (right side)
       - AI understands the current PlantUML source as context
       - AI provides improvement suggestions with PlantUML source diffs
       - Conversation history is retained within the session
+      - Chat panel spans the full height alongside diagram and analysis panel
 
   - id: UR-1.4
     title: Apply AI suggestions
@@ -77,25 +120,114 @@ user_requirements:
 
   - id: UR-1.6
     title: Export the review session
-    description: Export the review session (PlantUML source + dialogue log) as a file
+    description: >
+      Export the review session (PlantUML source + dialogue log +
+      analysis artifacts) as a file
     phase: 1
     role: author
     acceptance_criteria:
       - Export as JSON (source code + full dialogue log)
       - Export file includes timestamps and participant info
 
-  # Phase 2 (Collaborative)
+  - id: UR-1.7
+    title: Resize the analysis panel
+    description: >
+      Drag the analysis panel boundary to resize it vertically,
+      or collapse/expand it to maximize the diagram view
+    phase: 1
+    role: reviewer
+    acceptance_criteria:
+      - Drag the top edge of the analysis panel to resize vertically
+      - Collapse the panel to maximize the diagram area
+      - Expand the panel to see more analysis content
+      - Panel state (size, active tab) persists within the session
+
+  # ============================================================
+  # Phase 2 (Analytical Review) — Model Analysis + Interactive
+  # ============================================================
+
   - id: UR-2.1
-    title: Interact with diagram elements
-    description: Select and interact with individual elements of the model diagram
+    title: View model-related analysis table
+    description: >
+      View a tabular representation of the model alongside the diagram.
+      For example: state transition table for state diagrams,
+      factor/level table for classification trees.
+      Displayed in the analysis panel's Table tab.
     phase: 2
     role: reviewer
     acceptance_criteria:
-      - Select individual elements (classes, relationships, etc.)
+      - State transition diagram shows a state transition table
+        (states × events matrix, or before/after state matrix)
+      - Classification tree shows a factor/level table
+      - Table is displayed in the Table tab of the analysis panel
+      - Table updates when the source or diagram changes
+
+  - id: UR-2.2
+    title: View generated test cases
+    description: >
+      View test cases derived from the model.
+      For example: N-switch coverage table for state transition models.
+      Displayed in the analysis panel's TestCases tab.
+    phase: 2
+    role: reviewer
+    acceptance_criteria:
+      - State transition model generates N-switch coverage test cases
+      - Test cases are displayed in the TestCases tab
+      - Test case coverage metrics are shown
+
+  - id: UR-2.3
+    title: View EBNF-constrained grammar
+    description: >
+      View the PlantUML source constrained to an EBNF grammar
+      optimized for the current model type and review purpose.
+      Displayed in the analysis panel's EBNF tab.
+    phase: 2
+    role: author
+    acceptance_criteria:
+      - EBNF grammar restricts PlantUML syntax to the relevant subset
+      - Grammar is tailored to the detected model type
+      - Constrained source is displayed in the EBNF tab
+
+  - id: UR-2.4
+    title: Navigate between diagram and analysis views
+    description: >
+      Click an element in the diagram to highlight the corresponding
+      row/cell in the analysis table, and vice versa
+      (bidirectional highlighting)
+    phase: 2
+    role: reviewer
+    acceptance_criteria:
+      - Click a state in the diagram → highlight the row in the table
+      - Click a row in the table → highlight the element in the diagram
+      - Highlighting is visually clear and immediate
+      - Works across diagram ↔ table, diagram ↔ test cases
+
+  - id: UR-2.5
+    title: Auto-detect model type and show relevant tabs
+    description: >
+      Automatically detect the model type from the PlantUML source
+      and display the relevant analysis tabs
+    phase: 2
+    role: author
+    acceptance_criteria:
+      - Detect state diagram → show state transition table + N-switch tabs
+      - Detect classification tree / mindmap → show factor/level table tab
+      - Tabs update when the model type changes
+      - Manual override is available if auto-detection is incorrect
+
+  - id: UR-2.6
+    title: Interact with diagram elements
+    description: >
+      Select and interact with individual elements of the model diagram
+      (React Flow integration)
+    phase: 2
+    role: reviewer
+    acceptance_criteria:
+      - Select individual elements (states, classes, relationships, etc.)
       - Attach comments/feedback to selected elements
       - Start AI dialogue about a specific element
 
-  - id: UR-2.2
+  - id: UR-2.7
     title: Point and review
     description: Point at specific diagram elements to leave review comments
     phase: 2
@@ -105,28 +237,35 @@ user_requirements:
       - Comments are anchored to the element visually
       - View a list of all review comments
 
-  - id: UR-2.3
-    title: Provide feedback via Slack
-    description: Send feedback on models asynchronously through Slack
-    phase: 2
+  # ============================================================
+  # Phase 3 (Collaborative + Enterprise)
+  # ============================================================
+
+  - id: UR-3.1
+    title: Provide feedback via chat apps
+    description: >
+      Send feedback on models asynchronously through
+      Slack, Teams, or Discord (relayed by n8n)
+    phase: 3
     role: reviewer
     acceptance_criteria:
-      - Feedback from Slack channels is automatically collected
+      - Feedback from chat app channels is collected via n8n
       - AI aggregates feedback, extracts contradictions and unresolved items
-      - Aggregated results are reflected as drafts on the model in ModelLogue
+      - Aggregated results are reflected as drafts on the model
 
-  # Phase 3 (Enterprise)
-  - id: UR-3.1
+  - id: UR-3.2
     title: Publish review to GitHub
-    description: Automatically commit model source and dialogue log to GitHub upon approval
+    description: >
+      Automatically commit model source, dialogue log, and analysis
+      artifacts to GitHub upon approval
     phase: 3
     role: author
     acceptance_criteria:
-      - "Approve" action triggers auto-commit to GitHub repository
-      - Commit includes modified PlantUML source + review evidence (dialogue log JSON)
+      - "Approve" action triggers auto-commit via n8n to GitHub
+      - Commit includes PlantUML source + review evidence (dialogue log JSON)
       - Commit message includes review summary
 
-  - id: UR-3.2
+  - id: UR-3.3
     title: Integrate with business workflows
     description: Integrate the review process with existing business workflows via n8n
     phase: 3
@@ -134,3 +273,20 @@ user_requirements:
     acceptance_criteria:
       - Review start/complete events are notified to n8n
       - n8n can trigger actions in ModelLogue (e.g., review request)
+
+# ============================================================
+# Supported Model Types (reference)
+# ============================================================
+# The following model types and their related analysis views
+# are targeted for support:
+#
+# | Model Type              | PlantUML keyword   | Analysis Table           | Test Cases          |
+# |-------------------------|--------------------|--------------------------|---------------------|
+# | State Transition Diagram| @startuml (state)  | State Transition Table   | N-switch Coverage   |
+# | Classification Tree     | @startmindmap      | Factor/Level Table       | Combinatorial Tests |
+# | Class Diagram           | @startuml (class)  | Responsibility Matrix    | —                   |
+# | Sequence Diagram        | @startuml (seq)    | Message Trace Table      | —                   |
+# | Activity Diagram        | @startuml (activity)| Decision Table          | Path Coverage       |
+#
+# Note: This table is a target reference. Actual support depends on
+# implementation priority and feasibility.
