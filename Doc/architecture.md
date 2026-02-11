@@ -1,84 +1,152 @@
 # ModelLogue アーキテクチャ設計書
 
-**バージョン**: 1.1
-**作成日**: 2026-02-08
+**バージョン**: 2.0
+**作成日**: 2026-02-11
 **ステータス**: ドラフト
 
 ---
 
 ## 1. アーキテクチャ概要
 
-ModelLogueは「持たないアーキテクチャ」を徹底する。フロントエンドSPAは純粋なUIであり、秘密情報を一切持たない。
-AIとの対話やAPI連携はすべて**n8n（オーケストレーター）**が担い、ユーザーは自分のn8nインスタンスにAPIキーを設定する。
+ModelLogueは「持たないアーキテクチャ」を徹底する。フロントエンドSPAは純粋なUIであり、重い処理はすべて外部サービス（PlantUML Server、n8n + LLM）に委譲する。
+
+### システム構成図
 
 ```
-┌────────────────────────────────────────────────────────┐
-│               ブラウザ（SPA — 純粋なUI）                  │
-│  ┌─────────┐  ┌──────────┐  ┌───────────────────────┐ │
-│  │ エディタ  │  │ プレビュー │  │ AIチャットパネル       │ │
-│  │ パネル   │  │ パネル    │  │ （最低限のチャット中継） │ │
-│  └────┬────┘  └─────┬────┘  └──────────┬────────────┘ │
-│       │              │                  │               │
-│  ┌────┴──────────────┴──────────────────┴───────────┐  │
-│  │            ステート管理 (Zustand)                   │  │
-│  └────┬──────────────┬──────────────────┬───────────┘  │
-│       │              │                  │               │
-│  ┌────┴────┐  ┌──────┴──────┐  ┌───────┴───────────┐  │
-│  │PlantUML │  │ n8n         │  │ Export            │  │
-│  │Service  │  │ Service     │  │ Service           │  │
-│  └────┬────┘  └──────┬──────┘  └───────┬───────────┘  │
-└───────┼──────────────┼─────────────────┼───────────────┘
-        │              │                 │
-        ▼              ▼                 ▼
-  ┌──────────┐  ┌──────────────────┐  ┌──────────┐
-  │ PlantUML │  │  n8n             │  │ ファイル   │
-  │ Server   │  │  (Docker)        │  │ ダウンロード│
-  │ (Docker) │  │                  │  └──────────┘
-  └──────────┘  │  ┌────────────┐  │
-                │  │ Gemini API │  │
-                │  │ (中継)     │  │
-                │  ├────────────┤  │
-                │  │ Slack/     │  │
-                │  │ Teams/     │  │
-                │  │ Discord    │  │
-                │  │ (任意連携)  │  │
-                │  ├────────────┤  │
-                │  │ GitHub     │  │
-                │  │ (Phase 3)  │  │
-                │  └────────────┘  │
-                └──────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    ブラウザ（SPA — 純粋なUI）                       │
+│                                                                  │
+│  ┌─────────────────────────────┐  ┌───────────────────────────┐  │
+│  │     DiagramView (SVG)       │  │     ChatPanel             │  │
+│  │     モデル図（主役）          │  │     AI対話                 │  │
+│  ├─────────────────────────────┤  │                           │  │
+│  │     AnalysisPanel (タブ)     │  │                           │  │
+│  │  [Source|Table|TestCases|EBNF]│  │                           │  │
+│  └──────────┬──────────────────┘  └────────────┬──────────────┘  │
+│             │                                  │                 │
+│  ┌──────────┴──────────────────────────────────┴──────────────┐  │
+│  │                    Zustand ストア                            │  │
+│  └──────┬───────────────────┬────────────────────┬────────────┘  │
+│         │                   │                    │               │
+│  ┌──────┴──────┐  ┌────────┴────────┐  ┌────────┴────────────┐  │
+│  │ PlantUml    │  │ n8n             │  │ TestCase            │  │
+│  │ Service     │  │ Service         │  │ Engine              │  │
+│  │ (HTTP GET)  │  │ (Webhook POST)  │  │ (純粋アルゴリズム)    │  │
+│  └──────┬──────┘  └────────┬────────┘  └─────────────────────┘  │
+└─────────┼──────────────────┼─────────────────────────────────────┘
+          │                  │
+          ▼                  ▼
+  ┌──────────────┐  ┌──────────────────────┐
+  │ PlantUML     │  │  n8n (Docker)         │
+  │ Server       │  │  ┌────────────────┐  │
+  │ (Docker)     │  │  │ Gemini API     │  │
+  │              │  │  │ (チャット中継)   │  │
+  │ source → SVG │  │  │ (テーブル生成)   │  │
+  └──────────────┘  │  ├────────────────┤  │
+                    │  │ Slack/Teams/   │  │
+                    │  │ Discord        │  │
+                    │  │ (Phase 3)      │  │
+                    │  ├────────────────┤  │
+                    │  │ GitHub API     │  │
+                    │  │ (Phase 3)      │  │
+                    │  └────────────────┘  │
+                    └──────────────────────┘
 ```
 
 ## 2. 設計原則
 
-### 2.1 フロントエンドは純粋なUI
+### 2.1 持たないアーキテクチャ
 
-- バックエンドを持たず、秘密情報（APIキー等）は一切フロントエンドに置かない
-- セッションデータはブラウザのメモリ上に保持（Volatile Canvas思想）
-- 永続化はエクスポート機能（Phase 1）またはGitHub連携（Phase 3）で対応
+- フロントエンドは**表示と接続**に専念する
+- 図のレンダリング → PlantUML Server
+- AI対話・テーブル生成 → n8n + LLM
+- テストケース生成 → 純粋アルゴリズム（唯一フロントエンドが計算する部分）
+- 永続化 → エクスポート（Phase 1）/ GitHub（Phase 3）
 
-### 2.2 n8nがオーケストレーター
+### 2.2 リアクティブパイプライン
 
-- AIチャットの中継、外部サービス連携はすべてn8nが担う
+PlantUMLソースを起点として、すべてのビューがリアクティブに更新される。
+
+```
+Source変更
+ ├── debounce(500ms) → PlantUML Server → SVG → DiagramView
+ ├── debounce(1500ms) → n8n/LLM → テーブル(JSON) → TableView
+ │                                       └─→ アルゴリズム → TestCasesView
+ └── 即時 → モデル種別検出 → EBNF(静的定義) → EbnfView
+```
+
+### 2.3 n8nがオーケストレーター
+
+- AI対話の中継、テーブル生成、外部連携はすべてn8nが担う
 - APIキーはn8n側で管理し、フロントエンドには露出しない
-- ユーザーが対話アプリ（Slack/Teams/Discord等）を使う場合、n8nがその橋渡しをする
-- 対話アプリを使わないユーザーには、n8n経由で最低限のチャット中継を提供
-
-### 2.3 疎結合
-
-- 各外部サービスへのアクセスはService層で抽象化する
-- サービスのモック化が容易な設計とし、テスタビリティを確保
-- 外部サービスの差し替え（例: PlantUML → Mermaid、Gemini → 別のLLM）に対応可能
+- n8nワークフローはJSONエクスポート可能 → リポジトリに同梱
 
 ### 2.4 オープンソース＋セルフホスト
 
-- ModelLogueはMIT Licenseで公開
+- MIT License
 - ユーザーは自身の環境にセルフホスト可能
-- 各ユーザーが自分のn8nインスタンスに自分のAPIキーを設定する
+- Docker Compose で PlantUML Server + n8n を同時起動
 
-## 3. コンポーネント設計
+## 3. リアクティブデータフロー
 
-### 3.1 全体のコンポーネントツリー（Phase 1）
+### 3.1 概要
+
+PlantUMLソースが**唯一の情報源（Single Source of Truth）**。ソース変更に応じて各ビューがリアクティブに派生する。
+
+| パイプライン | 入力 | 処理場所 | 出力 | 想定遅延 |
+|------------|------|---------|------|---------|
+| 図レンダリング | Source | PlantUML Server (HTTP GET) | SVG | ~1s |
+| テーブル生成 | Source + ModelType | n8n → LLM | テーブル JSON | ~3s |
+| テストケース | テーブル JSON | フロントエンド内アルゴリズム | テストケース配列 | <100ms |
+| EBNF表示 | ModelType | フロントエンド内 静的定義参照 | EBNF文法テキスト | 即時 |
+| モデル種別検出 | Source | フロントエンド内 キーワードマッチ | ModelType enum | 即時 |
+
+### 3.2 チャットフロー
+
+```
+ユーザーメッセージ + コンテキスト（Source）
+  → n8n webhook → LLM → レスポンス（SSEストリーミング）
+  → ```plantuml``` コードブロックを検出
+  → 差分ビュー表示 → ユーザーが「適用」→ Source更新
+  → Source変更 → 全パイプライン再実行
+```
+
+### 3.3 プロンプトエンジニアリング
+
+プロンプトはn8n側で管理する。フロントエンドはプロンプトの内容を知らない。
+
+n8nワークフロー内で、モデル種別に応じたシステムプロンプトを選択し、LLMに構造化データを生成させる。
+
+| プロンプト | 用途 | 出力形式 |
+|-----------|------|---------|
+| chat-system-prompt | チャット対話のシステムプロンプト | テキスト（PlantUMLコードブロック含む） |
+| analyze-state-diagram | 状態遷移図 → テーブル変換 | JSON |
+| analyze-mindmap | マインドマップ → 因子水準表変換 | JSON |
+
+## 4. UIレイアウト＆コンポーネント設計
+
+### 4.1 画面構成
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Header (Logo / SessionName / ExportButton)                   │
+├──────────────────────────────────────┬───────────────────────┤
+│                                      │                       │
+│  DiagramView（主役・最大領域）         │  ChatPanel            │
+│  SVG表示（パン/ズーム）               │  （全高さ）            │
+│                                      │  MessageList          │
+│                                      │  SourceDiffView       │
+├─ ─ ─ ─ ─ drag handle ─ ─ ─ ─ ─ ─ ─ ┤  ChatInput            │
+│  ▲ AnalysisPanel（タブ付き）          │                       │
+│  [Source │ Table │ TestCases │ EBNF]  │                       │
+│  ──────────────────────────────────  │                       │
+│  (アクティブタブのコンテンツ)          │                       │
+├──────────────────────────────────────┴───────────────────────┤
+│  StatusBar (PlantUML / n8n / AI)                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 コンポーネントツリー
 
 ```
 App
@@ -86,103 +154,84 @@ App
 │   ├── Logo
 │   ├── SessionName
 │   └── ExportButton
-├── MainLayout（3ペインレイアウト）
-│   ├── EditorPanel
-│   │   └── PlantUmlEditor（CodeMirror）
-│   ├── PreviewPanel
-│   │   └── SvgPreview（パン/ズーム対応）
-│   └── ChatPanel
+├── MainLayout
+│   ├── WorkArea（左側）
+│   │   ├── DiagramView
+│   │   │   └── SvgPreview（pan/zoom: react-zoom-pan-pinch）
+│   │   └── AnalysisPanel（リサイズ可能・折りたたみ可能）
+│   │       ├── TabBar [Source | Table* | TestCases* | EBNF*]
+│   │       ├── PlantUmlEditor（CodeMirror — Source tab）
+│   │       ├── AnalysisTable*（Table tab）
+│   │       ├── TestCaseView*（TestCases tab）
+│   │       └── EbnfView*（EBNF tab）
+│   └── ChatPanel（右側・全高さ）
 │       ├── MessageList
 │       │   ├── UserMessage
 │       │   └── AssistantMessage
-│       │       └── SourceDiffView（修正提案時）
-│       │           └── ApplyButton
+│       │       └── SourceDiffView → ApplyButton
 │       └── ChatInput
 └── StatusBar
     ├── PlantUmlServerStatus
     ├── N8nStatus
     └── AiStatus
+
+* = Phase 2
 ```
 
-### 3.2 各コンポーネントの責務
+## 5. ステート管理
 
-#### App
-- アプリケーション全体のルートコンポーネント
-- グローバルなレイアウトとエラーバウンダリを提供
-
-#### Header
-- セッション名の表示・編集
-- エクスポート機能の起動
-
-#### EditorPanel
-- PlantUMLソースコードの編集UI
-- シンタックスハイライト（CodeMirror）
-- ソース変更時にステートを更新
-
-#### PreviewPanel
-- PlantUML ServerからSVGを取得して表示
-- パン・ズーム操作（react-zoom-pan-pinch等）
-- ソース変更時にデバウンス付きで再レンダリング
-
-#### ChatPanel
-- AI対話のメッセージ表示と入力
-- n8n経由でGemini APIへチャットを中継
-- AIの修正提案の差分表示と適用ボタン
-
-#### StatusBar
-- PlantUML Serverの接続状態
-- n8nの接続状態
-- AI応答状態（接続中、応答待ち等）
-
-## 4. ステート管理
-
-Zustandを使用し、シンプルなストア設計とする。
-
-### 4.1 ストア構造
+Zustandを使用。ストアは責務ごとに分離する。
 
 ```typescript
-// Session store
+// SessionStore — ソース＆履歴管理
 interface SessionStore {
   sessionId: string;
   sessionName: string;
   createdAt: string;
-
   currentSource: string;
   sourceHistory: SourceSnapshot[];
 
   updateSource: (source: string, triggeredBy: string) => void;
+  applyProposal: (messageId: string, source: string) => void;
   undoSource: () => void;
-  setSessionName: (name: string) => void;
-  exportSession: () => ReviewSession;
 }
 
-// Chat store
+// ChatStore — AI対話管理
 interface ChatStore {
   messages: ChatMessage[];
-  isLoading: boolean;
+  isStreaming: boolean;
 
   sendMessage: (content: string) => Promise<void>;
-  applyProposal: (messageId: string) => void;
-  clearMessages: () => void;
 }
 
-// UI store
+// AnalysisStore — テーブル・テストケース管理（Phase 2）
+interface AnalysisStore {
+  modelType: ModelType | null;
+  analysisTable: AnalysisTableData | null;
+  testCases: TestCase[] | null;
+  isTableLoading: boolean;
+
+  detectModelType: (source: string) => void;
+  generateTable: (source: string) => Promise<void>;
+  computeTestCases: () => void;
+}
+
+// UiStore — レイアウト＆接続状態
 interface UiStore {
-  panelSizes: { editor: number; preview: number; chat: number };
+  analysisPanelHeight: number;
+  analysisPanelCollapsed: boolean;
+  activeAnalysisTab: 'source' | 'table' | 'testcases' | 'ebnf';
+  chatPanelWidth: number;
   theme: 'light' | 'dark';
 
-  plantUmlServerStatus: 'connected' | 'disconnected' | 'checking';
+  plantUmlStatus: 'connected' | 'disconnected' | 'checking';
   n8nStatus: 'connected' | 'disconnected' | 'checking';
-  aiStatus: 'ready' | 'loading' | 'error';
-
-  setPanelSizes: (sizes: Partial<UiStore['panelSizes']>) => void;
-  setTheme: (theme: UiStore['theme']) => void;
 }
 ```
 
-## 5. サービス層
+## 6. サービス層
 
-### 5.1 PlantUML Service
+### 6.1 PlantUML Service
 
 ```typescript
 interface PlantUmlService {
@@ -191,53 +240,59 @@ interface PlantUmlService {
 }
 ```
 
-**実装詳細**:
-- PlantUMLソースをDeflate圧縮 → Base64エンコードして、PlantUML ServerのREST APIを呼び出す
-- エンコードにはplantuml-encoderライブラリを使用
-- デバウンス: ソース変更後500ms待ってからリクエスト
-- エラーハンドリング: サーバー接続不可時はステータスバーに通知
+- PlantUMLソースを Deflate + Base64 エンコード → HTTP GET
+- plantuml-encoder ライブラリを使用
+- デバウンス: 500ms
 
-### 5.2 n8n Service
+### 6.2 n8n Service
 
 ```typescript
 interface N8nService {
-  // Send chat message via n8n webhook, receive AI response
+  // Phase 1: チャット中継
   chat(params: {
     currentSource: string;
     messages: ChatMessage[];
     userMessage: string;
-  }): AsyncGenerator<string>;  // Streaming response
+  }): AsyncGenerator<string>;  // SSEストリーミング
 
-  // Check n8n connectivity
+  // Phase 2: テーブル生成
+  generateTable(params: {
+    source: string;
+    modelType: ModelType;
+  }): Promise<AnalysisTableData>;
+
   checkHealth(): Promise<boolean>;
 }
 ```
 
-**実装詳細**:
-- n8nのWebhookエンドポイントへHTTPリクエストを送信
-- n8n側でGemini APIキーを保持し、AIへリクエストを中継
-- ストリーミングレスポンス対応（SSE）
-- n8n側のワークフローで、システムプロンプト・コンテキスト組み立て・API呼び出しを処理
+- n8n Webhookへ HTTP POST
+- チャット: SSEストリーミングレスポンス
+- テーブル生成: JSONレスポンス
+- n8n側でプロンプト組み立て＋LLM呼び出しを実行
 
-**n8nワークフロー（Phase 1: チャット中継）**:
-```
-Webhook受信 → コンテキスト組み立て → Gemini API呼び出し → レスポンス中継
-```
+### 6.3 TestCase Engine
 
-**システムプロンプト方針**:
-```
-You are an AI assistant that supports software design reviews.
-For the PlantUML model diagram provided by the user, you offer improvement suggestions
-from the following perspectives:
-- Appropriateness of design patterns
-- Separation of concerns
-- Naming quality
-- Diagram readability
-When suggesting modifications, provide the complete PlantUML source code
-in a ```plantuml``` code block.
+```typescript
+interface TestCaseEngine {
+  // 状態遷移表 → Nスイッチカバレッジ
+  generateNSwitchCases(
+    table: StateTransitionTable,
+    n: number
+  ): TestCase[];
+
+  // 因子水準表 → 組合せテスト
+  generateCombinatorialCases(
+    table: FactorLevelTable
+  ): TestCase[];
+}
 ```
 
-### 5.3 Export Service
+- **純粋アルゴリズム** — 外部サービス呼び出しなし
+- テーブルデータから即座に計算
+- Nスイッチカバレッジ: グラフ探索によるパス列挙
+- 組合せテスト: ペアワイズ等の組合せ手法
+
+### 6.4 Export Service
 
 ```typescript
 interface ExportService {
@@ -245,84 +300,80 @@ interface ExportService {
 }
 ```
 
-**実装詳細**:
-- `ReviewSession`オブジェクトをJSON文字列化
-- BlobとダウンロードリンクでファイルDL
+- ReviewSessionをJSON文字列化 → Blobダウンロード
 
-## 6. n8nオーケストレーター設計
+## 7. n8nオーケストレーター設計
 
-### 6.1 役割
+### 7.1 Webhookエンドポイント
 
-n8nはModelLogueエコシステム全体のオーケストレーターとして、以下を担う:
+| エンドポイント | Phase | 用途 |
+|--------------|-------|------|
+| `POST /webhook/modellogue-chat` | 1 | チャット中継（SSEレスポンス） |
+| `POST /webhook/modellogue-analyze` | 2 | テーブル生成（JSONレスポンス） |
+| `POST /webhook/modellogue-commit` | 3 | GitHub自動コミット |
+| `POST /webhook/modellogue-event` | 3 | 業務フロー統合イベント |
 
-| Phase | 機能 |
-|-------|------|
-| Phase 1 | Gemini APIへのチャット中継（APIキー保護） |
-| Phase 2 | Slack/Teams/Discord連携による非同期フィードバック収集 |
-| Phase 3 | GitHub自動コミット、業務フロー統合 |
-
-### 6.2 Phase 1 ワークフロー: チャット中継
+### 7.2 チャット中継ワークフロー（Phase 1）
 
 ```
-┌─────────┐     ┌──────────────────┐     ┌────────────┐
-│ Browser  │────▶│ n8n Webhook      │────▶│ Gemini API │
-│ (SPA)   │     │                  │     │            │
-│         │◀────│ Response relay   │◀────│            │
-└─────────┘     └──────────────────┘     └────────────┘
+Webhook受信 → コンテキスト組み立て（systemPrompt + source + history）
+→ Gemini API呼び出し → SSEレスポンス中継
 ```
 
 **Webhook仕様**:
 
 ```
-POST {n8n_base_url}/webhook/modellogue-chat
+POST /webhook/modellogue-chat
 Content-Type: application/json
 
 Request:
 {
-  "currentSource": "...",       // Current PlantUML source
-  "messages": [...],            // Conversation history
-  "userMessage": "..."          // New user message
+  "currentSource": "...",
+  "messages": [...],
+  "userMessage": "..."
+}
+
+Response: text/event-stream (SSE)
+```
+
+### 7.3 テーブル生成ワークフロー（Phase 2）
+
+```
+Webhook受信 → モデル種別に応じたプロンプト選択
+→ Gemini API呼び出し → JSON整形 → レスポンス返却
+```
+
+**Webhook仕様**:
+
+```
+POST /webhook/modellogue-analyze
+Content-Type: application/json
+
+Request:
+{
+  "source": "...",
+  "modelType": "state_diagram"
 }
 
 Response:
-text/event-stream (SSE) — Streaming AI response
+{
+  "columns": ["Before State", "Event", "After State"],
+  "rows": [
+    ["Idle", "start", "Running"],
+    ...
+  ]
+}
 ```
 
-### 6.3 Phase 2 ワークフロー: 非同期フィードバック
-
-```
-Slack/Teams/Discord → n8n → フィードバック集約 → ModelLogue通知
-```
-
-### 6.4 Phase 3 ワークフロー: GitHub連携
-
-```
-ModelLogue (承認) → n8n → GitHub API (コミット: ソース + 対話ログ)
-```
-
-### 6.5 n8n設定のポータビリティ
+### 7.4 ワークフローのポータビリティ
 
 - n8nワークフローはJSON形式でエクスポート可能
-- ModelLogueリポジトリに `n8n/workflows/` ディレクトリを設け、テンプレートを同梱
-- セルフホストユーザーはワークフローをインポートし、自分のAPIキーを設定するだけで利用開始
+- `n8n/workflows/` ディレクトリにテンプレートを同梱
+- ユーザーはインポート → APIキー設定で利用開始
 
-## 7. 外部サービス連携
+## 8. 外部サービス連携
 
-### 7.1 PlantUML Server
-
-- **接続方式**: HTTP REST
-- **デプロイ**: Docker (`plantuml/plantuml-server:jetty`)
-- **ポート**: 8080
-- **CORS**: 開発時はViteのプロキシ設定で対応
-
-### 7.2 n8n
-
-- **接続方式**: HTTP Webhook
-- **デプロイ**: Docker (`docker.n8n.io/n8nio/n8n`)
-- **ポート**: 5678
-- **設定**: 環境変数でGemini APIキーを注入
-
-### 7.3 Docker Compose構成（開発環境）
+### 8.1 Docker Compose構成
 
 ```yaml
 services:
@@ -344,57 +395,72 @@ volumes:
   n8n_data:
 ```
 
-## 8. ディレクトリ構造（Phase 1）
+### 8.2 環境変数
+
+フロントエンド（.env）に必要なのは接続先URLのみ:
+
+```
+VITE_PLANTUML_SERVER_URL=http://localhost:8080
+VITE_N8N_BASE_URL=http://localhost:5678
+```
+
+## 9. ディレクトリ構造
 
 ```
 ModelLogue/
 ├── CLAUDE.md
-├── LICENSE                      # MIT License
+├── LICENSE
 ├── Reference/
-├── Doc/                         # Design documents
-│   ├── requirements/            # Requirements (YAML + Markdown)
+├── Doc/
+│   ├── requirements/
 │   ├── architecture.md
 │   ├── Security_Design.md
-│   └── traceability/            # Traceability diagrams (Mermaid)
+│   └── traceability/
 ├── n8n/
-│   └── workflows/               # n8n workflow templates (JSON)
-│       └── chat-relay.json      # Phase 1: Gemini chat relay
-├── Prototype/                   # Prototype code (isolated from production)
-├── docker-compose.yml           # PlantUML Server + n8n
+│   └── workflows/
+│       ├── chat-relay.json
+│       └── table-generation.json      # Phase 2
+├── docker-compose.yml
 ├── src/
 │   ├── main.tsx
 │   ├── App.tsx
 │   ├── components/
 │   │   ├── Header/
-│   │   │   ├── Header.tsx
-│   │   │   ├── SessionName.tsx
-│   │   │   └── ExportButton.tsx
-│   │   ├── EditorPanel/
-│   │   │   └── PlantUmlEditor.tsx
-│   │   ├── PreviewPanel/
+│   │   ├── DiagramView/
 │   │   │   └── SvgPreview.tsx
+│   │   ├── AnalysisPanel/
+│   │   │   ├── AnalysisPanel.tsx
+│   │   │   ├── TabBar.tsx
+│   │   │   ├── PlantUmlEditor.tsx
+│   │   │   ├── AnalysisTable.tsx      # Phase 2
+│   │   │   ├── TestCaseView.tsx       # Phase 2
+│   │   │   └── EbnfView.tsx           # Phase 2
 │   │   ├── ChatPanel/
 │   │   │   ├── ChatPanel.tsx
 │   │   │   ├── MessageList.tsx
-│   │   │   ├── UserMessage.tsx
-│   │   │   ├── AssistantMessage.tsx
 │   │   │   ├── SourceDiffView.tsx
 │   │   │   └── ChatInput.tsx
 │   │   ├── StatusBar/
-│   │   │   └── StatusBar.tsx
 │   │   └── MainLayout.tsx
 │   ├── services/
 │   │   ├── plantUmlService.ts
-│   │   ├── n8nService.ts        # Replaces geminiService.ts
+│   │   ├── n8nService.ts
 │   │   └── exportService.ts
+│   ├── engines/                        # 純粋アルゴリズム
+│   │   ├── testCaseEngine.ts           # Phase 2
+│   │   └── modelTypeDetector.ts        # Phase 2
 │   ├── stores/
 │   │   ├── sessionStore.ts
 │   │   ├── chatStore.ts
+│   │   ├── analysisStore.ts            # Phase 2
 │   │   └── uiStore.ts
+│   ├── grammars/                       # EBNF静的定義（Phase 2）
+│   │   ├── stateDiagram.ebnf
+│   │   └── mindmap.ebnf
 │   ├── i18n/
-│   │   ├── index.ts             # i18next initialization
-│   │   ├── en.json              # English translations
-│   │   └── ja.json              # Japanese translations
+│   │   ├── index.ts
+│   │   ├── en.json
+│   │   └── ja.json
 │   ├── types/
 │   │   └── index.ts
 │   └── utils/
@@ -403,11 +469,10 @@ ModelLogue/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
-├── vercel.json                  # Vercel deployment config + security headers
-└── .env.example                 # N8N_BASE_URL, PLANTUML_SERVER_URL
+└── .env.example
 ```
 
-## 9. ビルド・開発環境
+## 10. ビルド・開発環境
 
 | 項目 | 技術 |
 |------|------|
@@ -420,60 +485,51 @@ ModelLogue/
 | CSS | Tailwind CSS |
 | コンテナ | Docker Compose（PlantUML Server + n8n） |
 
-## 10. 主要ライブラリ
-
-| ライブラリ | バージョン目安 | 用途 |
-|-----------|-------------|------|
-| react | ^19 | UIフレームワーク |
-| react-dom | ^19 | DOM描画 |
-| @xyflow/react | ^12 | React Flow (Phase 2) |
-| zustand | ^5 | ステート管理 |
-| @codemirror/lang-* | 最新 | コードエディタ |
-| plantuml-encoder | ^1 | PlantUMLエンコード |
-| react-zoom-pan-pinch | ^3 | SVGパン/ズーム |
-| i18next | ^24 | 国際化フレームワーク |
-| react-i18next | ^15 | React向けi18nextバインディング |
-
 ## 11. Phase別の進化パス
 
 ```
-Phase 1 (MVP)
-├── PlantUMLエディタ + SVGプレビュー
-├── AI対話チャット（n8n経由でGemini中継）
-├── 修正提案の適用・Undo
-└── セッションJSON エクスポート
+Phase 1 (MVP) — コアレビュー基盤
+├── DiagramView: SVGプレビュー（パン/ズーム）
+├── AnalysisPanel: Source タブのみ（PlantUMLエディタ）
+├── ChatPanel: n8n経由AI対話 + 修正提案の適用/Undo
+├── StatusBar: PlantUML Server / n8n 接続状態
+└── Export: セッションJSONエクスポート
 
-Phase 2 (Collaborative)  ← React Flow + 外部チャット連携
-├── SVGプレビュー → React Flowインタラクティブ表示へ進化
-├── 要素ポインティング・コメント機能
-├── n8n経由でSlack/Teams/Discord連携
-└── AI議論集約エンジン
+Phase 2 (Analytical Review) — モデル解析＋インタラクティブ
+├── AnalysisPanel: Table / TestCases / EBNF タブ追加
+├── テーブル生成: n8n/LLMに委譲
+├── テストケース: フロントエンド内アルゴリズム計算
+├── 双方向ハイライト: 図 ↔ テーブル
+├── React Flow: 要素選択・コメント付与
+└── モデル種別自動検出
 
-Phase 3 (Enterprise)  ← GitHub統合 + 業務フロー
-├── n8n経由でGitHub API自動コミット（レビュー証跡）
-├── n8nワークフローによる業務フロー統合
-├── マルチユーザー認証
-└── レビューダッシュボード
+Phase 3 (Enterprise) — コラボレーション＋業務フロー
+├── n8n経由 Slack/Teams/Discord フィードバック収集
+├── n8n経由 GitHub自動コミット（レビュー証跡）
+└── n8n経由 業務フロー統合
 ```
 
 ## 12. 判断記録（ADR）
 
 ### ADR-001: フロントエンドは純粋なUI
 
-- **決定**: フロントエンドSPAは純粋なUIとし、秘密情報を一切持たない
-- **理由**: オープンソース＋セルフホスト前提。APIキー等はn8n側で管理する。Volatile Canvas思想との一貫性。
+- **決定**: SPAは表示と接続のみ。秘密情報を持たない。
+- **理由**: オープンソース + セルフホスト前提。Volatile Canvas思想。
 
 ### ADR-002: n8nをPhase 1からオーケストレーターとして導入
 
-- **決定**: 専用のAPIプロキシを作らず、n8nをPhase 1から導入してチャット中継を担わせる
+- **決定**: n8nがAI中継・テーブル生成・外部連携を一手に担う
+- **理由**: アーキテクチャの一貫性。ワークフロー追加でPhase 2/3に拡張。
+- **トレードオフ**: Docker環境必要だが、PlantUML Serverと同様。
+
+### ADR-003: テーブル生成はLLM委譲、テストケースはアルゴリズム
+
+- **決定**: PlantUMLソース → テーブル変換はn8n/LLMに委譲。テーブル → テストケース変換はフロントエンドのアルゴリズムで実行。
 - **理由**:
-  - Phase 3で必要になるn8nを先行導入することで、アーキテクチャの一貫性を保つ
-  - n8nはオープンソース（フェアコードライセンス）でセルフホスト可能
-  - APIキーはn8n側で管理し、フロントエンドに露出しない
-  - 将来のSlack/Teams/Discord/GitHub連携もn8nのワークフロー追加で対応可能
-- **トレードオフ**: 開発環境でDocker上にn8nを立てる必要があるが、PlantUML Serverも同様にDockerで動かすため追加負担は小さい
+  - テーブル生成: PlantUML構文の完全パーサを自前で実装するのは過剰。LLMに構造化データ抽出を委譲する方がシンプルで拡張性が高い。
+  - テストケース: Nスイッチカバレッジ等は明確なアルゴリズム。LLMは不要。即座に計算可能。
 
-### ADR-003: 対話アプリの選択はユーザーに委ねる
+### ADR-004: EBNFはモデル種別ごとの静的定義
 
-- **決定**: Slack/Teams/Discord等の対話アプリ連携は任意。ModelLogue内蔵のチャットUIは最低限の中継機能を提供
-- **理由**: ユーザーの環境や好みに応じて柔軟に対応できるようにする。n8nが橋渡しを担うことで、どの対話アプリとも連携可能。
+- **決定**: EBNF文法はフロントエンドに静的ファイルとして持つ
+- **理由**: 文法定義は変更頻度が低く、LLM生成は不安定。静的定義が最も信頼性が高い。

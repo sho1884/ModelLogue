@@ -297,24 +297,13 @@ functional_requirements:
       - Display comment visually near the element
       - List all comments in a comment panel
 
-  - id: FR-2.3
-    title: Collect feedback from chat apps via n8n
-    description: Receive and aggregate feedback from Slack/Teams/Discord via n8n workflows
-    phase: 2
-    traces_to: UR-2.3
-    function: N8nService.collectFeedback
-    acceptance_criteria:
-      - n8n collects messages from configured chat apps (Slack/Teams/Discord)
-      - AI aggregates and summarizes feedback
-      - Display aggregated feedback in ModelLogue
-
   # --- Phase 3 (Enterprise) ---
 
   - id: FR-3.1
     title: Commit review evidence to GitHub via n8n
     description: Auto-commit PlantUML source and dialogue log to GitHub via n8n on approval
     phase: 3
-    traces_to: UR-3.1
+    traces_to: UR-3.2
     function: N8nService.commitReviewEvidence
     acceptance_criteria:
       - Send approval event with session data to n8n
@@ -326,12 +315,23 @@ functional_requirements:
     title: Integrate review lifecycle with n8n workflows
     description: Send review lifecycle events to n8n for business workflow integration
     phase: 3
-    traces_to: UR-3.2
+    traces_to: UR-3.3
     function: N8nService.notifyEvent
     acceptance_criteria:
       - Send webhook on review start, complete, and approve events
       - Include session metadata in webhook payload
       - n8n triggers configured downstream actions
+
+  - id: FR-3.3
+    title: Collect feedback from chat apps via n8n
+    description: Receive and aggregate feedback from Slack/Teams/Discord via n8n workflows
+    phase: 3
+    traces_to: UR-3.1
+    function: N8nService.collectFeedback
+    acceptance_criteria:
+      - n8n collects messages from configured chat apps (Slack/Teams/Discord)
+      - AI aggregates and summarizes feedback
+      - Display aggregated feedback in ModelLogue
 
 # ============================================================
 # Non-Functional Requirements

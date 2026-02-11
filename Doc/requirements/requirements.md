@@ -127,10 +127,12 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 | Sequence Diagram / シーケンス図 | `@startuml` (sequence) | Message trace table / メッセージトレース表 | — |
 | Activity Diagram / アクティビティ図 | `@startuml` (activity) | Decision table / デシジョンテーブル | Path coverage / パスカバレッジ |
 
-## 7. System Requirements (Phase 1) / システム要求（Phase 1）
+## 7. System Requirements / システム要求
 
 > Writing style: Verb + Object / 記述スタイル: 動詞＋目的語
 > Data source: [`system_requirements.yaml`](./system_requirements.yaml)
+
+### Phase 1 (MVP) — Core Review Platform / コアレビュー基盤
 
 | ID | Title | Function | Traces to |
 |---|---|---|---|
@@ -150,6 +152,26 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 | FR-1.13 | Manage session state | `SessionStore` | UR-1.1, UR-1.3, UR-1.5 |
 | FR-1.14 | Render resizable analysis panel with tabs | `AnalysisPanel` | UR-1.1, UR-1.7 |
 | FR-1.15 | Render diagram as primary view | `DiagramView` | UR-1.2 |
+
+### Phase 2 (Analytical Review) — Model Analysis + Interactive / モデル解析＋インタラクティブ
+
+| ID | Title | Function | Traces to |
+|---|---|---|---|
+| FR-2.1 | Generate analysis table from PlantUML source | `TableGenerator` | UR-2.1 |
+| FR-2.2 | Generate test cases from model | `TestCaseGenerator` | UR-2.2 |
+| FR-2.3 | Display EBNF-constrained grammar | `EbnfView` | UR-2.3 |
+| FR-2.4 | Highlight diagram-table correspondence bidirectionally | `BidirectionalHighlighter` | UR-2.4 |
+| FR-2.5 | Detect model type from PlantUML source | `ModelTypeDetector` | UR-2.5 |
+| FR-2.6 | Render model diagram as React Flow nodes | `ReactFlowCanvas` | UR-2.6 |
+| FR-2.7 | Attach review comment to element | `CommentStore.addComment` | UR-2.7 |
+
+### Phase 3 (Enterprise) — Collaborative + Enterprise / コラボレーション＋エンタープライズ
+
+| ID | Title | Function | Traces to |
+|---|---|---|---|
+| FR-3.1 | Commit review evidence to GitHub via n8n | `N8nService.commitReviewEvidence` | UR-3.2 |
+| FR-3.2 | Integrate review lifecycle with n8n workflows | `N8nService.notifyEvent` | UR-3.3 |
+| FR-3.3 | Collect feedback from chat apps via n8n | `N8nService.collectFeedback` | UR-3.1 |
 
 ## 8. Non-Functional Requirements / 非機能要求
 
