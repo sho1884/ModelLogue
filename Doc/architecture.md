@@ -405,13 +405,16 @@ services:
     ports:
       - "5678:5678"
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GENERIC_TIMEZONE=${TIMEZONE:-Asia/Tokyo}
+      - TZ=${TIMEZONE:-Asia/Tokyo}
     volumes:
       - n8n_data:/home/node/.n8n
 
 volumes:
   n8n_data:
 ```
+
+**注**: Gemini APIキーはn8n UI内のCredentials設定で管理する。環境変数やコードには一切含めない。
 
 ### 8.2 環境変数
 

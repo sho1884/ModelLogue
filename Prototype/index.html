@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModelLogue - Walking Skeleton Prototype</title>
+    <!-- n8n Chat Widget CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/@n8n/chat/dist/style.css" rel="stylesheet" />
+    <style>
+        /* Reset */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            background: #16213e;
+            border-bottom: 1px solid #0f3460;
+            flex-shrink: 0;
+        }
+        .header-left {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+        header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #e94560;
+        }
+        .subtitle {
+            font-size: 12px;
+            color: #888;
+        }
+        .status-bar {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+        }
+        .status-dot.connected { background: #00c853; }
+        .status-dot.disconnected { background: #ff1744; }
+        .status-dot.checking { background: #ffc107; animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+
+        /* Main layout */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Diagram area */
+        #diagram-area {
+            flex: 1;
+            background: #0a0a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            padding: 16px;
+            min-height: 200px;
+        }
+        #diagram-area img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        #diagram-area .placeholder {
+            color: #888;
+            font-size: 14px;
+        }
+        #diagram-area .error {
+            color: #ff1744;
+            font-size: 14px;
+        }
+
+        /* Analysis panel (bottom) */
+        #analysis-panel {
+            border-top: 2px solid #0f3460;
+            background: #16213e;
+            display: flex;
+            flex-direction: column;
+            max-height: 50vh;
+        }
+
+        /* Tabs */
+        .tab-bar {
+            display: flex;
+            border-bottom: 1px solid #0f3460;
+            flex-shrink: 0;
+        }
+        .tab-btn {
+            padding: 8px 20px;
+            background: transparent;
+            color: #888;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .tab-btn:hover { color: #ccc; }
+        .tab-btn.active {
+            color: #e94560;
+            border-bottom-color: #e94560;
+        }
+
+        /* Tab content */
+        .tab-content {
+            display: none;
+            overflow: auto;
+            flex: 1;
+        }
+        .tab-content.active { display: block; }
+
+        /* Source tab */
+        #source-tab {
+            padding: 12px 16px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #source-tab.active {
+            display: flex;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        #source-editor {
+            flex: 1;
+            background: #0a0a1a;
+            color: #00ff88;
+            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 12px;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            resize: none;
+            min-height: 150px;
+        }
+        #source-editor:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        /* Table tab */
+        #table-tab {
+            padding: 12px 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            padding: 6px 12px;
+            text-align: left;
+            border: 1px solid #0f3460;
+        }
+        th {
+            background: #0f3460;
+            color: #e94560;
+            font-weight: 600;
+        }
+        td { color: #ccc; }
+        tr:hover td { background: rgba(233, 69, 96, 0.08); }
+
+        /* Buttons */
+        .btn {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .btn:hover { background: #c73652; }
+        .btn:disabled { background: #444; cursor: not-allowed; }
+
+        /* n8n chat overrides */
+        :root {
+            --chat--color-primary: #e94560;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>ModelLogue</h1>
+            <span class="subtitle">Walking Skeleton Prototype</span>
+        </div>
+        <div class="status-bar">
+            <div class="status-item">
+                <div id="plantuml-status" class="status-dot checking"></div>
+                <span>PlantUML</span>
+            </div>
+            <div class="status-item">
+                <div id="n8n-status" class="status-dot checking"></div>
+                <span>n8n</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Diagram View (primary area) -->
+        <div id="diagram-area">
+            <span class="placeholder">Loading diagram...</span>
+        </div>
+
+        <!-- Analysis Panel (bottom pull-up) -->
+        <div id="analysis-panel">
+            <div class="tab-bar">
+                <button class="tab-btn active" data-tab="source-tab">Source</button>
+                <button class="tab-btn" data-tab="table-tab">Table</button>
+            </div>
+
+            <!-- Source Tab -->
+            <div id="source-tab" class="tab-content active">
+                <textarea id="source-editor" spellcheck="false"></textarea>
+                <div class="toolbar">
+                    <button class="btn" id="render-btn">Render</button>
+                </div>
+            </div>
+
+            <!-- Table Tab (Dummy Data) -->
+            <div id="table-tab" class="tab-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Before State</th>
+                            <th>Event</th>
+                            <th>After State</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>[*]</td><td>create order</td><td>Pending</td></tr>
+                        <tr><td>Pending</td><td>confirm payment</td><td>Confirmed</td></tr>
+                        <tr><td>Pending</td><td>cancel</td><td>Cancelled</td></tr>
+                        <tr><td>Confirmed</td><td>ship order</td><td>Shipped</td></tr>
+                        <tr><td>Confirmed</td><td>cancel</td><td>Cancelled</td></tr>
+                        <tr><td>Shipped</td><td>deliver</td><td>Delivered</td></tr>
+                        <tr><td>Delivered</td><td>&mdash;</td><td>[*]</td></tr>
+                        <tr><td>Cancelled</td><td>&mdash;</td><td>[*]</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Deflate library for PlantUML encoding -->
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+
+    <script>
+        // ============================================================
+        // Configuration
+        // ============================================================
+        const PLANTUML_SERVER_URL = 'http://localhost:8080';
+
+        // n8n Chat Trigger webhook URL
+        // After setting up the n8n workflow, find the production webhook URL
+        // in the Chat Trigger node settings and update this value.
+        const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/modellogue-chat/chat';
+
+        // ============================================================
+        // PlantUML Encoding (Deflate + custom Base64)
+        // ============================================================
+        function encode6bit(b) {
+            if (b < 10) return String.fromCharCode(48 + b);
+            b -= 10;
+            if (b < 26) return String.fromCharCode(65 + b);
+            b -= 26;
+            if (b < 26) return String.fromCharCode(97 + b);
+            b -= 26;
+            if (b === 0) return '-';
+            if (b === 1) return '_';
+            return '?';
+        }
+
+        function append3bytes(b1, b2, b3) {
+            const c1 = b1 >> 2;
+            const c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
+            const c3 = ((b2 & 0xF) << 2) | (b3 >> 6);
+            const c4 = b3 & 0x3F;
+            return encode6bit(c1) + encode6bit(c2) + encode6bit(c3) + encode6bit(c4);
+        }
+
+        function encodePlantUml(source) {
+            const data = pako.deflateRaw(new TextEncoder().encode(source));
+            let encoded = '';
+            for (let i = 0; i < data.length; i += 3) {
+                const b1 = data[i];
+                const b2 = (i + 1 < data.length) ? data[i + 1] : 0;
+                const b3 = (i + 2 < data.length) ? data[i + 2] : 0;
+                encoded += append3bytes(b1, b2, b3);
+            }
+            return encoded;
+        }
+
+        // ============================================================
+        // Diagram Rendering
+        // ============================================================
+        async function renderDiagram() {
+            const source = document.getElementById('source-editor').value.trim();
+            const area = document.getElementById('diagram-area');
+            const btn = document.getElementById('render-btn');
+
+            if (!source) {
+                area.innerHTML = '<span class="error">No PlantUML source</span>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Rendering...';
+            area.innerHTML = '<span class="placeholder">Rendering...</span>';
+
+            try {
+                const encoded = encodePlantUml(source);
+                const img = document.createElement('img');
+                img.alt = 'PlantUML Diagram';
+                img.style.maxWidth = '100%';
+                img.style.height = 'auto';
+
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = () => reject(new Error('Failed to load SVG from PlantUML Server'));
+                    img.src = `${PLANTUML_SERVER_URL}/svg/${encoded}`;
+                });
+
+                area.innerHTML = '';
+                area.appendChild(img);
+            } catch (err) {
+                area.innerHTML = `<span class="error">${err.message}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Render';
+            }
+        }
+
+        // ============================================================
+        // Health Checks
+        // ============================================================
+        async function checkPlantUmlHealth() {
+            const dot = document.getElementById('plantuml-status');
+            try {
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = `${PLANTUML_SERVER_URL}/svg/SoWkIImgAStDuNBAJrBGjLDmpCbCJbMmKiX8pSd9vt98pKi1IW80`;
+                });
+                dot.className = 'status-dot connected';
+            } catch {
+                dot.className = 'status-dot disconnected';
+            }
+        }
+
+        async function checkN8nHealth() {
+            const dot = document.getElementById('n8n-status');
+            try {
+                const res = await fetch('http://localhost:5678/healthz');
+                const data = await res.json();
+                dot.className = (data.status === 'ok')
+                    ? 'status-dot connected'
+                    : 'status-dot disconnected';
+            } catch {
+                dot.className = 'status-dot disconnected';
+            }
+        }
+
+        // ============================================================
+        // Tab Switching
+        // ============================================================
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ============================================================
+        // Example PlantUML Source
+        // ============================================================
+        const EXAMPLE_SOURCE = `@startuml
+title Order State Machine
+
+[*] --> Pending : create order
+Pending --> Confirmed : confirm payment
+Pending --> Cancelled : cancel
+Confirmed --> Shipped : ship order
+Confirmed --> Cancelled : cancel
+Shipped --> Delivered : deliver
+Delivered --> [*]
+Cancelled --> [*]
+
+@enduml`;
+
+        // ============================================================
+        // Initialize
+        // ============================================================
+        document.getElementById('source-editor').value = EXAMPLE_SOURCE;
+        document.getElementById('render-btn').addEventListener('click', renderDiagram);
+
+        checkPlantUmlHealth();
+        checkN8nHealth();
+        renderDiagram();
+    </script>
+
+    <!-- n8n Chat Widget -->
+    <script type="module">
+        import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/dist/chat.bundle.es.js';
+
+        createChat({
+            webhookUrl: 'http://localhost:5678/webhook/modellogue-chat/chat',
+            showWelcomeScreen: false,
+            initialMessages: [
+                'Welcome to ModelLogue! Ask me to review or improve the diagram.'
+            ],
+            i18n: {
+                en: {
+                    title: 'ModelLogue AI',
+                    subtitle: 'Powered by Gemini via n8n',
+                    inputPlaceholder: 'Ask about the diagram...',
+                }
+            }
+        });
+    </script>
+</body>
+</html>

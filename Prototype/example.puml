@@ -1,0 +1,13 @@
+@startuml
+title Order State Machine
+
+[*] --> Pending : create order
+Pending --> Confirmed : confirm payment
+Pending --> Cancelled : cancel
+Confirmed --> Shipped : ship order
+Confirmed --> Cancelled : cancel
+Shipped --> Delivered : deliver
+Delivered --> [*]
+Cancelled --> [*]
+
+@enduml
