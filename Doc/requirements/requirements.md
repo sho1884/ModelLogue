@@ -142,7 +142,7 @@ ModelLogueは、ソフトウェア開発におけるモデルレビューを支�
 | FR-1.4 | Display SVG preview with pan and zoom | `SvgPreview` | UR-1.2 |
 | FR-1.5 | Send chat message to AI via n8n | `N8nService.chat` | UR-1.3 |
 | FR-1.6 | Render chat message list | `MessageList` | UR-1.3, UR-1.5 |
-| FR-1.7 | Extract PlantUML source from AI response | `parseAiResponse` | UR-1.4 |
+| FR-1.7 | Extract PlantUML source from AI response | n8n workflow | UR-1.4 |
 | FR-1.8 | Display source diff for AI proposals | `SourceDiffView` | UR-1.4 |
 | FR-1.9 | Apply proposed source modification | `SessionStore.applyProposal` | UR-1.4 |
 | FR-1.10 | Undo source modification | `SessionStore.undoSource` | UR-1.4 |

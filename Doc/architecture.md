@@ -105,11 +105,14 @@ PlantUMLソースが**唯一の情報源（Single Source of Truth）**。ソー�
 
 ```
 ユーザーメッセージ + コンテキスト（Source）
-  → n8n webhook → LLM → レスポンス（SSEストリーミング）
-  → ```plantuml``` コードブロックを検出
-  → 差分ビュー表示 → ユーザーが「適用」→ Source更新
+  → n8n webhook → LLM → レスポンス
+  → n8nが ```plantuml``` コードブロックを検出・抽出
+  → 構造化JSON { text, suggestedSource } を返却
+  → フロントエンドで差分ビュー表示 → 「適用」→ Source更新
   → Source変更 → 全パイプライン再実行
 ```
+
+**ポイント**: AIレスポンスの解析（コードブロック抽出）はn8n側で行い、フロントエンドには構造化データのみを渡す。フロントエンドに `parseAiResponse` のようなパーサは不要。
 
 ### 3.3 プロンプトエンジニアリング
 
@@ -247,13 +250,19 @@ interface PlantUmlService {
 ### 6.2 n8n Service
 
 ```typescript
+// n8nが返す構造化レスポンス
+interface ChatResponse {
+  text: string;                // AI応答テキスト
+  suggestedSource?: string;    // 抽出済みPlantUMLソース（あれば）
+}
+
 interface N8nService {
-  // Phase 1: チャット中継
+  // Phase 1: チャット中継（n8nがレスポンス解析済みの構造化JSONを返す）
   chat(params: {
     currentSource: string;
     messages: ChatMessage[];
     userMessage: string;
-  }): AsyncGenerator<string>;  // SSEストリーミング
+  }): Promise<ChatResponse>;
 
   // Phase 2: テーブル生成
   generateTable(params: {
@@ -266,9 +275,10 @@ interface N8nService {
 ```
 
 - n8n Webhookへ HTTP POST
-- チャット: SSEストリーミングレスポンス
-- テーブル生成: JSONレスポンス
-- n8n側でプロンプト組み立て＋LLM呼び出しを実行
+- チャット: n8nがLLM応答を解析し、構造化JSON（text + suggestedSource）を返却
+- テーブル生成: 同様にJSON返却
+- n8n側でプロンプト組み立て＋LLM呼び出し＋レスポンス解析をすべて実行
+- フロントエンドはJSONを受け取って表示するだけ
 
 ### 6.3 TestCase Engine
 
@@ -317,7 +327,9 @@ interface ExportService {
 
 ```
 Webhook受信 → コンテキスト組み立て（systemPrompt + source + history）
-→ Gemini API呼び出し → SSEレスポンス中継
+→ Gemini API呼び出し → レスポンス受信
+→ ```plantuml``` コードブロック検出・抽出
+→ 構造化JSON返却
 ```
 
 **Webhook仕様**:
@@ -333,8 +345,14 @@ Request:
   "userMessage": "..."
 }
 
-Response: text/event-stream (SSE)
+Response:
+{
+  "text": "この状態遷移図には初期状態からの...",
+  "suggestedSource": "@startuml\n[*] --> Idle\n..."
+}
 ```
+
+**注**: `suggestedSource` はAIレスポンスに ` ```plantuml``` ` コードブロックが含まれる場合のみ。n8nワークフロー内で抽出する。
 
 ### 7.3 テーブル生成ワークフロー（Phase 2）
 
@@ -485,7 +503,44 @@ ModelLogue/
 | CSS | Tailwind CSS |
 | コンテナ | Docker Compose（PlantUML Server + n8n） |
 
-## 11. Phase別の進化パス
+## 11. プロトタイプ検証計画（Walking Skeleton）
+
+本番実装の前に、アーキテクチャの前提（外部サービス接続）を検証するプロトタイプを `Prototype/` に作成する。
+
+### 11.1 検証目的
+
+| # | 検証対象 | 成功条件 |
+|---|---------|---------|
+| 1 | PlantUML Server → SVG | 例題ソースを送信し、SVG画像が返る |
+| 2 | n8n → Gemini チャット | Chat Trigger経由でGeminiが応答する |
+| 3 | n8n レスポンス構造化 | AIレスポンスから構造化JSON（text + suggestedSource）が返る |
+| 4 | UIレイアウト基本形 | SVG + ダミーテーブル + チャットが1画面に収まる |
+
+### 11.2 プロトタイプ構成
+
+```
+Prototype/
+├── index.html              # 1枚のHTML（SVG表示 + ダミーテーブル + n8nチャットウィジェット）
+└── example.puml            # 例題PlantUMLソース（状態遷移図）
+```
+
+### 11.3 アプローチ
+
+- **チャット**: n8nの `@n8n/chat` ウィジェットを埋め込み。カスタムコード不要。
+- **SVG表示**: PlantUML Serverへ直接HTTPリクエスト（エンコード済みURL）。
+- **テーブル**: ハードコードのダミーデータ。LLM連携はプロトタイプ後。
+- **自前コード**: HTML/CSSのみ。React/TypeScriptはまだ使わない。
+
+### 11.4 検証ステップ
+
+1. `docker compose up -d` — PlantUML Server + n8n 起動
+2. PlantUML Server 疎通確認（curl / ブラウザ）
+3. n8n UI でワークフロー構築（Chat Trigger + Gemini）
+4. `Prototype/index.html` をブラウザで開いて統合確認
+
+環境構築の詳細手順は [`Doc/setup_guide.md`](./setup_guide.md) を参照。
+
+## 12. Phase別の進化パス
 
 ```
 Phase 1 (MVP) — コアレビュー基盤
@@ -533,3 +588,11 @@ Phase 3 (Enterprise) — コラボレーション＋業務フロー
 
 - **決定**: EBNF文法はフロントエンドに静的ファイルとして持つ
 - **理由**: 文法定義は変更頻度が低く、LLM生成は不安定。静的定義が最も信頼性が高い。
+
+### ADR-005: AIレスポンスの解析はn8n側で行う
+
+- **決定**: LLMレスポンスからのPlantUMLコードブロック抽出はn8nワークフロー内で実行し、フロントエンドには構造化JSON（text + suggestedSource）を返す。
+- **理由**:
+  - フロントエンドに `parseAiResponse` のようなパーサを持つ必要がなくなる
+  - n8nワークフロー内でレスポンス整形を完結させることで、フロントエンドは受け取ったJSONを表示するだけになる
+  - 「持たないアーキテクチャ」の一貫性：フロントエンドはUI表示に専念

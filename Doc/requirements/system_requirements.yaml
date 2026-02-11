@@ -86,14 +86,17 @@ functional_requirements:
 
   - id: FR-1.7
     title: Extract PlantUML source from AI response
-    description: Parse AI response to detect proposed PlantUML source modifications
+    description: >
+      n8n workflow parses AI response to detect and extract proposed
+      PlantUML source modifications, returning structured JSON
     phase: 1
     traces_to: UR-1.4
-    function: parseAiResponse
+    function: n8n workflow (code block extraction)
     acceptance_criteria:
-      - Detect ```plantuml``` code blocks in AI response
-      - Extract complete PlantUML source from code block
-      - Return null if no code block is found
+      - n8n detects ```plantuml``` code blocks in AI response
+      - n8n extracts complete PlantUML source from code block
+      - n8n returns structured JSON with text and suggestedSource fields
+      - suggestedSource is null if no code block is found
 
   - id: FR-1.8
     title: Display source diff for AI proposals

@@ -1,0 +1,18 @@
+services:
+  plantuml:
+    image: plantuml/plantuml-server:jetty
+    ports:
+      - "8080:8080"
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=${TIMEZONE:-Asia/Tokyo}
+      - TZ=${TIMEZONE:-Asia/Tokyo}
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:
