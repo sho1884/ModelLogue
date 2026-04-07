@@ -1,91 +1,96 @@
 # ModelLogue アーキテクチャ設計書
 
-**バージョン**: 2.0
-**作成日**: 2026-02-11
+**バージョン**: 5.0
+**作成日**: 2026-04-07
 **ステータス**: ドラフト
 
 ---
 
 ## 1. アーキテクチャ概要
 
-ModelLogueは「持たないアーキテクチャ」を徹底する。フロントエンドSPAは純粋なUIであり、重い処理はすべて外部サービス（PlantUML Server、n8n + LLM）に委譲する。
+ModelLogueは「持たないアーキテクチャ」を基本としつつ、モデルの意味解析はフロントエンドが担う。PlantUMLソースの**意味**はフロントエンドのパーサーで抽出し、**図の表示**はPlantUML ServerのSVGをそのまま使用する。SVGの上にネイティブSVGの薄いマーカーオーバーレイを重ね、レビューアはマーカー（楕円・矩形・矢印）を置いて「ここに注目」を示す。マーカーは特定要素に縛られず、AIに「マーカーの座標」と「モデル要素の座標」の両方を渡し、AIに解釈を任せる。
 
 ### システム構成図
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    ブラウザ（SPA — 純粋なUI）                       │
+│                    ブラウザ（SPA）                                 │
 │                                                                  │
 │  ┌─────────────────────────────┐  ┌───────────────────────────┐  │
-│  │     DiagramView (SVG)       │  │     ChatPanel             │  │
-│  │     モデル図（主役）          │  │     AI対話                 │  │
+│  │  DiagramView                │  │  ChatPanel                │  │
+│  │   ├ SvgPreview (PlantUML)   │  │  AI対話                    │  │
+│  │   └ MarkerOverlay (native)  │  │                           │  │
 │  ├─────────────────────────────┤  │                           │  │
-│  │     AnalysisPanel (タブ)     │  │                           │  │
-│  │  [Source|Table|TestCases|EBNF]│  │                           │  │
+│  │  AnalysisPanel (タブ)        │  │                           │  │
+│  │  [Source|S×E|S×S|EBNF]      │  │                           │  │
 │  └──────────┬──────────────────┘  └────────────┬──────────────┘  │
 │             │                                  │                 │
 │  ┌──────────┴──────────────────────────────────┴──────────────┐  │
 │  │                    Zustand ストア                            │  │
-│  └──────┬───────────────────┬────────────────────┬────────────┘  │
-│         │                   │                    │               │
-│  ┌──────┴──────┐  ┌────────┴────────┐  ┌────────┴────────────┐  │
-│  │ PlantUml    │  │ n8n             │  │ TestCase            │  │
-│  │ Service     │  │ Service         │  │ Engine              │  │
-│  │ (HTTP GET)  │  │ (Webhook POST)  │  │ (純粋アルゴリズム)    │  │
-│  └──────┬──────┘  └────────┬────────┘  └─────────────────────┘  │
-└─────────┼──────────────────┼─────────────────────────────────────┘
-          │                  │
-          ▼                  ▼
-  ┌──────────────┐  ┌──────────────────────┐
-  │ PlantUML     │  │  n8n (Docker)         │
-  │ Server       │  │  ┌────────────────┐  │
-  │ (Docker)     │  │  │ Gemini API     │  │
-  │              │  │  │ (チャット中継)   │  │
-  │ source → SVG │  │  │ (テーブル生成)   │  │
-  └──────────────┘  │  ├────────────────┤  │
-                    │  │ Slack/Teams/   │  │
-                    │  │ Discord        │  │
-                    │  │ (Phase 3)      │  │
-                    │  ├────────────────┤  │
-                    │  │ GitHub API     │  │
-                    │  │ (Phase 3)      │  │
-                    │  └────────────────┘  │
-                    └──────────────────────┘
+│  └──┬────────────┬──────────────┬───────────────┬─────────────┘  │
+│     │            │              │               │                │
+│  ┌──┴────┐  ┌────┴─────┐  ┌────┴────┐  ┌───────┴──────────┐    │
+│  │Parser │  │Coordinate│  │ Matrix  │  │ n8n              │    │
+│  │       │  │Extractor │  │Generator│  │ Service          │    │
+│  │PlantUML│  │SVG→座標  │  │モデル→表 │  │ (Webhook POST)   │    │
+│  │→Model │  │          │  │         │  │                  │    │
+│  └───────┘  └────┬─────┘  └─────────┘  └────────┬─────────┘    │
+└──────────────────┼──────────────────────────────┼───────────────┘
+                   │                              │
+                   ▼                              ▼
+           ┌──────────────┐               ┌──────────────────┐
+           │ PlantUML     │               │  n8n (Docker)    │
+           │ Server       │               │  ┌────────────┐  │
+           │ (Docker)     │               │  │ Gemini API │  │
+           │              │               │  │ (チャット)  │  │
+           │ source → SVG │               │  └────────────┘  │
+           └──────────────┘               └──────────────────┘
 ```
 
 ## 2. 設計原則
 
-### 2.1 持たないアーキテクチャ
+### 2.1 意味はソースから、表示はSVGそのまま、マーカーはオーバーレイ
 
-- フロントエンドは**表示と接続**に専念する
-- 図のレンダリング → PlantUML Server
-- AI対話・テーブル生成 → n8n + LLM
-- テストケース生成 → 純粋アルゴリズム（唯一フロントエンドが計算する部分）
-- 永続化 → エクスポート（Phase 1）/ GitHub（Phase 3）
-
-### 2.2 リアクティブパイプライン
-
-PlantUMLソースを起点として、すべてのビューがリアクティブに更新される。
+PlantUMLソースが意味の源泉。SVGはPlantUMLが生成した図をそのまま表示する（描き直さない）。マーカー（楕円・矩形・矢印）はネイティブSVGの薄いオーバーレイ層に描かれる。マーカーは特定モデル要素には縛られず、AIに「マーカーの座標」と「モデル要素の座標」を渡してAIに解釈させる。
 
 ```
-Source変更
- ├── debounce(500ms) → PlantUML Server → SVG → DiagramView
- ├── debounce(1500ms) → n8n/LLM → テーブル(JSON) → TableView
- │                                       └─→ アルゴリズム → TestCasesView
- └── 即時 → モデル種別検出 → EBNF(静的定義) → EbnfView
+PlantUML Source ──parse──→ StateMachineModel（意味）
+PlantUML Source ──encode──→ PlantUML Server ──→ SVG（表示＋座標抽出）
+SVG ──→ SvgPreviewにそのまま表示
+SVG ──extract──→ Coordinate Map（AIコンテキスト用）
+ユーザーがマーカー描画 → MarkerStore（id + type + color + geometry）
+MarkerStore + Coordinate Map → AIチャットコンテキスト
 ```
 
-### 2.3 n8nがオーケストレーター
+この設計により：
+- **AIなしでもモデルの意味構造は維持される**（パーサーは純粋アルゴリズム）
+- **図の品質はPlantUMLのレンダリングそのまま**（エッジルーティング含む）
+- **マーカーは小さなネイティブSVG実装で済む**（外部ホワイトボードフレームワーク不要）
+- **マーカーをモデル要素に縛らないことで、状態遷移図以外にも同じ仕組みが流用できる**
 
-- AI対話の中継、テーブル生成、外部連携はすべてn8nが担う
-- APIキーはn8n側で管理し、フロントエンドには露出しない
-- n8nワークフローはJSONエクスポート可能 → リポジトリに同梱
+### 2.2 持たないアーキテクチャ（選択的適用）
+
+- 図のレイアウト → PlantUML Serverに委譲
+- AI対話 → n8n + Gemini APIに委譲
+- **意味解析・テーブル生成 → フロントエンドが自前で計算**
+- 永続化 → エクスポート（JSON）
+
+旧設計ではテーブル生成もLLMに委譲していたが、PlantUMLサブセットのパーサーを自前で持つことにより：
+- LLM依存を排除し、確実で高速な解析が可能
+- NeoCEGと同じ「テキスト→正規モデル→図＋表」パターンを踏襲
+
+### 2.3 Volatile Canvas
+
+- セッションデータはブラウザメモリにのみ保持
+- 図は一時的な思考のキャンバスであり最終成果物ではない
+- 対話ログが設計の本質的な資産
+- 永続化はエクスポートで行う
 
 ### 2.4 オープンソース＋セルフホスト
 
 - MIT License
-- ユーザーは自身の環境にセルフホスト可能
 - Docker Compose で PlantUML Server + n8n を同時起動
+- APIキーはn8n側で管理
 
 ## 3. リアクティブデータフロー
 
@@ -93,38 +98,47 @@ Source変更
 
 PlantUMLソースが**唯一の情報源（Single Source of Truth）**。ソース変更に応じて各ビューがリアクティブに派生する。
 
+```
+Source変更
+ ├── 即時 → StateMachineParser → StateMachineModel
+ │                                  ├── → StateEventMatrix → S×Eタブ
+ │                                  └── → StateStateMatrix → S×Sタブ
+ ├── debounce(500ms) → PlantUML Server → SVG
+ │                                        ├── → SvgPreviewにそのまま表示
+ │                                        └── → SvgCoordinateExtractor → 座標マップ
+ ├── 静的定義 → EbnfView
+ └── (独立) MarkerStore → MarkerOverlay & AIコンテキスト
+```
+
 | パイプライン | 入力 | 処理場所 | 出力 | 想定遅延 |
 |------------|------|---------|------|---------|
-| 図レンダリング | Source | PlantUML Server (HTTP GET) | SVG | ~1s |
-| テーブル生成 | Source + ModelType | n8n → LLM | テーブル JSON | ~3s |
-| テストケース | テーブル JSON | フロントエンド内アルゴリズム | テストケース配列 | <100ms |
-| EBNF表示 | ModelType | フロントエンド内 静的定義参照 | EBNF文法テキスト | 即時 |
-| モデル種別検出 | Source | フロントエンド内 キーワードマッチ | ModelType enum | 即時 |
+| モデル解析 | Source | フロントエンド（Parser） | StateMachineModel | <100ms |
+| 状態遷移表 | Model | フロントエンド（Matrix Generator） | マトリクスデータ | <100ms |
+| SVG表示 | Source | PlantUML Server | SVG → SvgPreview | ~1s |
+| 座標抽出 | SVG | フロントエンド（Extractor） | 座標マップ | <100ms |
+| マーカー描画 | ユーザー操作 | MarkerOverlay | MarkerStore更新 | 即時 |
+| EBNF表示 | 静的 | フロントエンド | EBNF文法テキスト | 即時 |
 
 ### 3.2 チャットフロー
 
 ```
 ユーザーメッセージ + コンテキスト（Source）
-  → n8n webhook → LLM → レスポンス
+  → n8n webhook → Gemini API → レスポンス
   → n8nが ```plantuml``` コードブロックを検出・抽出
   → 構造化JSON { text, suggestedSource } を返却
   → フロントエンドで差分ビュー表示 → 「適用」→ Source更新
-  → Source変更 → 全パイプライン再実行
+  → Source変更 → Parser再実行 → 全パイプライン再実行
 ```
 
-**ポイント**: AIレスポンスの解析（コードブロック抽出）はn8n側で行い、フロントエンドには構造化データのみを渡す。フロントエンドに `parseAiResponse` のようなパーサは不要。
+AIレスポンスの解析（コードブロック抽出）はn8n側で行い、フロントエンドには構造化データのみを渡す。
 
-### 3.3 プロンプトエンジニアリング
+### 3.3 プロンプト管理
 
 プロンプトはn8n側で管理する。フロントエンドはプロンプトの内容を知らない。
-
-n8nワークフロー内で、モデル種別に応じたシステムプロンプトを選択し、LLMに構造化データを生成させる。
 
 | プロンプト | 用途 | 出力形式 |
 |-----------|------|---------|
 | chat-system-prompt | チャット対話のシステムプロンプト | テキスト（PlantUMLコードブロック含む） |
-| analyze-state-diagram | 状態遷移図 → テーブル変換 | JSON |
-| analyze-mindmap | マインドマップ → 因子水準表変換 | JSON |
 
 ## 4. UIレイアウト＆コンポーネント設計
 
@@ -135,17 +149,17 @@ n8nワークフロー内で、モデル種別に応じたシステムプロン�
 │  Header (Logo / SessionName / ExportButton)                   │
 ├──────────────────────────────────────┬───────────────────────┤
 │                                      │                       │
-│  DiagramView（主役・最大領域）         │  ChatPanel            │
-│  SVG表示（パン/ズーム）               │  （全高さ）            │
-│                                      │  MessageList          │
+│  DiagramView（主役・最大領域）        │  ChatPanel            │
+│  PlantUML SVG ＋ マーカーオーバーレイ │  （全高さ）            │
+│  [⬭ ▭ ⇢] マーカーツール / パン/ズーム │  MessageList          │
 │                                      │  SourceDiffView       │
 ├─ ─ ─ ─ ─ drag handle ─ ─ ─ ─ ─ ─ ─ ┤  ChatInput            │
 │  ▲ AnalysisPanel（タブ付き）          │                       │
-│  [Source │ Table │ TestCases │ EBNF]  │                       │
+│  [Source | S×E | S×S | EBNF]         │                       │
 │  ──────────────────────────────────  │                       │
 │  (アクティブタブのコンテンツ)          │                       │
 ├──────────────────────────────────────┴───────────────────────┤
-│  StatusBar (PlantUML / n8n / AI)                              │
+│  StatusBar (PlantUML Server / n8n)                            │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -160,13 +174,15 @@ App
 ├── MainLayout
 │   ├── WorkArea（左側）
 │   │   ├── DiagramView
-│   │   │   └── SvgPreview（pan/zoom: react-zoom-pan-pinch）
+│   │   │   ├── MarkerToolbar [⬭ ▭ ⇢]
+│   │   │   ├── SvgPreview（PlantUML SVG + pan/zoom）
+│   │   │   └── MarkerOverlay（ネイティブSVG）
 │   │   └── AnalysisPanel（リサイズ可能・折りたたみ可能）
-│   │       ├── TabBar [Source | Table* | TestCases* | EBNF*]
+│   │       ├── TabBar [Source | S×E | S×S | EBNF]
 │   │       ├── PlantUmlEditor（CodeMirror — Source tab）
-│   │       ├── AnalysisTable*（Table tab）
-│   │       ├── TestCaseView*（TestCases tab）
-│   │       └── EbnfView*（EBNF tab）
+│   │       ├── StateEventMatrixView（S×E tab）
+│   │       ├── StateStateMatrixView（S×S tab）
+│   │       └── EbnfView（EBNF tab）
 │   └── ChatPanel（右側・全高さ）
 │       ├── MessageList
 │       │   ├── UserMessage
@@ -175,10 +191,7 @@ App
 │       └── ChatInput
 └── StatusBar
     ├── PlantUmlServerStatus
-    ├── N8nStatus
-    └── AiStatus
-
-* = Phase 2
+    └── N8nStatus
 ```
 
 ## 5. ステート管理
@@ -199,6 +212,16 @@ interface SessionStore {
   undoSource: () => void;
 }
 
+// ModelStore — パース済みモデル＆テーブル
+interface ModelStore {
+  model: StateMachineModel | null;
+  parseError: string | null;
+  stateEventMatrix: MatrixData | null;
+  stateStateMatrix: MatrixData | null;
+
+  parseSource: (source: string) => void;
+}
+
 // ChatStore — AI対話管理
 interface ChatStore {
   messages: ChatMessage[];
@@ -207,102 +230,163 @@ interface ChatStore {
   sendMessage: (content: string) => Promise<void>;
 }
 
-// AnalysisStore — テーブル・テストケース管理（Phase 2）
-interface AnalysisStore {
-  modelType: ModelType | null;
-  analysisTable: AnalysisTableData | null;
-  testCases: TestCase[] | null;
-  isTableLoading: boolean;
-
-  detectModelType: (source: string) => void;
-  generateTable: (source: string) => Promise<void>;
-  computeTestCases: () => void;
-}
-
 // UiStore — レイアウト＆接続状態
 interface UiStore {
   analysisPanelHeight: number;
   analysisPanelCollapsed: boolean;
-  activeAnalysisTab: 'source' | 'table' | 'testcases' | 'ebnf';
+  activeAnalysisTab: 'source' | 'state-event' | 'state-state' | 'ebnf';
   chatPanelWidth: number;
-  theme: 'light' | 'dark';
 
   plantUmlStatus: 'connected' | 'disconnected' | 'checking';
   n8nStatus: 'connected' | 'disconnected' | 'checking';
 }
+
+// MarkerStore — マーカー管理
+type MarkerColor = 'red' | 'blue' | 'green' | 'purple';
+type MarkerType = 'ellipse' | 'rectangle' | 'arrow';
+
+interface Marker {
+  id: string;            // 安定ID（将来の協調編集・AI操作用）
+  type: MarkerType;
+  color: MarkerColor;    // 4色の中からの未使用色
+  geometry: EllipseGeometry | RectangleGeometry | ArrowGeometry;
+}
+
+interface MarkerStore {
+  markers: Marker[];
+  activeTool: MarkerType;            // ツールバーで選択中
+  setActiveTool: (t: MarkerType) => void;
+  addMarker: (m: Omit<Marker, 'id' | 'color'>) => Marker | null; // 色満杯ならnull
+  updateMarker: (id: string, geometry: Marker['geometry']) => void;
+  deleteMarker: (id: string) => void;
+}
 ```
 
-## 6. サービス層
+### ModelStoreのリアクティブ更新
 
-### 6.1 PlantUML Service
+```
+SessionStore.currentSource が変更
+  → ModelStore.parseSource(source) が呼ばれる
+  → StateMachineParser が Model を生成
+  → StateEventMatrix, StateStateMatrix が再計算
+  → テーブルビュー が再描画（SVGはPlantUML Server経由で別途更新）
+```
+
+## 6. コアモジュール設計
+
+### 6.1 StateMachineParser
+
+```typescript
+interface StateMachineParser {
+  parse(source: string): ParseResult;
+}
+
+interface ParseResult {
+  model: StateMachineModel | null;
+  errors: ParseError[];
+}
+
+interface ParseError {
+  line: number;
+  message: string;
+}
+```
+
+- PlantUMLの状態遷移図サブセットのみを対象
+- 純粋関数（副作用なし）
+- 対応構文: `[*] -->`, `A --> B : event [guard] / action`, `state "name" as alias`
+
+### 6.2 SvgCoordinateExtractor
+
+```typescript
+interface SvgCoordinateExtractor {
+  extract(svgString: string, model: StateMachineModel): CoordinateMap;
+}
+
+type CoordinateMap = Map<string, { x: number; y: number; width: number; height: number }>;
+```
+
+- PlantUML Serverが生成したSVGを解析
+- SVG内のテキスト要素から状態名を特定し、囲み図形の座標を取得
+- StateMachineModelの状態IDと照合してマッピング
+
+### 6.3 MatrixGenerator
+
+```typescript
+interface MatrixGenerator {
+  generateStateEventMatrix(model: StateMachineModel): MatrixData;
+  generateStateStateMatrix(model: StateMachineModel): MatrixData;
+}
+
+interface MatrixData {
+  rowHeaders: string[];     // 状態名
+  columnHeaders: string[];  // イベント名 or 状態名
+  cells: (string | null)[][]; // セル値（遷移先 or イベント or null）
+}
+```
+
+- StateMachineModelから純粋に算出
+- 副作用なし、即時計算
+
+### 6.4 MarkerOverlay コンポーネント
+
+```typescript
+interface MarkerOverlayProps {
+  // SVG座標空間の幅・高さ（PlantUML SVGに合わせる）
+  svgWidth: number;
+  svgHeight: number;
+  // 現在のパン・ズーム状態（SvgPreviewと共有）
+  viewport: { x: number; y: number; scale: number };
+}
+```
+
+責務：
+- ネイティブSVG (`<svg>` の上に重ねた透明な `<svg>`) でマーカーを描画
+- ポインタイベントを受け取り、`MarkerStore.activeTool` に応じてドラッグで新規マーカーを作成
+- 既存マーカーの選択・移動・リサイズ・矢印端点の調整
+- 選択中マーカーで Delete/Backspace キーを処理
+- マーカーは SVG 座標空間に保存されるので、パン・ズームを変えても自動的に追従する
+
+外部ホワイトボードフレームワークは使わず、200行程度の自前実装で十分。
+
+### 6.5 PlantUML Service
 
 ```typescript
 interface PlantUmlService {
-  renderSvg(source: string): Promise<string>;
+  fetchSvg(source: string): Promise<string>;
   checkHealth(): Promise<boolean>;
 }
 ```
 
 - PlantUMLソースを Deflate + Base64 エンコード → HTTP GET
 - plantuml-encoder ライブラリを使用
+- 取得したSVGはSvgCoordinateExtractorに渡す（直接表示には使わない）
 - デバウンス: 500ms
 
-### 6.2 n8n Service
+### 6.6 n8n Service
 
 ```typescript
-// n8nが返す構造化レスポンス
 interface ChatResponse {
-  text: string;                // AI応答テキスト
-  suggestedSource?: string;    // 抽出済みPlantUMLソース（あれば）
+  text: string;
+  suggestedSource?: string;
 }
 
 interface N8nService {
-  // Phase 1: チャット中継（n8nがレスポンス解析済みの構造化JSONを返す）
   chat(params: {
     currentSource: string;
     messages: ChatMessage[];
     userMessage: string;
   }): Promise<ChatResponse>;
 
-  // Phase 2: テーブル生成
-  generateTable(params: {
-    source: string;
-    modelType: ModelType;
-  }): Promise<AnalysisTableData>;
-
   checkHealth(): Promise<boolean>;
 }
 ```
 
 - n8n Webhookへ HTTP POST
-- チャット: n8nがLLM応答を解析し、構造化JSON（text + suggestedSource）を返却
-- テーブル生成: 同様にJSON返却
-- n8n側でプロンプト組み立て＋LLM呼び出し＋レスポンス解析をすべて実行
+- n8nがLLM応答を解析し、構造化JSON（text + suggestedSource）を返却
 - フロントエンドはJSONを受け取って表示するだけ
 
-### 6.3 TestCase Engine
-
-```typescript
-interface TestCaseEngine {
-  // 状態遷移表 → Nスイッチカバレッジ
-  generateNSwitchCases(
-    table: StateTransitionTable,
-    n: number
-  ): TestCase[];
-
-  // 因子水準表 → 組合せテスト
-  generateCombinatorialCases(
-    table: FactorLevelTable
-  ): TestCase[];
-}
-```
-
-- **純粋アルゴリズム** — 外部サービス呼び出しなし
-- テーブルデータから即座に計算
-- Nスイッチカバレッジ: グラフ探索によるパス列挙
-- 組合せテスト: ペアワイズ等の組合せ手法
-
-### 6.4 Export Service
+### 6.7 Export Service
 
 ```typescript
 interface ExportService {
@@ -316,14 +400,11 @@ interface ExportService {
 
 ### 7.1 Webhookエンドポイント
 
-| エンドポイント | Phase | 用途 |
-|--------------|-------|------|
-| `POST /webhook/modellogue-chat` | 1 | チャット中継（SSEレスポンス） |
-| `POST /webhook/modellogue-analyze` | 2 | テーブル生成（JSONレスポンス） |
-| `POST /webhook/modellogue-commit` | 3 | GitHub自動コミット |
-| `POST /webhook/modellogue-event` | 3 | 業務フロー統合イベント |
+| エンドポイント | 用途 |
+|--------------|------|
+| `POST /webhook/modellogue-chat` | チャット中継（SSEレスポンス） |
 
-### 7.2 チャット中継ワークフロー（Phase 1）
+### 7.2 チャット中継ワークフロー
 
 ```
 Webhook受信 → コンテキスト組み立て（systemPrompt + source + history）
@@ -347,43 +428,12 @@ Request:
 
 Response:
 {
-  "text": "この状態遷移図には初期状態からの...",
+  "text": "この状態遷移図には...",
   "suggestedSource": "@startuml\n[*] --> Idle\n..."
 }
 ```
 
-**注**: `suggestedSource` はAIレスポンスに ` ```plantuml``` ` コードブロックが含まれる場合のみ。n8nワークフロー内で抽出する。
-
-### 7.3 テーブル生成ワークフロー（Phase 2）
-
-```
-Webhook受信 → モデル種別に応じたプロンプト選択
-→ Gemini API呼び出し → JSON整形 → レスポンス返却
-```
-
-**Webhook仕様**:
-
-```
-POST /webhook/modellogue-analyze
-Content-Type: application/json
-
-Request:
-{
-  "source": "...",
-  "modelType": "state_diagram"
-}
-
-Response:
-{
-  "columns": ["Before State", "Event", "After State"],
-  "rows": [
-    ["Idle", "start", "Running"],
-    ...
-  ]
-}
-```
-
-### 7.4 ワークフローのポータビリティ
+### 7.3 ワークフローのポータビリティ
 
 - n8nワークフローはJSON形式でエクスポート可能
 - `n8n/workflows/` ディレクトリにテンプレートを同梱
@@ -414,7 +464,7 @@ volumes:
   n8n_data:
 ```
 
-**注**: Gemini APIキーはn8n UI内のCredentials設定で管理する。環境変数やコードには一切含めない。
+Gemini APIキーはn8n UI内のCredentials設定で管理する。環境変数やコードには一切含めない。
 
 ### 8.2 環境変数
 
@@ -434,13 +484,18 @@ ModelLogue/
 ├── Reference/
 ├── Doc/
 │   ├── requirements/
+│   │   ├── Requirements_Specification.md
+│   │   ├── user_requirements.yaml
+│   │   ├── system_requirements.yaml
+│   │   ├── nonfunctional_requirements.yaml
+│   │   └── test_strategy.yaml
+│   ├── Traceability.md
 │   ├── architecture.md
-│   ├── Security_Design.md
-│   └── traceability/
+│   └── Security_Design.md
 ├── n8n/
 │   └── workflows/
-│       ├── chat-relay.json
-│       └── table-generation.json      # Phase 2
+│       └── chat-relay.json
+├── Prototype/
 ├── docker-compose.yml
 ├── src/
 │   ├── main.tsx
@@ -448,14 +503,17 @@ ModelLogue/
 │   ├── components/
 │   │   ├── Header/
 │   │   ├── DiagramView/
-│   │   │   └── SvgPreview.tsx
+│   │   │   ├── DiagramView.tsx             # SVG + overlay layout
+│   │   │   ├── SvgPreview.tsx               # PlantUML SVG + pan/zoom
+│   │   │   ├── MarkerToolbar.tsx            # ⬭ ▭ ⇢ buttons
+│   │   │   └── MarkerOverlay.tsx            # ネイティブSVGマーカー描画
 │   │   ├── AnalysisPanel/
 │   │   │   ├── AnalysisPanel.tsx
 │   │   │   ├── TabBar.tsx
-│   │   │   ├── PlantUmlEditor.tsx
-│   │   │   ├── AnalysisTable.tsx      # Phase 2
-│   │   │   ├── TestCaseView.tsx       # Phase 2
-│   │   │   └── EbnfView.tsx           # Phase 2
+│   │   │   ├── PlantUmlEditor.tsx         # CodeMirror
+│   │   │   ├── StateEventMatrixView.tsx
+│   │   │   ├── StateStateMatrixView.tsx
+│   │   │   └── EbnfView.tsx
 │   │   ├── ChatPanel/
 │   │   │   ├── ChatPanel.tsx
 │   │   │   ├── MessageList.tsx
@@ -463,29 +521,43 @@ ModelLogue/
 │   │   │   └── ChatInput.tsx
 │   │   ├── StatusBar/
 │   │   └── MainLayout.tsx
+│   ├── parsers/
+│   │   ├── stateMachineParser.ts
+│   │   └── stateMachineSerializer.ts
+│   ├── engines/
+│   │   ├── matrixGenerator.ts
+│   │   └── svgCoordinateExtractor.ts
 │   ├── services/
 │   │   ├── plantUmlService.ts
 │   │   ├── n8nService.ts
 │   │   └── exportService.ts
-│   ├── engines/                        # 純粋アルゴリズム
-│   │   ├── testCaseEngine.ts           # Phase 2
-│   │   └── modelTypeDetector.ts        # Phase 2
 │   ├── stores/
 │   │   ├── sessionStore.ts
+│   │   ├── modelStore.ts
 │   │   ├── chatStore.ts
-│   │   ├── analysisStore.ts            # Phase 2
+│   │   ├── markerStore.ts
 │   │   └── uiStore.ts
-│   ├── grammars/                       # EBNF静的定義（Phase 2）
-│   │   ├── stateDiagram.ebnf
-│   │   └── mindmap.ebnf
+│   ├── grammars/
+│   │   └── stateDiagram.ebnf
 │   ├── i18n/
 │   │   ├── index.ts
 │   │   ├── en.json
 │   │   └── ja.json
 │   ├── types/
-│   │   └── index.ts
+│   │   ├── stateMachine.ts
+│   │   ├── session.ts
+│   │   └── matrix.ts
 │   └── utils/
 │       └── plantumlEncoder.ts
+├── tests/
+│   ├── unit/
+│   │   ├── stateMachineParser.test.ts
+│   │   ├── matrixGenerator.test.ts
+│   │   └── svgCoordinateExtractor.test.ts
+│   └── golden/
+│       ├── GT-001/
+│       ├── GT-002/
+│       └── ...
 ├── index.html
 ├── package.json
 ├── tsconfig.json
@@ -506,96 +578,72 @@ ModelLogue/
 | CSS | Tailwind CSS |
 | コンテナ | Docker Compose（PlantUML Server + n8n） |
 
-## 11. プロトタイプ検証計画（Walking Skeleton）
+## 11. 判断記録（ADR）
 
-本番実装の前に、アーキテクチャの前提（外部サービス接続）を検証するプロトタイプを `Prototype/` に作成する。
+### ADR-001: フロントエンドは純粋なUI（選択的適用）
 
-### 11.1 検証目的
+- **決定**: SPAは表示と接続に専念。秘密情報を持たない。ただしモデルの意味解析と表生成はフロントエンドで実行する。
+- **理由**: オープンソース + セルフホスト前提。Volatile Canvas思想。意味解析はLLM不要の確定的処理であり、フロントエンドで完結させることで堅牢性とレスポンスを確保する。
 
-| # | 検証対象 | 成功条件 |
-|---|---------|---------|
-| 1 | PlantUML Server → SVG | 例題ソースを送信し、SVG画像が返る |
-| 2 | n8n → Gemini チャット | Chat Trigger経由でGeminiが応答する |
-| 3 | n8n レスポンス構造化 | AIレスポンスから構造化JSON（text + suggestedSource）が返る |
-| 4 | UIレイアウト基本形 | SVG + ダミーテーブル + チャットが1画面に収まる |
+### ADR-002: n8nをオーケストレーターとして導入
 
-### 11.2 プロトタイプ構成
-
-```
-Prototype/
-├── index.html              # 1枚のHTML（SVG表示 + ダミーテーブル + n8nチャットウィジェット）
-└── example.puml            # 例題PlantUMLソース（状態遷移図）
-```
-
-### 11.3 アプローチ
-
-- **チャット**: n8nの `@n8n/chat` ウィジェットを埋め込み。カスタムコード不要。
-- **SVG表示**: PlantUML Serverへ直接HTTPリクエスト（エンコード済みURL）。
-- **テーブル**: ハードコードのダミーデータ。LLM連携はプロトタイプ後。
-- **自前コード**: HTML/CSSのみ。React/TypeScriptはまだ使わない。
-
-### 11.4 検証ステップ
-
-1. `docker compose up -d` — PlantUML Server + n8n 起動
-2. PlantUML Server 疎通確認（curl / ブラウザ）
-3. n8n UI でワークフロー構築（Chat Trigger + Gemini）
-4. `Prototype/index.html` をブラウザで開いて統合確認
-
-環境構築の詳細手順は [`Doc/setup_guide.md`](./setup_guide.md) を参照。
-
-## 12. Phase別の進化パス
-
-```
-Phase 1 (MVP) — コアレビュー基盤
-├── DiagramView: SVGプレビュー（パン/ズーム）
-├── AnalysisPanel: Source タブのみ（PlantUMLエディタ）
-├── ChatPanel: n8n経由AI対話 + 修正提案の適用/Undo
-├── StatusBar: PlantUML Server / n8n 接続状態
-└── Export: セッションJSONエクスポート
-
-Phase 2 (Analytical Review) — モデル解析＋インタラクティブ
-├── AnalysisPanel: Table / TestCases / EBNF タブ追加
-├── テーブル生成: n8n/LLMに委譲
-├── テストケース: フロントエンド内アルゴリズム計算
-├── 双方向ハイライト: 図 ↔ テーブル
-├── React Flow: 要素選択・コメント付与
-└── モデル種別自動検出
-
-Phase 3 (Enterprise) — コラボレーション＋業務フロー
-├── n8n経由 Slack/Teams/Discord フィードバック収集
-├── n8n経由 GitHub自動コミット（レビュー証跡）
-└── n8n経由 業務フロー統合
-```
-
-## 12. 判断記録（ADR）
-
-### ADR-001: フロントエンドは純粋なUI
-
-- **決定**: SPAは表示と接続のみ。秘密情報を持たない。
-- **理由**: オープンソース + セルフホスト前提。Volatile Canvas思想。
-
-### ADR-002: n8nをPhase 1からオーケストレーターとして導入
-
-- **決定**: n8nがAI中継・テーブル生成・外部連携を一手に担う
-- **理由**: アーキテクチャの一貫性。ワークフロー追加でPhase 2/3に拡張。
+- **決定**: n8nがAI中継を担う。将来の外部連携もn8n経由。
+- **理由**: APIキー管理の一元化。ワークフロー追加で拡張可能。
 - **トレードオフ**: Docker環境必要だが、PlantUML Serverと同様。
 
-### ADR-003: テーブル生成はLLM委譲、テストケースはアルゴリズム
+### ADR-003: 意味解析はフロントエンドのパーサー
 
-- **決定**: PlantUMLソース → テーブル変換はn8n/LLMに委譲。テーブル → テストケース変換はフロントエンドのアルゴリズムで実行。
+- **決定**: PlantUMLサブセットのパーサーをフロントエンドに持ち、StateMachineModelを自前で構築する。テーブル生成も純粋アルゴリズムで実行する。
+- **旧決定からの変更**: テーブル生成をLLMに委譲する方針を撤回。
 - **理由**:
-  - テーブル生成: PlantUML構文の完全パーサを自前で実装するのは過剰。LLMに構造化データ抽出を委譲する方がシンプルで拡張性が高い。
-  - テストケース: Nスイッチカバレッジ等は明確なアルゴリズム。LLMは不要。即座に計算可能。
+  - PlantUMLの状態遷移図サブセットは文法が限定的であり、パーサーの実装コストは低い
+  - LLM依存を排除することで、AIなしでも図＋表の表示が成立する
+  - NeoCEGで確立した「テキスト→正規モデル→図＋表」パターンを踏襲
+  - パーサーは純粋関数であり、テストが容易
 
-### ADR-004: EBNFはモデル種別ごとの静的定義
+### ADR-004: EBNFは静的定義
 
-- **決定**: EBNF文法はフロントエンドに静的ファイルとして持つ
+- **決定**: EBNF文法はフロントエンドに静的ファイルとして持つ。
 - **理由**: 文法定義は変更頻度が低く、LLM生成は不安定。静的定義が最も信頼性が高い。
 
-### ADR-005: AIレスポンスの解析はn8n側で行う
+### ADR-005: AIレスポンスの解析はn8n側
 
-- **決定**: LLMレスポンスからのPlantUMLコードブロック抽出はn8nワークフロー内で実行し、フロントエンドには構造化JSON（text + suggestedSource）を返す。
+- **決定**: LLMレスポンスからのPlantUMLコードブロック抽出はn8nワークフロー内で実行。
+- **理由**: フロントエンドは受け取ったJSONを表示するだけ。
+
+### ADR-006: SVGを直接表示し、ネイティブSVGオーバーレイにマーカーを描く
+
+- **決定**: PlantUML Serverから取得したSVGをそのまま `<img>` または `<svg>` で表示し、その上にネイティブSVGのオーバーレイ層を重ねてマーカー（楕円・矩形・矢印）を描く。React FlowもExcalidrawも使用しない。
+- **旧決定からの変更**:
+  - React Flowで図を描き直す方針を撤回（v3.0）
+  - その後Excalidrawをホワイトボードとして使う方針も撤回（v5.0）
 - **理由**:
-  - フロントエンドに `parseAiResponse` のようなパーサを持つ必要がなくなる
-  - n8nワークフロー内でレスポンス整形を完結させることで、フロントエンドは受け取ったJSONを表示するだけになる
-  - 「持たないアーキテクチャ」の一貫性：フロントエンドはUI表示に専念
+  - React Flowで描き直すとエッジルーティングとラベル配置がPlantUMLと一致せず、図の品質が低い（実装で確認済み）
+  - Excalidrawは多機能すぎて、必要な「マーカーを置く」操作を実現するために遠回りする必要があった（IDがランダム置換される、削除がうまく効かない、独自描画機能との混乱、など）
+  - 必要なのは「ここに注目を示せるマーカー」だけ。それなら200行程度のネイティブSVG実装で十分
+  - 余計な依存（Excalidraw 1.8MB）が消え、見た目とイベント挙動を完全にコントロールできる
+  - 将来のリアルタイム協調編集も、マーカーの差分をWebSocketで送るだけで実装できる
+
+### ADR-007: マーカーはモデル要素に縛らず、AIに解釈させる
+
+- **決定**: マーカーは特定のモデル要素IDに紐づけない。MarkerStoreはマーカーの座標と色だけを持ち、AIチャットコンテキストとして「マーカー一覧」と「モデル要素の座標」の両方を渡す。AIが必要に応じて「赤の楕円はIdle状態を指していますね」と解釈し、曖昧なら人間に質問する。
+- **旧決定からの変更**: マーカーをモデル要素に厳密に紐づける案を撤回（v4.1）
+- **理由**:
+  - 人間は一発で正確にクリックできない。厳密照合は失敗時のリカバリーが面倒
+  - 状態遷移図に限らず、将来のあらゆるモデル図（アクティビティ図・要求系統図等）で同じ仕組みが使える
+  - 「だいたいこのあたり」という人間のレビュー所作と合致する
+  - AIは元々曖昧性に強い。座標情報を渡せばAIが適切に解釈してくれる
+  - マーカー実装側の責任が減り、シンプルで堅牢になる
+
+## 12. 将来拡張
+
+現在のスコープは状態遷移図に限定しているが、パーサーとモデルを差し替えることで他の図種にも対応可能。
+
+| 拡張 | パーサー追加 | モデル追加 | テーブル追加 |
+|------|-----------|----------|------------|
+| Nスイッチカバレッジ | 不要 | 不要 | NswitchCoverageGenerator |
+| アクティビティ図（BPMN風） | ActivityDiagramParser | ActivityModel | DecisionTable |
+| 要求帰納系統図 | RequirementsTreeParser | RequirementsModel | DerivationMatrix |
+| クラシフィケーションツリー | ClassificationTreeParser | ClassificationModel | FactorLevelTable |
+
+拡張時のアーキテクチャへの影響は最小限（パーサー＋モデル＋テーブルの差し替えのみ）。

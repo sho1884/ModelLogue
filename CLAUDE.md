@@ -2,14 +2,18 @@
 
 ## プロジェクト概要
 
-**ModelLogue** は、ソフトウェア開発におけるモデルレビューを支援する次世代型プラットフォームです。
+**ModelLogue** は、ソフトウェア開発におけるモデルレビューを支援するプラットフォームです。
 モデル図を「一時的な思考のキャンバス（Volatile Canvas）」と位置づけ、人間とAIの「対話ログ」を設計の本質的な資産として扱います。
+
+現在のスコープは**状態遷移図のレビュー**に集中しています。NeoCEGと同じ「テキスト→正規モデル→図＋表」パターンで、PlantUMLサブセット→StateMachineModel→PlantUML SVG（マーカーオーバーレイ付き）＋状態遷移マトリクスのパイプラインを構築します。
 
 ## 作業方針
 
 ### ドキュメント・ファースト
 
 - 十分なドキュメント（要求仕様書・アーキテクチャ設計書）が完成するまで、本番のコーディングは開始しない
+- **ドキュメントの変更を常に実装より先行させる**
+- 例外: 実装レベルの試行錯誤が必要な場合のみ、Prototype/で検証してから文書を修正してもよい
 - ドキュメントは `Doc/` ディレクトリに格納する
 - 企画・参考資料は `Reference/` ディレクトリに格納する
 
@@ -22,17 +26,28 @@ ModelLogue/
 ├── Reference/                  # 企画書・参考資料（変更しない）
 ├── Doc/                        # 設計ドキュメント
 │   ├── requirements/           # 要求仕様（YAML + Markdown）
+│   │   ├── Requirements_Specification.md  # Markdownビュー
 │   │   ├── user_requirements.yaml
 │   │   ├── system_requirements.yaml
-│   │   └── requirements.md     # Markdownビュー（YAMLを参照）
+│   │   ├── nonfunctional_requirements.yaml
+│   │   └── test_strategy.yaml
+│   ├── Traceability.md         # トレーサビリティ（Mermaid系統図＋マトリクス）
 │   ├── architecture.md         # アーキテクチャ設計書
-│   ├── Security_Design.md      # セキュリティ設計書
-│   └── traceability/           # トレーサビリティ図（Mermaid）
+│   └── Security_Design.md      # セキュリティ設計書
 ├── n8n/
 │   └── workflows/              # n8n workflow templates (JSON)
 ├── Prototype/                  # プロトタイプコード（本番とは隔離）
 ├── docker-compose.yml          # PlantUML Server + n8n
-└── src/                        # 本番ソースコード（設計完了後に着手）
+├── src/                        # 本番ソースコード
+│   ├── components/             # React コンポーネント
+│   ├── parsers/                # PlantUMLサブセットパーサー
+│   ├── engines/                # 純粋アルゴリズム（マトリクス生成、SVG座標抽出）
+│   ├── services/               # 外部サービス連携（PlantUML, n8n）
+│   ├── stores/                 # Zustand ストア
+│   ├── types/                  # TypeScript 型定義
+│   ├── grammars/               # EBNF 静的定義
+│   └── i18n/                   # 国際化リソース
+└── tests/                      # テスト（unit, golden）
 ```
 
 ### プロトタイプ
@@ -55,60 +70,62 @@ ModelLogue/
 ### Requirements Documents
 
 - Data: YAML files in `Doc/requirements/`
-- View: Markdown files referencing YAML
-- Traceability: Mermaid diagrams for visual review
+- View: `Requirements_Specification.md` referencing YAML
+- Traceability: `Traceability.md` with Mermaid diagrams and matrix
 
 ### Writing Style (Value Engineering)
 
-- User Requirements: Task expressions ("Review the graph")
-- System Requirements: Verb + Object ("Create a node on canvas")
-- Rule Scenarios: Context → Action → Outcome
+- User Requirements: Task expressions ("Review the diagram")
+- System Requirements: Verb + Object ("Parse PlantUML subset")
+- Rule Scenarios: Context → Action → Outcome (not Gherkin)
 
 ## Internationalization
 
 - UI: English and Japanese
 - Use i18next for translation
-- DSL keywords: English only (no localization)
+- PlantUML keywords: English only (no localization)
 
 ## 技術スタック
 
-### 基本方針: フロントエンドは純粋なUI + n8nがオーケストレーター
+### 基本方針
 
-- フロントエンド（SPA）は純粋なUIであり、秘密情報（APIキー等）を一切持たない
-- データ格納・AI連携・外部サービス連携はすべてn8nが担う
+- フロントエンド（SPA）は秘密情報（APIキー等）を一切持たない
+- **意味解析・テーブル生成はフロントエンドのパーサー＋アルゴリズム**で実行（LLM不要）
+- AI対話の中継はn8nが担う
 - オープンソース（MIT License）＋セルフホスト可能
 
 | レイヤー | 技術 | 用途 |
 |---------|------|------|
-| フロントエンド | React + TypeScript | SPA（純粋なUI） |
-| UIライブラリ | React Flow | モデル図の表示・インタラクション |
-| オーケストレーター | n8n (Docker) | AI中継・外部サービス連携・APIキー管理 |
-| 推論エンジン | Gemini 2.5 Flash API | AI対話・改善提案（n8n経由） |
-| 描画エンジン | PlantUML Server (Docker) | PlantUMLソース → SVG変換 |
+| フロントエンド | React + TypeScript | SPA |
+| 図の表示 | ネイティブSVG | PlantUML SVGをそのまま表示＋ネイティブSVGマーカーオーバーレイ |
+| ソースエディタ | CodeMirror | PlantUMLソース編集 |
+| 状態管理 | Zustand | ストア管理 |
+| 図の生成 | PlantUML Server (Docker) | PlantUMLソース → SVG（表示＋座標抽出） |
+| AI対話中継 | n8n (Docker) | Gemini API中継・APIキー管理 |
 | 国際化 | i18next | 英語・日本語 UI |
 
-### 外部サービス連携（すべてn8n経由）
+### 外部サービス連携
 
-- **n8n**: オーケストレーター（Docker セルフホスト、Phase 1から導入）
-- **PlantUML Server**: Docker セルフホスト（フロントエンドから直接接続）
+- **PlantUML Server**: Docker セルフホスト（SVG生成 → 直接表示＋座標抽出）
+- **n8n**: Docker セルフホスト（AI対話中継、APIキー管理）
 - **Gemini API**: n8n経由で中継（APIキーはn8n側で管理）
-- **Slack/Teams/Discord**: n8n経由で非同期フィードバック収集（Phase 2〜、任意）
-- **GitHub API**: n8n経由でソース＋会話ログの自動パブリッシュ（Phase 3）
 
-## 実装ロードマップ
+### マーカーUI
 
-1. **Phase 1 (MVP)**: PlantUMLソース受領・表示 + n8n経由AI対話型修正の基本フロー
-2. **Phase 2 (Collaborative)**: React Flow要素ポインティング + n8n経由Slack/Teams/Discord連携
-3. **Phase 3 (Enterprise)**: n8n経由GitHub自動コミット＋業務フロー統合
+- 楕円・矩形・矢印の3種類
+- 4色固定パレット（赤・青・緑・紫）、未使用色を自動割当
+- ドラッグで描画、選択→ハンドルで移動・リサイズ、DELキーまたは右クリックで削除
+- ネイティブSVGで自前実装（外部ホワイトボードフレームワーク不使用）
 
 ## コーディング規約
 
 - 言語: TypeScript（strict mode）
 - フォーマッター: Prettier
 - リンター: ESLint
-- テスト: Vitest
+- テスト: Vitest + React Testing Library
 - コンポーネント: 関数コンポーネント + Hooks
-- 状態管理: 必要に応じてZustand等の軽量ライブラリ
+- 状態管理: Zustand
+- CSS: Tailwind CSS
 
 ## Security
 
@@ -121,15 +138,9 @@ ModelLogue/
 
 - **Never use `eval()` or `Function()` with user input**
 - **Never use `dangerouslySetInnerHTML` with user input**
-- Validate all DSL input through parser (no direct execution)
-- Sanitize node labels before rendering
+- Validate all PlantUML input through parser (no direct execution)
+- Sanitize labels before rendering on the diagram view
 - Keep dependencies updated (`npm audit`)
-
-### Vercel Best Practices
-
-- Security headers configured in `vercel.json`
-- HTTPS enforced (automatic)
-- No secrets in code (use environment variables)
 
 ### AI-Generated Code Risks
 

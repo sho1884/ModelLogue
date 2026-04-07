@@ -1,0 +1,245 @@
+# ModelLogue Test Strategy
+
+version: "1.0"
+last_updated: "2026-04-05"
+
+# =============================================================================
+# Overview
+# =============================================================================
+
+approach: "specification-driven"
+description: |
+  Test strategy driven by requirements specification.
+  Core logic (parser, model, table generator) is tested with golden data.
+  UI components are tested with React Testing Library.
+  要求仕様駆動のテスト戦略。
+  コアロジック（パーサー、モデル、テーブル生成）はゴールデンデータで検証。
+  UIコンポーネントはReact Testing Libraryで検証。
+
+# =============================================================================
+# Test Categories
+# =============================================================================
+
+test_categories:
+
+  unit_tests:
+    description: "Test individual functions in isolation"
+    targets:
+      - component: "StateMachineParser"
+        traces_to: SR-002
+        tests:
+          - "Parse simple state transitions (A --> B : event)"
+          - "Parse initial/final pseudo-states ([*])"
+          - "Parse transitions with event, guard, and action"
+          - "Parse state aliases (state \"name\" as alias)"
+          - "Parse multiple transitions from same state"
+          - "Report syntax errors with line numbers"
+          - "Handle empty source gracefully"
+          - "Unicode state names (Japanese)"
+
+      - component: "StateMachineSerializer"
+        traces_to: SR-003
+        tests:
+          - "Serialize simple state machine to PlantUML source"
+          - "Round-trip: parse → serialize produces equivalent source"
+          - "Preserve event, guard, and action on transitions"
+
+      - component: "StateEventMatrix"
+        traces_to: SR-020
+        tests:
+          - "Generate matrix from simple state machine"
+          - "Empty cells for missing transitions"
+          - "Multiple transitions with different guards on same event"
+          - "Exclude initial/final pseudo-states from rows"
+          - "Deduplicate events for columns"
+
+      - component: "StateStateMatrix"
+        traces_to: SR-021
+        tests:
+          - "Generate matrix from simple state machine"
+          - "Multiple events between same state pair"
+          - "Empty cells for no direct transition"
+
+      - component: "SvgCoordinateExtractor"
+        traces_to: SR-011
+        tests:
+          - "Extract state positions from PlantUML SVG"
+          - "Map SVG elements to model states by name"
+          - "Handle SVG with state aliases"
+
+  integration_tests:
+    description: "Test PlantUML source → Model → Tables pipeline"
+    approach: "Golden data comparison"
+    format:
+      input: "PlantUML source (.puml)"
+      expected_output:
+        - "state_event_matrix.json"
+        - "state_state_matrix.json"
+        - "model.json"
+
+  component_tests:
+    description: "Test React components with React Testing Library"
+    targets:
+      - component: "StateMachineDiagram"
+        traces_to: [SR-010, SR-012, SR-013]
+        tests:
+          - "Render states as nodes"
+          - "Render transitions as edges"
+          - "Select state node on click"
+          - "Emit selection event"
+
+      - component: "AnalysisPanel"
+        traces_to: SR-071
+        tests:
+          - "Switch between tabs"
+          - "Resize panel via drag"
+          - "Collapse and expand"
+
+      - component: "BidirectionalHighlighter"
+        traces_to: SR-022
+        tests:
+          - "Click table row highlights diagram state"
+          - "Click diagram state highlights table row"
+          - "Click transition highlights table cell"
+
+# =============================================================================
+# Golden Test Cases
+# =============================================================================
+
+golden_test_cases:
+
+  basic:
+    - id: "GT-001"
+      name: "Simple two-state machine"
+      description: "Two states with one transition"
+      plantuml: |
+        @startuml
+        [*] --> Idle
+        Idle --> Active : start
+        Active --> Idle : stop
+        Active --> [*]
+        @enduml
+      expected:
+        states: ["Idle", "Active"]
+        events: ["start", "stop"]
+        transitions: 4  # including initial and final
+
+    - id: "GT-002"
+      name: "Transitions with guards and actions"
+      description: "State machine with guard conditions and actions"
+      plantuml: |
+        @startuml
+        [*] --> Idle
+        Idle --> Processing : submit [valid] / validate()
+        Idle --> Error : submit [invalid] / showError()
+        Processing --> Done : complete / notify()
+        Error --> Idle : retry
+        Done --> [*]
+        @enduml
+      expected:
+        states: ["Idle", "Processing", "Error", "Done"]
+        events: ["submit", "complete", "retry"]
+
+    - id: "GT-003"
+      name: "State aliases with Japanese names"
+      description: "States with display names in Japanese"
+      plantuml: |
+        @startuml
+        state "待機中" as Idle
+        state "処理中" as Processing
+        state "完了" as Done
+        [*] --> Idle
+        Idle --> Processing : start
+        Processing --> Done : finish
+        Done --> [*]
+        @enduml
+      expected:
+        states: ["Idle", "Processing", "Done"]
+        labels: ["待機中", "処理中", "完了"]
+
+  matrix:
+    - id: "GT-010"
+      name: "State×Event matrix basic"
+      description: "Verify State×Event matrix generation"
+      plantuml: |
+        @startuml
+        [*] --> S0
+        S0 --> S1 : E1
+        S1 --> S2 : E2
+        S2 --> S0 : E3
+        S2 --> S3 : E4
+        S0 --> S0 : E5
+        S3 --> S1 : E1
+        @enduml
+      expected_state_event_matrix:
+        rows: ["S0", "S1", "S2", "S3"]
+        columns: ["E1", "E2", "E3", "E4", "E5"]
+        cells:
+          S0: { E1: "S1", E5: "S0" }
+          S1: { E2: "S2" }
+          S2: { E3: "S0", E4: "S3" }
+          S3: { E1: "S1" }
+
+    - id: "GT-011"
+      name: "PreState×PostState matrix basic"
+      description: "Verify PreState×PostState matrix generation"
+      plantuml: |
+        @startuml
+        [*] --> S0
+        S0 --> S1 : E1
+        S1 --> S2 : E2
+        S2 --> S0 : E3
+        S2 --> S3 : E4
+        S0 --> S0 : E5
+        S3 --> S1 : E1
+        @enduml
+      expected_state_state_matrix:
+        rows: ["S0", "S1", "S2", "S3"]
+        columns: ["S0", "S1", "S2", "S3"]
+        cells:
+          S0: { S0: "E5", S1: "E1" }
+          S1: { S2: "E2" }
+          S2: { S0: "E3", S3: "E4" }
+          S3: { S1: "E1" }
+
+# =============================================================================
+# Test Data Format
+# =============================================================================
+
+test_data_format:
+  directory: "tests/golden/"
+  structure:
+    - "{test_id}/"
+    - "  input.puml                    # PlantUML source"
+    - "  expected_model.json           # Parsed StateMachineModel"
+    - "  expected_state_event.json     # State×Event matrix"
+    - "  expected_state_state.json     # PreState×PostState matrix"
+    - "  metadata.yaml                 # Test case info"
+
+# =============================================================================
+# CI Integration
+# =============================================================================
+
+ci_integration:
+  test_commands:
+    unit: "npm test -- --testPathPattern=unit"
+    integration: "npm test -- --testPathPattern=integration"
+    golden: "npm test -- --testPathPattern=golden"
+    all: "npm test"
+
+  coverage_threshold:
+    statements: 80
+    branches: 75
+    functions: 80
+    lines: 80
+
+  github_actions:
+    triggers:
+      - push
+      - pull_request
+    jobs:
+      - lint
+      - unit_tests
+      - integration_tests
+      - golden_tests
+      - build

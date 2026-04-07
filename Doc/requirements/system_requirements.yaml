@@ -1,476 +1,510 @@
-# ModelLogue - System Requirements
-# Language: English
-# Writing Style: Verb + Object (Value Engineering)
-# Version: 1.0
-# Date: 2026-02-08
+# ModelLogue System Requirements
+# Format: Verb + Object (Value Engineering - Miles function analysis)
+# Subject is always the artifact (component/system), omitted by convention.
+# Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-metadata:
-  project: ModelLogue
-  version: "1.0"
-  date: "2026-02-08"
-  status: draft
+version: "5.0"
+last_updated: "2026-04-07"
 
-# ============================================================
-# Functional Requirements
-# ============================================================
-functional_requirements:
-  # --- Phase 1 (MVP) ---
+# =============================================================================
+# PlantUML Subset Grammar
+# =============================================================================
+# Supported PlantUML state diagram syntax (simplified subset):
+#   @startuml / @enduml
+#   [*] --> StateName             (initial transition)
+#   StateName --> [*]             (final transition)
+#   StateName --> StateName : event [guard] / action
+#   state "Display Name" as alias
+#   state CompositeState {        (future extension)
+#     ...
+#   }
+#
+# NOT supported (out of scope for review purpose):
+#   Styling, colors, notes, concurrency (--), history states
 
-  - id: FR-1.1
-    title: Render PlantUML editor with syntax highlighting
-    description: Display a code editor component with PlantUML syntax highlighting
-    phase: 1
-    traces_to: UR-1.1
-    function: PlantUmlEditor
+# =============================================================================
+# Source Editing
+# =============================================================================
+
+source_editing:
+  SR-001:
+    function: "Render PlantUML editor with syntax highlighting"
+    parent: [UR-002]
+    component: PlantUmlEditor
     acceptance_criteria:
-      - Render CodeMirror editor with PlantUML language mode
-      - Emit source change events on user input
-      - Support paste from clipboard
+      - "Display code editor with PlantUML syntax highlighting"
+      - "Emit source change events on user input"
+      - "Support paste from clipboard"
 
-  - id: FR-1.2
-    title: Encode PlantUML source for server request
-    description: Encode PlantUML source using Deflate + Base64 for PlantUML Server API
-    phase: 1
-    traces_to: UR-1.2
-    function: encodePlantUml
+  SR-002:
+    function: "Parse PlantUML subset into state machine model"
+    parent: [UR-001, UR-002, UR-003]
+    component: StateMachineParser
     acceptance_criteria:
-      - Accept raw PlantUML source string
-      - Return encoded string compatible with PlantUML Server URL format
+      - "Parse states (including initial [*] and final [*])"
+      - "Parse transitions with optional event, guard, and action"
+      - "Parse state aliases (state \"Display Name\" as alias)"
+      - "Build StateMachineModel (states, events, transitions)"
+      - "Report syntax errors with line numbers"
+    rules:
+      - context: "Source contains syntax error"
+        action: "User edits source"
+        outcome: "Error message with line number displayed; last valid model retained"
+      - context: "Source is valid"
+        action: "User edits source"
+        outcome: "Model updated after 500ms debounce"
 
-  - id: FR-1.3
-    title: Fetch SVG from PlantUML Server
-    description: Send encoded PlantUML source to PlantUML Server and retrieve SVG
-    phase: 1
-    traces_to: UR-1.2
-    function: PlantUmlService.renderSvg
+  SR-003:
+    function: "Serialize state machine model to PlantUML source"
+    parent: [UR-006]
+    component: StateMachineSerializer
     acceptance_criteria:
-      - Send GET request to PlantUML Server with encoded source
-      - Return SVG string on success
-      - Return error message on server error or network failure
-      - Debounce requests (500ms after last source change)
+      - "Convert StateMachineModel back to valid PlantUML source"
+      - "Preserve event, guard, and action on transitions"
+      - "Round-trip: parse → serialize produces equivalent source"
 
-  - id: FR-1.4
-    title: Display SVG preview with pan and zoom
-    description: Render SVG in a viewport with pan and zoom controls
-    phase: 1
-    traces_to: UR-1.2
-    function: SvgPreview
+# =============================================================================
+# Diagram Display
+# =============================================================================
+# PlantUML SVG is displayed directly with pan and zoom.
+# A separate marker overlay layer holds the review markers.
+# No third-party whiteboard framework: a small native SVG layer is enough.
+
+diagram_display:
+  SR-010:
+    function: "Display PlantUML SVG with pan and zoom"
+    parent: [UR-001]
+    component: DiagramView
     acceptance_criteria:
-      - Render SVG from PlantUML Server response
-      - Support mouse drag for panning
-      - Support mouse wheel for zooming
-      - Display error overlay when rendering fails
+      - "Fetch SVG from PlantUML Server (Deflate + Base64 encoding)"
+      - "Display SVG as-is, preserving PlantUML's layout and edge routing"
+      - "Mouse wheel to zoom"
+      - "Mouse drag (on empty area) to pan"
+      - "Fit-to-view button"
+      - "SVG updates when PlantUML source changes (500ms debounce)"
+    rules:
+      - context: "PlantUML Server is unreachable"
+        action: "Source is edited"
+        outcome: "Connection error displayed in status bar; last known SVG retained"
 
-  - id: FR-1.5
-    title: Send chat message to AI via n8n
-    description: Send user message with PlantUML context to Gemini API via n8n webhook
-    phase: 1
-    traces_to: UR-1.3
-    function: N8nService.chat
+  SR-011:
+    function: "Extract element coordinates from PlantUML SVG"
+    parent: [UR-001, UR-004]
+    component: SvgCoordinateExtractor
     acceptance_criteria:
-      - Send request to n8n webhook endpoint with current PlantUML source
-      - Include conversation history in request
-      - Stream response tokens via SSE
-      - Handle n8n/API errors gracefully
+      - "Parse SVG to extract state positions (x, y, width, height)"
+      - "Map SVG elements to StateMachineModel states by text content"
+      - "Coordinate map is shared with the AI as context (model side of the marker context)"
 
-  - id: FR-1.6
-    title: Render chat message list
-    description: Display chronological list of user and AI messages
-    phase: 1
-    traces_to: [UR-1.3, UR-1.5]
-    function: MessageList
+  SR-012:
+    function: "Provide marker tool selection"
+    parent: [UR-004]
+    component: MarkerToolbar
     acceptance_criteria:
-      - Render user messages and AI messages with distinct styles
-      - Display timestamp on each message
-      - Auto-scroll to latest message
+      - "Toolbar offers three tools: ellipse, rectangle, arrow"
+      - "Active tool is visually highlighted"
+      - "Default tool is ellipse"
 
-  - id: FR-1.7
-    title: Extract PlantUML source from AI response
-    description: >
-      n8n workflow parses AI response to detect and extract proposed
-      PlantUML source modifications, returning structured JSON
-    phase: 1
-    traces_to: UR-1.4
-    function: n8n workflow (code block extraction)
+  SR-013:
+    function: "Draw marker by drag"
+    parent: [UR-004]
+    component: MarkerOverlay
     acceptance_criteria:
-      - n8n detects ```plantuml``` code blocks in AI response
-      - n8n extracts complete PlantUML source from code block
-      - n8n returns structured JSON with text and suggestedSource fields
-      - suggestedSource is null if no code block is found
+      - "Drag on the diagram with active tool to create a marker"
+      - "Ellipse and rectangle take the dragged bounding box"
+      - "Arrow takes the drag start as tail and drag end as head"
+      - "New marker is assigned an unused color from the palette"
+      - "Marker is added to MarkerStore on drag end"
+    rules:
+      - context: "All four palette colors are already in use"
+        action: "User attempts to draw a new marker"
+        outcome: "No marker is created; a toast error explains the limit"
 
-  - id: FR-1.8
-    title: Display source diff for AI proposals
-    description: Show visual diff between current source and AI-proposed source
-    phase: 1
-    traces_to: UR-1.4
-    function: SourceDiffView
+  SR-014:
+    function: "Manage marker colors from a fixed palette"
+    parent: [UR-004]
+    component: MarkerStore
     acceptance_criteria:
-      - Render side-by-side or inline diff view
-      - Highlight added, removed, and changed lines
-      - Display "Apply" button alongside the diff
+      - "Palette contains four colors: red, blue, green, purple"
+      - "New markers are assigned an unused color (no two markers share a color)"
+      - "When a marker is removed, its color becomes available again"
+      - "Reject creation when all colors are in use"
 
-  - id: FR-1.9
-    title: Apply proposed source modification
-    description: Replace current PlantUML source with AI-proposed source
-    phase: 1
-    traces_to: UR-1.4
-    function: SessionStore.applyProposal
+  SR-015:
+    function: "Select, move, and resize markers"
+    parent: [UR-004]
+    component: MarkerOverlay
     acceptance_criteria:
-      - Replace currentSource in session store
-      - Record snapshot in sourceHistory
-      - Mark the ChatMessage as applied
-      - Trigger SVG preview re-render
+      - "Click a marker to select it"
+      - "Selected marker shows handles for resize / endpoint adjustment"
+      - "Drag the marker body to move it"
+      - "Drag a handle to resize an ellipse/rectangle or move an arrow endpoint"
+      - "Click on empty area or another marker to change selection"
 
-  - id: FR-1.10
-    title: Undo source modification
-    description: Revert PlantUML source to previous snapshot
-    phase: 1
-    traces_to: UR-1.4
-    function: SessionStore.undoSource
+  SR-016:
+    function: "Delete marker"
+    parent: [UR-004]
+    component: MarkerOverlay
     acceptance_criteria:
-      - Restore previous source from sourceHistory
-      - Trigger SVG preview re-render
-      - Disable undo when no history exists
+      - "Press Delete or Backspace while a marker is selected to remove it"
+      - "Right-click a marker to open a context menu with a Delete item"
+      - "Removed colors return to the palette pool"
 
-  - id: FR-1.11
-    title: Export session as JSON
-    description: Serialize review session data and trigger file download
-    phase: 1
-    traces_to: UR-1.6
-    function: ExportService.exportAsJson
+  SR-017:
+    function: "Render marker overlay over the SVG"
+    parent: [UR-004]
+    component: MarkerOverlay
     acceptance_criteria:
-      - Serialize ReviewSession object to JSON string
-      - Include all messages, source history, and metadata
-      - Trigger browser file download with timestamped filename
+      - "Markers are drawn in their assigned color on a layer above the PlantUML SVG"
+      - "Marker geometry is stored in SVG coordinate space so it stays aligned during pan/zoom"
+      - "Each marker has a stable id (used by future features such as AI-driven highlight)"
 
-  - id: FR-1.12
-    title: Check PlantUML Server health
-    description: Verify PlantUML Server connectivity and display status
-    phase: 1
-    traces_to: UR-1.2
-    function: PlantUmlService.checkHealth
+# =============================================================================
+# State Transition Table
+# =============================================================================
+
+state_transition_table:
+  SR-020:
+    function: "Generate State×Event matrix"
+    parent: [UR-003]
+    component: StateEventMatrix
     acceptance_criteria:
-      - Send health check request to PlantUML Server
-      - Update connection status in UI store
-      - Display status indicator in status bar
+      - "Rows: states (excluding initial/final pseudo-states)"
+      - "Columns: events (deduplicated from all transitions)"
+      - "Cell value: next state name (or empty if no transition)"
+      - "Recalculate reactively when model changes"
+    rules:
+      - context: "Transition has guard condition"
+        action: "Matrix is generated"
+        outcome: "Cell shows next state with guard annotation"
+      - context: "Multiple transitions from same state on same event (different guards)"
+        action: "Matrix is generated"
+        outcome: "Cell shows all possible next states with their guards"
 
-  - id: FR-1.12b
-    title: Check n8n connectivity
-    description: Verify n8n webhook endpoint is reachable and display status
-    phase: 1
-    traces_to: UR-1.3
-    function: N8nService.checkHealth
+  SR-021:
+    function: "Generate PreState×PostState matrix"
+    parent: [UR-003]
+    component: StateStateMatrix
     acceptance_criteria:
-      - Send health check request to n8n
-      - Update n8n connection status in UI store
-      - Display n8n status indicator in status bar
+      - "Rows: source states"
+      - "Columns: target states"
+      - "Cell value: event name (or empty if no direct transition)"
+      - "Recalculate reactively when model changes"
+    rules:
+      - context: "Multiple events between same state pair"
+        action: "Matrix is generated"
+        outcome: "Cell shows all events separated by comma"
 
-  - id: FR-1.13
-    title: Manage session state
-    description: Store and manage session data in browser memory
-    phase: 1
-    traces_to: [UR-1.1, UR-1.3, UR-1.5]
-    function: SessionStore
+  SR-022:
+    function: "Provide marker context to AI"
+    parent: [UR-004, UR-005]
+    component: MarkerStore, ChatPanel
     acceptance_criteria:
-      - Initialize session with unique ID and timestamp
-      - Store current PlantUML source
-      - Maintain source change history
-      - Session data lives only in browser memory (Volatile Canvas)
+      - "AI chat requests include the current marker list (id, type, color, geometry)"
+      - "AI chat requests include the model element coordinate map (SR-011)"
+      - "AI is expected to interpret which model elements each marker is pointing at, and ask the reviewer to clarify if it is ambiguous"
 
-  - id: FR-1.14
-    title: Render resizable analysis panel with tabs
-    description: >
-      Display a bottom pull-up panel with tabbed views.
-      Phase 1 includes Source tab. Additional tabs (Table, TestCases, EBNF)
-      are added in Phase 2.
-    phase: 1
-    traces_to: [UR-1.1, UR-1.7]
-    function: AnalysisPanel
+# =============================================================================
+# AI Chat (n8n relay)
+# =============================================================================
+
+ai_chat:
+  SR-030:
+    function: "Send chat message to AI via n8n"
+    parent: [UR-005]
+    component: N8nService
     acceptance_criteria:
-      - Render a panel at the bottom of the diagram area with tab navigation
-      - Source tab contains the PlantUML editor (from FR-1.1)
-      - Panel is vertically resizable via drag handle
-      - Panel can be collapsed to maximize diagram area
-      - Panel can be expanded to show more content
-      - Panel state (size, active tab) persists within the session
+      - "POST to n8n webhook with current PlantUML source as context"
+      - "Include conversation history in request"
+      - "Stream response tokens via SSE"
+      - "Handle n8n/API errors gracefully"
 
-  - id: FR-1.15
-    title: Render diagram as primary view
-    description: >
-      Display the model diagram (SVG) as the dominant primary view area,
-      occupying the center and largest portion of the screen
-    phase: 1
-    traces_to: UR-1.2
-    function: DiagramView
+  SR-031:
+    function: "Render chat message list"
+    parent: [UR-005]
+    component: MessageList
     acceptance_criteria:
-      - Diagram occupies the main screen area (above analysis panel, left of chat)
-      - Diagram area resizes proportionally when analysis panel resizes
-      - Diagram area maximizes when analysis panel is collapsed
+      - "Display user and AI messages with distinct styles"
+      - "Display timestamp on each message"
+      - "Auto-scroll to latest message"
 
-  # --- Phase 2 (Analytical Review) ---
-
-  - id: FR-2.1
-    title: Generate analysis table from PlantUML source
-    description: >
-      Parse PlantUML source to generate a model-specific analysis table
-      (e.g., state transition table, factor/level table)
-    phase: 2
-    traces_to: UR-2.1
-    function: TableGenerator
+  SR-032:
+    function: "Extract PlantUML source from AI response"
+    parent: [UR-006]
+    component: "n8n workflow"
     acceptance_criteria:
-      - Parse state diagram source into state transition table
-        (states × events matrix or before/after state matrix)
-      - Parse classification tree (mindmap) into factor/level table
-      - Display table in the Table tab of analysis panel
-      - Table updates reactively when source changes
+      - "Detect ```plantuml code blocks in AI response"
+      - "Extract complete PlantUML source from code block"
+      - "Return structured JSON with text and suggestedSource fields"
 
-  - id: FR-2.2
-    title: Generate test cases from model
-    description: >
-      Derive test cases from the analysis table
-      (e.g., N-switch coverage from state transition table)
-    phase: 2
-    traces_to: UR-2.2
-    function: TestCaseGenerator
+  SR-033:
+    function: "Display source diff for AI proposals"
+    parent: [UR-006]
+    component: SourceDiffView
     acceptance_criteria:
-      - Generate N-switch coverage test cases from state transition table
-      - Display test cases in the TestCases tab
-      - Show coverage metrics
+      - "Show visual diff between current and proposed source"
+      - "Highlight added, removed, and changed lines"
+      - "Display Apply button alongside the diff"
 
-  - id: FR-2.3
-    title: Display EBNF-constrained grammar
-    description: >
-      Show the EBNF grammar that constrains PlantUML syntax
-      for the current model type
-    phase: 2
-    traces_to: UR-2.3
-    function: EbnfView
+  SR-034:
+    function: "Apply proposed source modification"
+    parent: [UR-006]
+    component: SessionStore
     acceptance_criteria:
-      - Display EBNF grammar in the EBNF tab
-      - Grammar is specific to the detected model type
-      - Syntax highlighting for EBNF notation
+      - "Replace current source with proposed source"
+      - "Record snapshot in source history"
+      - "Mark the ChatMessage as applied"
+      - "Trigger model re-parse, diagram re-render, table re-calculate"
 
-  - id: FR-2.4
-    title: Highlight diagram-table correspondence bidirectionally
-    description: >
-      When user clicks an element in the diagram, highlight the
-      corresponding row in the table, and vice versa
-    phase: 2
-    traces_to: UR-2.4
-    function: BidirectionalHighlighter
+  SR-035:
+    function: "Undo source modification"
+    parent: [UR-006]
+    component: SessionStore
     acceptance_criteria:
-      - Click diagram element → highlight table row/cell
-      - Click table row/cell → highlight diagram element
-      - Visual highlight is immediate and clear
-      - Works for diagram ↔ table and diagram ↔ test cases
+      - "Restore previous source from history"
+      - "Trigger model re-parse, diagram re-render, table re-calculate"
+      - "Disable undo when no history exists"
 
-  - id: FR-2.5
-    title: Detect model type from PlantUML source
-    description: >
-      Analyze PlantUML source keywords to detect the model type
-      and show/hide relevant analysis tabs
-    phase: 2
-    traces_to: UR-2.5
-    function: ModelTypeDetector
+# =============================================================================
+# Session Management
+# =============================================================================
+
+session_management:
+  SR-040:
+    function: "Manage session state in browser memory"
+    parent: [UR-002, UR-005, UR-007]
+    component: SessionStore
     acceptance_criteria:
-      - Detect state diagram from 'state' keyword or '[*]' syntax
-      - Detect mindmap/classification tree from '@startmindmap'
-      - Show relevant tabs (Table, TestCases) based on detected type
-      - Allow manual override of auto-detected type
+      - "Initialize session with unique ID and timestamp"
+      - "Store current PlantUML source"
+      - "Maintain source change history"
+      - "Session data is volatile (browser memory only)"
 
-  - id: FR-2.6
-    title: Render model diagram as React Flow nodes
-    description: Convert PlantUML SVG elements into interactive React Flow nodes
-    phase: 2
-    traces_to: UR-2.6
-    function: ReactFlowCanvas
+  SR-041:
+    function: "Export session as JSON"
+    parent: [UR-007]
+    component: ExportService
     acceptance_criteria:
-      - Parse SVG elements into React Flow node/edge definitions
-      - Enable selection of individual nodes
-      - Emit selection events for comment attachment
+      - "Serialize session (source + messages + source history + metadata)"
+      - "Trigger browser file download with timestamped filename"
 
-  - id: FR-2.7
-    title: Attach review comment to element
-    description: Create a review comment anchored to a specific diagram element
-    phase: 2
-    traces_to: UR-2.7
-    function: CommentStore.addComment
+# =============================================================================
+# Grammar Display
+# =============================================================================
+
+grammar_display:
+  SR-050:
+    function: "Display PlantUML subset grammar"
+    parent: [UR-008]
+    component: EbnfView
     acceptance_criteria:
-      - Associate comment with element ID
-      - Display comment visually near the element
-      - List all comments in a comment panel
+      - "Display EBNF grammar for supported state diagram subset"
+      - "Grammar is a static file (not LLM-generated)"
+      - "Syntax highlighting for EBNF notation"
 
-  # --- Phase 3 (Enterprise) ---
+# =============================================================================
+# Infrastructure
+# =============================================================================
 
-  - id: FR-3.1
-    title: Commit review evidence to GitHub via n8n
-    description: Auto-commit PlantUML source and dialogue log to GitHub via n8n on approval
-    phase: 3
-    traces_to: UR-3.2
-    function: N8nService.commitReviewEvidence
+infrastructure:
+  SR-060:
+    function: "Check PlantUML Server health"
+    parent: [UR-001]
+    component: PlantUmlService
     acceptance_criteria:
-      - Send approval event with session data to n8n
-      - n8n creates commit with PlantUML source file
-      - n8n includes dialogue log JSON as review evidence
-      - n8n sets commit message with review summary
+      - "Send health check request to PlantUML Server"
+      - "Display connection status in status bar"
 
-  - id: FR-3.2
-    title: Integrate review lifecycle with n8n workflows
-    description: Send review lifecycle events to n8n for business workflow integration
-    phase: 3
-    traces_to: UR-3.3
-    function: N8nService.notifyEvent
+  SR-061:
+    function: "Check n8n connectivity"
+    parent: [UR-005]
+    component: N8nService
     acceptance_criteria:
-      - Send webhook on review start, complete, and approve events
-      - Include session metadata in webhook payload
-      - n8n triggers configured downstream actions
+      - "Send health check request to n8n webhook endpoint"
+      - "Display n8n connection status in status bar"
 
-  - id: FR-3.3
-    title: Collect feedback from chat apps via n8n
-    description: Receive and aggregate feedback from Slack/Teams/Discord via n8n workflows
-    phase: 3
-    traces_to: UR-3.1
-    function: N8nService.collectFeedback
+# =============================================================================
+# UI Layout
+# =============================================================================
+# ┌──────────────────────────────────┬──────────────┐
+# │  Diagram View                    │  Chat/Review  │
+# │  (PlantUML SVG + marker overlay) │  Panel        │
+# │  [Marker tools: ⬭ ▭ ⇢]           │              │
+# ├── drag to resize ────────────────┤              │
+# │  ▲ Analysis Panel [tabs]        │              │
+# │  [Source|StateEvent|StateState|EBNF]            │
+# ├──────────────────────────────────┴──────────────┤
+# │  Status Bar                                      │
+# └──────────────────────────────────────────────────┘
+
+ui_layout:
+  SR-070:
+    function: "Render state machine diagram as primary view"
+    parent: [UR-001]
+    component: DiagramView
     acceptance_criteria:
-      - n8n collects messages from configured chat apps (Slack/Teams/Discord)
-      - AI aggregates and summarizes feedback
-      - Display aggregated feedback in ModelLogue
+      - "Diagram occupies the main screen area (center, largest)"
+      - "Diagram area resizes when analysis panel resizes"
+      - "Diagram area maximizes when analysis panel is collapsed"
 
-# ============================================================
-# Non-Functional Requirements
-# ============================================================
-non_functional_requirements:
-  - id: NFR-1
-    category: Performance
-    requirements:
-      - SVG preview update within 2 seconds of source change (including debounce)
-      - AI first response token within 5 seconds (streaming)
-      - UI interaction response within 100ms
+  SR-071:
+    function: "Render resizable analysis panel with tabs"
+    parent: [UR-002, UR-003, UR-008]
+    component: AnalysisPanel
+    acceptance_criteria:
+      - "Bottom pull-up panel with tab navigation"
+      - "Source tab: PlantUML editor (SR-001)"
+      - "State×Event tab: state transition matrix (SR-020)"
+      - "State×State tab: pre/post state matrix (SR-021)"
+      - "EBNF tab: grammar display (SR-050)"
+      - "Vertically resizable via drag handle"
+      - "Collapsible to maximize diagram area"
 
-  - id: NFR-2
-    category: Security
-    requirements:
-      - Never embed API keys or secrets in frontend code
-      - Route all API calls through n8n orchestrator
-      - Sanitize user input before sending to APIs
-      - Validate PlantUML source to prevent injection
-      - Follow OWASP Top 10 guidelines
-      - Never use eval() or Function() with user input
-      - Never use dangerouslySetInnerHTML with user input
+  SR-072:
+    function: "Render chat panel"
+    parent: [UR-005, UR-006]
+    component: ChatPanel
+    acceptance_criteria:
+      - "Right side panel spanning full height"
+      - "Contains message list (SR-031)"
+      - "Contains chat input field"
+      - "Contains source diff view when AI proposes changes (SR-033)"
 
-  - id: NFR-3
-    category: Usability
-    requirements:
-      - Responsive design (desktop-first, tablet-compatible)
-      - Dark mode support
-      - Keyboard shortcut support for primary operations
-      - Bilingual UI (English and Japanese) via i18next
+# =============================================================================
+# Data Model
+# =============================================================================
 
-  - id: NFR-4
-    category: Availability
-    requirements:
-      - Frontend deployable as static SPA
-      - Display PlantUML Server and n8n health check status
-      - Notify user when offline (PlantUML preview and AI disabled)
-      - Support self-hosted deployment (Docker Compose for PlantUML Server + n8n)
+data_model:
+  StateMachineModel:
+    description: "Canonical representation of a state machine parsed from PlantUML source"
+    fields:
+      - name: states
+        type: "State[]"
+        description: "All states including initial/final pseudo-states"
+      - name: transitions
+        type: "Transition[]"
+        description: "All transitions between states"
+      - name: events
+        type: "string[]"
+        description: "Deduplicated list of all event names"
 
-  - id: NFR-5
-    category: Extensibility
-    requirements:
-      - Support all PlantUML diagram types (class, sequence, activity, etc.)
-      - Design for future diagram language extensions (e.g., Mermaid)
-      - Leave room for plugin architecture
+  State:
+    fields:
+      - name: id
+        type: string
+        description: "Unique identifier (PlantUML name or alias)"
+      - name: label
+        type: string
+        description: "Display name (from state \"name\" as alias, or id)"
+      - name: type
+        type: "'normal' | 'initial' | 'final'"
 
-# ============================================================
-# Dependencies (MIT-compatible licenses only)
-# ============================================================
-dependencies:
-  runtime:
-    - name: react
-      version: "^19"
-      license: MIT
-      purpose: UI framework
+  Transition:
+    fields:
+      - name: sourceStateId
+        type: string
+      - name: targetStateId
+        type: string
+      - name: event
+        type: "string | null"
+      - name: guard
+        type: "string | null"
+      - name: action
+        type: "string | null"
 
-    - name: react-dom
-      version: "^19"
-      license: MIT
-      purpose: DOM rendering
+  ReviewSession:
+    fields:
+      - name: id
+        type: string
+      - name: name
+        type: string
+      - name: createdAt
+        type: "string (ISO 8601)"
+      - name: updatedAt
+        type: "string (ISO 8601)"
+      - name: plantUmlSource
+        type: string
+      - name: messages
+        type: "ChatMessage[]"
+      - name: sourceHistory
+        type: "SourceSnapshot[]"
+      - name: markers
+        type: "Marker[]"
 
-    - name: zustand
-      version: "^5"
-      license: MIT
-      purpose: State management
+  Marker:
+    description: "A review marker drawn by the user on top of the diagram"
+    fields:
+      - name: id
+        type: string
+        description: "Stable id, used by future features (e.g. AI-driven highlight)"
+      - name: type
+        type: "'ellipse' | 'rectangle' | 'arrow'"
+      - name: color
+        type: "'red' | 'blue' | 'green' | 'purple'"
+      - name: geometry
+        type: "EllipseGeometry | RectangleGeometry | ArrowGeometry"
+        description: "Coordinates in the SVG coordinate space (so the marker stays aligned during pan/zoom)"
 
-    - name: plantuml-encoder
-      version: "^1"
-      license: MIT
-      purpose: PlantUML source encoding
+  EllipseGeometry:
+    fields:
+      - name: cx
+        type: number
+      - name: cy
+        type: number
+      - name: rx
+        type: number
+      - name: ry
+        type: number
 
-    - name: react-zoom-pan-pinch
-      version: "^3"
-      license: MIT
-      purpose: SVG pan/zoom
+  RectangleGeometry:
+    fields:
+      - name: x
+        type: number
+      - name: y
+        type: number
+      - name: width
+        type: number
+      - name: height
+        type: number
 
-    - name: i18next
-      version: "^24"
-      license: MIT
-      purpose: Internationalization framework
+  ArrowGeometry:
+    fields:
+      - name: x1
+        type: number
+      - name: y1
+        type: number
+      - name: x2
+        type: number
+      - name: y2
+        type: number
 
-    - name: react-i18next
-      version: "^15"
-      license: MIT
-      purpose: React bindings for i18next
+# =============================================================================
+# External Interfaces
+# =============================================================================
 
-    - name: "@xyflow/react"
-      version: "^12"
-      license: MIT
-      purpose: React Flow (Phase 2)
+external_interfaces:
+  plantuml_server:
+    endpoint: "http://localhost:8080/svg/{encoded}"
+    method: GET
+    input: "PlantUML source encoded with Deflate + Base64"
+    output: "SVG image (displayed directly with pan/zoom + used for coordinate extraction)"
 
-  dev:
-    - name: typescript
-      version: "^5"
-      license: Apache-2.0
-      purpose: Type system
+  n8n_chat_webhook:
+    endpoint: "{n8n_base_url}/webhook/modellogue-chat"
+    method: POST
+    input: "Current PlantUML source + conversation history + user message"
+    output: "AI text response (streaming via SSE)"
+    note: "n8n internally calls Gemini API; API key managed on n8n side"
 
-    - name: vite
-      version: "^6"
-      license: MIT
-      purpose: Build tool
-
-    - name: vitest
-      version: "^3"
-      license: MIT
-      purpose: Test runner
-
-    - name: "@testing-library/react"
-      version: "^16"
-      license: MIT
-      purpose: Component testing
-
-    - name: eslint
-      version: "^9"
-      license: MIT
-      purpose: Linting
-
-    - name: prettier
-      version: "^3"
-      license: MIT
-      purpose: Code formatting
-
-    - name: tailwindcss
-      version: "^4"
-      license: MIT
-      purpose: Utility-first CSS
-
-  infrastructure:
-    - name: plantuml-server
-      version: latest
-      license: GPL-3.0
-      purpose: PlantUML rendering (runs as separate Docker service, not bundled)
-      note: GPL is acceptable here because it runs as an independent network service, not linked into the codebase
-
-    - name: n8n
-      version: latest
-      license: Sustainable Use License (fair-code)
-      purpose: Orchestrator — AI chat relay, API key management, external service integration
-      note: Runs as a separate Docker service. Self-hostable. Not bundled into the codebase.
+# =============================================================================
+# Future Extensions (not in current scope)
+# =============================================================================
+# - N-switch coverage test case generation (0-3 switch, matrix calculation)
+#   → Additional tabs in analysis panel
+# - Activity diagram (BPMN-style) support
+# - Requirements derivation tree support
+# - Classification tree support
+# - Real-time multi-user marker collaboration (shared marker store via WebSocket)
+# - AI-initiated markers (AI places a marker to point at something it's discussing)
+# - Slack/Teams/Discord feedback via n8n
+# - GitHub auto-commit via n8n

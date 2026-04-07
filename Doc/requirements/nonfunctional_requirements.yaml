@@ -1,0 +1,125 @@
+# ModelLogue Non-Functional Requirements
+
+version: "4.0"
+last_updated: "2026-04-07"
+
+requirements:
+  NFR-001:
+    parent: [UR-001, UR-002]
+    category: performance
+    name: "Response performance"
+    criteria:
+      - item: "Source parse + model update"
+        standard: "Within 100ms"
+      - item: "SVG coordinate extraction"
+        standard: "Within 2 seconds (including PlantUML Server round-trip)"
+      - item: "State transition table recalculation"
+        standard: "Within 100ms"
+      - item: "AI first response token"
+        standard: "Within 5 seconds (streaming)"
+      - item: "UI interaction response"
+        standard: "Within 100ms"
+
+  NFR-010:
+    parent: [UR-001, UR-002]
+    category: usability
+    name: "Intuitive operation"
+    criteria:
+      - item: "Diagram interaction"
+        standard: "Pan/zoom/select with mouse"
+      - item: "Panel resize"
+        standard: "Drag handle for analysis panel"
+      - item: "Tab navigation"
+        standard: "Single click to switch analysis tabs"
+
+  NFR-011:
+    parent: [UR-002]
+    category: usability
+    name: "Error handling"
+    criteria:
+      - item: "Parse errors"
+        standard: "Display with line number in editor"
+      - item: "Connection errors"
+        standard: "Display in status bar with service name"
+      - item: "Data protection"
+        standard: "Last valid state retained on error"
+
+  NFR-020:
+    parent: []
+    category: compatibility
+    name: "Browser compatibility"
+    criteria:
+      - item: "Primary"
+        standard: "Chrome latest version"
+      - item: "Secondary"
+        standard: "Firefox, Safari, Edge latest versions"
+      - item: "Out of scope"
+        standard: "Mobile browsers"
+
+  NFR-030:
+    parent: []
+    category: security
+    name: "Security"
+    criteria:
+      - item: "API keys"
+        standard: "Never embedded in frontend; managed by n8n"
+      - item: "Input validation"
+        standard: "All PlantUML source validated through parser"
+      - item: "Injection prevention"
+        standard: "No eval(), no Function(), no dangerouslySetInnerHTML with user input"
+      - item: "Standards"
+        standard: "Follow OWASP Top 10 guidelines"
+
+  NFR-040:
+    parent: []
+    category: internationalization
+    name: "Internationalization"
+    criteria:
+      - item: "Supported languages"
+        standard: "English (EN), Japanese (JA)"
+      - item: "UI language switch"
+        standard: "User can switch via settings"
+      - item: "Default language"
+        standard: "Follow browser locale setting"
+      - item: "PlantUML keywords"
+        standard: "English only (no localization)"
+      - item: "State labels"
+        standard: "Unicode characters allowed (including Japanese)"
+
+  NFR-050:
+    parent: []
+    category: maintainability
+    name: "Code quality"
+    criteria:
+      - item: "Type safety"
+        standard: "TypeScript strict mode"
+      - item: "Testability"
+        standard: "Parser and table generator testable independently"
+      - item: "Modularity"
+        standard: "Parser, model, diagram, and table as independent modules"
+
+  NFR-060:
+    parent: []
+    category: availability
+    name: "Deployment"
+    criteria:
+      - item: "Frontend"
+        standard: "Static SPA (deployable to any static host)"
+      - item: "Infrastructure"
+        standard: "Docker Compose for PlantUML Server + n8n"
+      - item: "Offline mode"
+        standard: "Display notification when PlantUML Server or n8n is unreachable"
+
+  NFR-070:
+    parent: []
+    category: licensing
+    name: "License compatibility"
+    criteria:
+      - item: "Project license"
+        standard: "MIT License"
+      - item: "Dependencies"
+        standard: "Only MIT, Apache-2.0, BSD, ISC, or similarly permissive licenses"
+      - item: "Prohibited"
+        standard: "GPL, LGPL, AGPL (copyleft incompatible with MIT)"
+      - item: "Infrastructure services"
+        standard: "GPL/fair-code acceptable for separate Docker services (not bundled)"
