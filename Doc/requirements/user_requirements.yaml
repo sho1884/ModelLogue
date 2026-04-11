@@ -2,8 +2,8 @@
 # Format: Task expression (Value Engineering)
 # Writing convention: Short verb phrase describing user task
 
-version: "5.0"
-last_updated: "2026-04-07"
+version: "6.0"
+last_updated: "2026-04-08"
 
 requirements:
   UR-001:
@@ -93,3 +93,51 @@ requirements:
       Author refers to the constrained PlantUML grammar (EBNF)
       to understand which syntax is supported for state diagrams.
     priority: low
+
+  UR-009:
+    task: "Receive an initial model into the review session"
+    background: >
+      Before a review can start, an initial PlantUML model must
+      already exist. The way it is produced (AI auto-generation
+      from a requirement spec, hand-writing by a human, fetching
+      from a Git repository, etc.) varies by site and is composed
+      using n8n workflows. ModelLogue itself only needs to be able
+      to receive whatever PlantUML source comes in. See ADR-008 for
+      the scope boundary between ModelLogue and the surrounding
+      workflow.
+    priority: high
+
+  UR-010:
+    task: "Close the review session with an outcome"
+    background: >
+      A review session ends in one of several outcomes: consensus
+      reached, postponed (modifications cannot yet be agreed),
+      or requirement-spec issue discovered (the problem is upstream).
+      How the outcome is acted on (notifying stakeholders, opening
+      a ticket, committing to Git, etc.) is composed using n8n
+      workflows. ModelLogue itself needs to provide a way to
+      package the session as evidence and hand it off. See ADR-008
+      for the scope boundary.
+    priority: medium
+
+  UR-011:
+    task: "Convert between state machine source and state transition table"
+    background: >
+      A state transition diagram and a state transition table are
+      isomorphic representations of the same model. Reviewers and
+      authors must be able to move freely between the two:
+      - Importing a state transition table (CSV) into a review
+        session, so that legacy spreadsheet-based artifacts can be
+        reviewed in ModelLogue without manual rewriting.
+      - Exporting the current model as a state transition table
+        (CSV), so that the result can be handed off to other tools
+        such as test generators, spreadsheet reviews, or CI/CD
+        pipelines.
+      Both directions go through PlantUML subset source as the
+      canonical form (CSV → PlantUML source → model, and model →
+      PlantUML source → CSV). The CSV format is strictly defined
+      to keep the conversion deterministic and predictable
+      (see ADR-011). Per ADR-010, the converter is implemented as
+      an external service in the same repository, callable from
+      both ModelLogue and CI/CD pipelines.
+    priority: medium

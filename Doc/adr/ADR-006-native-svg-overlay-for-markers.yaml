@@ -1,0 +1,58 @@
+id: ADR-006
+title: "PlantUML SVGを直接表示し、ネイティブSVGオーバーレイにマーカーを描く"
+date: "2026-04-07"
+status: accepted
+superseded_by: null
+
+participants:
+  author: ""
+  approver: ""
+  last_updated: "2026-04-07"
+
+context:
+  problem: |
+    モデル図のレビューで「ここに注目」を示すためのUIをどう実装するか。
+    当初はReact FlowでPlantUMLの内容を描き直す方針だったが、
+    エッジルーティングとラベル配置がPlantUMLと一致せず、図の品質が
+    著しく低下することが実装で確認された。次にExcalidrawを
+    ホワイトボードとして使う案を試したが、機能が過剰でマーカーUIの
+    実装に遠回りが必要であり、IDがランダム置換される・削除が
+    正しく効かないなどの問題があった。
+  drivers:
+    - "図の品質（PlantUMLのレンダリングそのままを維持したい）"
+    - "マーカーUIの実装のシンプルさ"
+    - "バンドルサイズの抑制"
+    - "将来のリアルタイム協調編集への拡張パス"
+
+decision:
+  summary: "PlantUML Serverが生成したSVGをそのまま表示し、その上にネイティブSVGのオーバーレイ層を重ねてマーカーを描く。React FlowもExcalidrawも使用しない。"
+  detail: |
+    PlantUML Serverから取得したSVGを<img>または<svg>で直接表示し、
+    その上にネイティブSVGのオーバーレイ層を重ねて、レビューアが
+    マーカー（楕円・矩形・矢印）を描けるようにした。React Flowや
+    Excalidrawなどの外部ホワイトボードフレームワークは一切使わず、
+    200行程度の自前SVG実装で完結する。必要なのは「ここに注目を
+    示せるマーカー」だけなので、シンプルな自前実装が最適。
+
+neglected:
+  - option: "React FlowでPlantUMLを描き直す"
+    because: "エッジルーティングとラベル配置がPlantUMLと一致せず、図の品質が低下することを実装で確認"
+  - option: "Excalidrawをホワイトボードとして使う"
+    because: "機能が過剰で、マーカーUIの実装に遠回りが必要。IDがランダム置換される等の固有の問題があり、1.8MBのバンドル追加に見合わない"
+  - option: "Canvas APIで自前実装"
+    because: "SVGのパン/ズーム/座標変換が自然にできるので、Canvasを使う利点がない"
+
+consequences:
+  positive:
+    - "PlantUMLのレンダリング品質をそのまま維持できる"
+    - "バンドルサイズが大幅に削減された（1.6MB → 600kB）"
+    - "見た目とイベント挙動を完全にコントロールできる"
+    - "将来のリアルタイム協調編集は、マーカー差分をWebSocket送信するだけで実装可能"
+  negative:
+    - "マーカーUIのすべて（選択・移動・リサイズ・削除など）を自前実装する必要がある"
+  risks:
+    - "将来より高度なホワイトボード機能が必要になった場合、自前実装の限界に達する可能性"
+
+references:
+  - "Doc/architecture.md §ADR-006"
+  - "Doc/adr/ADR-007-markers-without-element-binding.yaml"

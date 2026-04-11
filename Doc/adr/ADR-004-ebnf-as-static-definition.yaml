@@ -1,0 +1,46 @@
+id: ADR-004
+title: "EBNF文法は静的ファイルとして定義する"
+date: "2026-02-11"
+status: accepted
+superseded_by: null
+
+participants:
+  author: ""
+  approver: ""
+  last_updated: "2026-04-07"
+
+context:
+  problem: |
+    PlantUMLサブセットの文法をユーザーや開発者が参照できるように
+    表示する必要がある。定義の格納場所として、静的ファイルに
+    持つか、LLMに都度生成させるかの選択肢があった。
+  drivers:
+    - "文法定義の信頼性・一貫性"
+    - "文法定義の変更頻度の低さ"
+    - "LLM出力のばらつきによる不安定さ"
+
+decision:
+  summary: "EBNF文法はフロントエンドに静的ファイルとして持つ。"
+  detail: |
+    PlantUMLサブセットのEBNF文法定義はフロントエンドに静的ファイル
+    として格納することにした。文法は変更頻度が低く、定義の一貫性が
+    信頼できる必要があるため、LLMに都度生成させるのは不安定で
+    不適切。静的定義が最も信頼性が高い。
+
+neglected:
+  - option: "EBNF文法をLLMに都度生成させる"
+    because: "LLM出力のばらつきで定義が揺れ、信頼性が損なわれる"
+  - option: "EBNF文法を外部APIから取得する"
+    because: "オフラインで表示できなくなり、セルフホスト方針に反する"
+
+consequences:
+  positive:
+    - "文法定義が常に一貫している"
+    - "オフラインでも表示できる"
+    - "AIに依存しない"
+  negative:
+    - "文法を変更するたびに静的ファイルを更新する必要がある"
+  risks: []
+
+references:
+  - "Doc/architecture.md"

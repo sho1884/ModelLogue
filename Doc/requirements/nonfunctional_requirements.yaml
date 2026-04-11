@@ -1,7 +1,7 @@
 # ModelLogue Non-Functional Requirements
 
-version: "4.0"
-last_updated: "2026-04-07"
+version: "5.0"
+last_updated: "2026-04-08"
 
 requirements:
   NFR-001:

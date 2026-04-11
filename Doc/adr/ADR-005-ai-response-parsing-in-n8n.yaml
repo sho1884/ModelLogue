@@ -1,0 +1,49 @@
+id: ADR-005
+title: "AIレスポンスの解析はn8nワークフロー内で行う"
+date: "2026-02-11"
+status: accepted
+superseded_by: null
+
+participants:
+  author: ""
+  approver: ""
+  last_updated: "2026-04-07"
+
+context:
+  problem: |
+    AIチャット（Gemini）のレスポンスにはPlantUMLコードブロックが
+    含まれることがあり、そこからソースコードを抽出してユーザーに
+    「適用」ボタンを提示する必要がある。この抽出処理をどこで
+    行うかが論点だった。
+  drivers:
+    - "フロントエンドを純粋なUIに保つ方針（ADR-001）"
+    - "プロンプトエンジニアリングの一元化"
+    - "AIレスポンス形式の変更に対する柔軟性"
+
+decision:
+  summary: "LLMレスポンスからのPlantUMLコードブロック抽出はn8nワークフロー内で実行する。"
+  detail: |
+    AIレスポンスのパース（```plantuml ブロックの抽出など）は
+    n8nワークフロー側で行い、フロントエンドには構造化済みJSON
+    （text と suggestedSource のフィールドを持つ）として返すことに
+    した。フロントエンドは受け取ったJSONを表示するだけで済み、
+    レスポンス形式が変わってもn8n側の修正で対応できる。
+
+neglected:
+  - option: "フロントエンドでAIレスポンスをパースする"
+    because: "レスポンス形式の変更時にフロントエンドを修正する必要があり、UIロジックが重くなる"
+  - option: "AIに最初から構造化JSONで返させる（function calling等）"
+    because: "Geminiの機能と依存してしまい、他のLLMへの差し替えが難しくなる"
+
+consequences:
+  positive:
+    - "フロントエンドはUI表示に専念できる"
+    - "レスポンス整形がn8nで一元管理される"
+    - "LLMの差し替え時にn8n側のみを更新すれば済む"
+  negative:
+    - "n8nワークフローに解析ロジックが埋まる"
+  risks:
+    - "n8nワークフローが複雑化する可能性"
+
+references:
+  - "Doc/architecture.md §7.2"

@@ -19,10 +19,41 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   sessionName: 'Untitled Session',
   createdAt: new Date().toISOString(),
   currentSource: `@startuml
-[*] --> Idle
-Idle --> Active : start
-Active --> Idle : stop
-Active --> [*]
+' Sample: ModelLogue's own review process, expressed as a state diagram.
+' This is a flattened version of a higher-level diagram (no composite states),
+' which fits the supported PlantUML subset.
+
+state "AIに自動生成を依頼" as AIGenerate
+state "人間が手動で記述" as HumanWrite
+state "初版モデルの完成" as Drafted
+state "モデルの確認・マーカー配置" as Inspecting
+state "AIへの質問・指示" as Asking
+state "AIからの回答・修正提案" as Answering
+state "モデルの修正・更新" as Editing
+state "合意形成（完了）" as Agreed
+state "モデル修正保留" as Postponed
+state "要求仕様の不備発覚" as SpecIssue
+
+[*] --> AIGenerate : 要求仕様＋文法ルール [AIに任せる]
+[*] --> HumanWrite : 要求仕様＋文法ルール [自分で書く]
+
+AIGenerate --> Drafted
+HumanWrite --> Drafted
+
+Drafted --> Inspecting
+
+Inspecting --> Asking : 気になる点がある
+Asking --> Answering
+Answering --> Editing : 提案を受け入れる
+Editing --> Inspecting
+
+Inspecting --> Agreed : 指摘がすべて解消された
+Inspecting --> Postponed : 修正案がまとまらない
+Inspecting --> SpecIssue : 仕様側の矛盾・漏れ等に気づいた
+
+Agreed --> [*]
+Postponed --> [*]
+SpecIssue --> [*]
 @enduml`,
   sourceHistory: [],
   messages: [],

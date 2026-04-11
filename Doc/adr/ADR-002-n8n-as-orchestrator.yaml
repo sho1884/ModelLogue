@@ -1,0 +1,51 @@
+id: ADR-002
+title: "n8nをオーケストレーターとして導入する"
+date: "2026-02-11"
+status: accepted
+superseded_by: null
+
+participants:
+  author: ""
+  approver: ""
+  last_updated: "2026-04-07"
+
+context:
+  problem: |
+    AIチャット（Gemini API）や将来的な外部サービス連携（Slack,
+    GitHub等）において、APIキー管理とワークフロー処理をどこで行うかが
+    設計上の論点だった。フロントエンドには秘密情報を置かない方針
+    （ADR-001）があるため、何らかの中継層が必要。
+  drivers:
+    - "APIキー管理の一元化"
+    - "フロントエンド側での秘密情報排除"
+    - "将来の外部連携拡張性"
+    - "セルフホスト可能であること"
+
+decision:
+  summary: "n8nをオーケストレーターとして採用し、AI中継・APIキー管理・外部サービス連携をすべて担わせる。"
+  detail: |
+    n8nをDocker Composeで起動する前提のオーケストレーターとして採用
+    することにした。AIチャット（Gemini API）の中継、APIキーの保管、
+    将来のSlack/Teams/Discord/GitHub連携などをすべてn8nのワークフローで
+    扱う。n8nはオープンソースかつセルフホスト可能で、ノーコードで
+    ワークフローを組めるため、拡張時のコストも低い。
+
+neglected:
+  - option: "自前のバックエンドサーバーを立てる"
+    because: "SPA + 静的ホスティングの方針が崩れ、運用の複雑さが増す"
+  - option: "Gemini APIを直接フロントエンドから呼ぶ"
+    because: "APIキーがクライアントに露出し、ADR-001に反する"
+
+consequences:
+  positive:
+    - "APIキーがフロントエンドから完全に分離される"
+    - "ワークフロー追加だけで外部連携を増やせる"
+    - "n8n UIでプロンプトエンジニアリングが完結する"
+  negative:
+    - "Docker環境が必須になる（ただしPlantUML Serverと同様なので追加コストは小さい）"
+    - "n8nのライセンス（Sustainable Use License / fair-code）に依存する"
+  risks:
+    - "n8nのワークフローJSONをリポジトリに同梱するが、n8nのバージョン差で互換性問題が起きる可能性"
+
+references:
+  - "Doc/architecture.md §7"

@@ -1,7 +1,7 @@
 # ModelLogue アーキテクチャ設計書
 
-**バージョン**: 5.0
-**作成日**: 2026-04-07
+**バージョン**: 6.0
+**作成日**: 2026-04-08
 **ステータス**: ドラフト
 
 ---
@@ -45,6 +45,18 @@ ModelLogueは「持たないアーキテクチャ」を基本としつつ、モ�
            │              │               │  │ (チャット)  │  │
            │ source → SVG │               │  └────────────┘  │
            └──────────────┘               └──────────────────┘
+
+  ┌─ Future: Auxiliary Services (ADR-010, same repository) ──────┐
+  │                                                              │
+  │   ┌──────────────────┐    ┌──────────────────────────┐       │
+  │   │ N-switch         │    │ State-table converter    │       │
+  │   │ generator        │    │ (CSV ↔ PlantUML source)  │       │
+  │   │ (CLI + API)      │    │ (CLI + API)              │       │
+  │   └──────────────────┘    └──────────────────────────┘       │
+  │                                                              │
+  │   Called from ModelLogue (UI) AND from CI/CD (independent)   │
+  │   Strict formats, deterministic conversions (ADR-011)        │
+  └──────────────────────────────────────────────────────────────┘
 ```
 
 ## 2. 設計原則
@@ -206,10 +218,18 @@ interface SessionStore {
   createdAt: string;
   currentSource: string;
   sourceHistory: SourceSnapshot[];
+  outcome: SessionOutcome | null;  // セッションが終了するとセットされる（UR-010）
 
   updateSource: (source: string, triggeredBy: string) => void;
   applyProposal: (messageId: string, source: string) => void;
   undoSource: () => void;
+  setOutcome: (outcome: SessionOutcome) => void;
+}
+
+interface SessionOutcome {
+  status: 'consensus' | 'postponed' | 'spec_issue';
+  closedAt: string;  // ISO 8601
+  note: string | null;
 }
 
 // ModelStore — パース済みモデル＆テーブル
@@ -294,7 +314,21 @@ interface ParseError {
 
 - PlantUMLの状態遷移図サブセットのみを対象
 - 純粋関数（副作用なし）
-- 対応構文: `[*] -->`, `A --> B : event [guard] / action`, `state "name" as alias`
+- 対応構文:
+  - `[*] -->` 初期遷移、`--> [*]` 終了遷移
+  - `A --> B : event [guard] / action` イベント・ガード・アクション付き遷移
+  - `state "name" as alias` 状態の別名
+  - `state X { ... }` 1階層限定の複合状態（ADR-009）
+
+**複合状態のパース実装方針**:
+- 行ベース解析を維持しつつ、`state X {` の出現で「現在の親ID」をセットし、`}` でクリアする
+- 中括弧の深さを内部カウンタで管理し、深さ2以上は構文エラー
+- 複合状態の中で生成された子状態は `parentId` に親複合状態のIDをセット
+- 複合状態の名前が遷移の source となる場合は、グループ脱出遷移として扱う
+- 複合状態の中の `[*] --> ChildState` は内部初期遷移として扱う（その複合状態専用の初期擬似状態を作って区別する）
+- 拒否すべき構文（直交領域 `--`、ヒストリ `[H]`、ドット記法 `X.Y`、entry/exit point）を検出して構文エラーを返す
+
+実装規模の見積もり：行ベースパーサーへの追加 30〜50 行程度。全面書き直しは不要。
 
 ### 6.2 SvgCoordinateExtractor
 
@@ -319,14 +353,27 @@ interface MatrixGenerator {
 }
 
 interface MatrixData {
-  rowHeaders: string[];     // 状態名
+  rows: MatrixRow[];        // ハイブリッド構成の行（複合状態と子状態が混在）
   columnHeaders: string[];  // イベント名 or 状態名
-  cells: (string | null)[][]; // セル値（遷移先 or イベント or null）
+  cells: (string | null)[][]; // [rowIndex][colIndex] のセル値
+}
+
+interface MatrixRow {
+  stateId: string;
+  label: string;
+  level: number;            // 0 = top-level, 1 = child of a composite
+  isComposite: boolean;     // true なら複合状態の行
 }
 ```
 
-- StateMachineModelから純粋に算出
-- 副作用なし、即時計算
+- StateMachineModelから純粋に算出（副作用なし、即時計算）
+- **ハイブリッドパターン**：複合状態と子状態の両方を行に含める。子状態は `level: 1` でインデント表示
+- **複合状態の行**：その複合状態を source とするグループ脱出遷移を保持
+- **子状態の行**：その子状態を source とする内部遷移を保持
+- 複合状態がない場合は従来通りフラットな表（`level` がすべて 0）
+- 詳細は ADR-009 と Requirements_Specification.md §3.3 を参照
+
+MatrixView 側では `level` に応じて `padding-left` を当て、`isComposite` に応じて行の見た目を強調する。折りたたみ機能は将来拡張。
 
 ### 6.4 MarkerOverlay コンポーネント
 
@@ -580,70 +627,43 @@ ModelLogue/
 
 ## 11. 判断記録（ADR）
 
-### ADR-001: フロントエンドは純粋なUI（選択的適用）
+判断記録は [`Doc/adr/`](./adr/) 配下にYAMLファイルとして格納されており、[`Doc/ADR_Index.md`](./ADR_Index.md) から自動生成されたMarkdownビューで一覧・参照できる。新規のADRは `adr` スキル経由で作成・更新する。
 
-- **決定**: SPAは表示と接続に専念。秘密情報を持たない。ただしモデルの意味解析と表生成はフロントエンドで実行する。
-- **理由**: オープンソース + セルフホスト前提。Volatile Canvas思想。意味解析はLLM不要の確定的処理であり、フロントエンドで完結させることで堅牢性とレスポンスを確保する。
+主要な判断記録：
 
-### ADR-002: n8nをオーケストレーターとして導入
-
-- **決定**: n8nがAI中継を担う。将来の外部連携もn8n経由。
-- **理由**: APIキー管理の一元化。ワークフロー追加で拡張可能。
-- **トレードオフ**: Docker環境必要だが、PlantUML Serverと同様。
-
-### ADR-003: 意味解析はフロントエンドのパーサー
-
-- **決定**: PlantUMLサブセットのパーサーをフロントエンドに持ち、StateMachineModelを自前で構築する。テーブル生成も純粋アルゴリズムで実行する。
-- **旧決定からの変更**: テーブル生成をLLMに委譲する方針を撤回。
-- **理由**:
-  - PlantUMLの状態遷移図サブセットは文法が限定的であり、パーサーの実装コストは低い
-  - LLM依存を排除することで、AIなしでも図＋表の表示が成立する
-  - NeoCEGで確立した「テキスト→正規モデル→図＋表」パターンを踏襲
-  - パーサーは純粋関数であり、テストが容易
-
-### ADR-004: EBNFは静的定義
-
-- **決定**: EBNF文法はフロントエンドに静的ファイルとして持つ。
-- **理由**: 文法定義は変更頻度が低く、LLM生成は不安定。静的定義が最も信頼性が高い。
-
-### ADR-005: AIレスポンスの解析はn8n側
-
-- **決定**: LLMレスポンスからのPlantUMLコードブロック抽出はn8nワークフロー内で実行。
-- **理由**: フロントエンドは受け取ったJSONを表示するだけ。
-
-### ADR-006: SVGを直接表示し、ネイティブSVGオーバーレイにマーカーを描く
-
-- **決定**: PlantUML Serverから取得したSVGをそのまま `<img>` または `<svg>` で表示し、その上にネイティブSVGのオーバーレイ層を重ねてマーカー（楕円・矩形・矢印）を描く。React FlowもExcalidrawも使用しない。
-- **旧決定からの変更**:
-  - React Flowで図を描き直す方針を撤回（v3.0）
-  - その後Excalidrawをホワイトボードとして使う方針も撤回（v5.0）
-- **理由**:
-  - React Flowで描き直すとエッジルーティングとラベル配置がPlantUMLと一致せず、図の品質が低い（実装で確認済み）
-  - Excalidrawは多機能すぎて、必要な「マーカーを置く」操作を実現するために遠回りする必要があった（IDがランダム置換される、削除がうまく効かない、独自描画機能との混乱、など）
-  - 必要なのは「ここに注目を示せるマーカー」だけ。それなら200行程度のネイティブSVG実装で十分
-  - 余計な依存（Excalidraw 1.8MB）が消え、見た目とイベント挙動を完全にコントロールできる
-  - 将来のリアルタイム協調編集も、マーカーの差分をWebSocketで送るだけで実装できる
-
-### ADR-007: マーカーはモデル要素に縛らず、AIに解釈させる
-
-- **決定**: マーカーは特定のモデル要素IDに紐づけない。MarkerStoreはマーカーの座標と色だけを持ち、AIチャットコンテキストとして「マーカー一覧」と「モデル要素の座標」の両方を渡す。AIが必要に応じて「赤の楕円はIdle状態を指していますね」と解釈し、曖昧なら人間に質問する。
-- **旧決定からの変更**: マーカーをモデル要素に厳密に紐づける案を撤回（v4.1）
-- **理由**:
-  - 人間は一発で正確にクリックできない。厳密照合は失敗時のリカバリーが面倒
-  - 状態遷移図に限らず、将来のあらゆるモデル図（アクティビティ図・要求系統図等）で同じ仕組みが使える
-  - 「だいたいこのあたり」という人間のレビュー所作と合致する
-  - AIは元々曖昧性に強い。座標情報を渡せばAIが適切に解釈してくれる
-  - マーカー実装側の責任が減り、シンプルで堅牢になる
+| ID | タイトル |
+|---|---|
+| [ADR-001](./adr/ADR-001-frontend-is-pure-ui.yaml) | フロントエンドは純粋なUI（選択的適用） |
+| [ADR-002](./adr/ADR-002-n8n-as-orchestrator.yaml) | n8nをオーケストレーターとして導入する |
+| [ADR-003](./adr/ADR-003-frontend-parser-for-semantics.yaml) | 意味解析とテーブル生成はフロントエンドのパーサーとアルゴリズムで行う |
+| [ADR-004](./adr/ADR-004-ebnf-as-static-definition.yaml) | EBNF文法は静的ファイルとして定義する |
+| [ADR-005](./adr/ADR-005-ai-response-parsing-in-n8n.yaml) | AIレスポンスの解析はn8nワークフロー内で行う |
+| [ADR-006](./adr/ADR-006-native-svg-overlay-for-markers.yaml) | PlantUML SVGを直接表示し、ネイティブSVGオーバーレイにマーカーを描く |
+| [ADR-007](./adr/ADR-007-markers-without-element-binding.yaml) | マーカーはモデル要素に紐づけず、AIに解釈させる |
+| [ADR-008](./adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) | ModelLogueのスコープ境界——前後の業務ワークフローはn8n側に委ねる |
+| [ADR-009](./adr/ADR-009-composite-states-minimal-subset.yaml) | 複合状態は1階層限定の最小サブセットでサポートする |
+| [ADR-010](./adr/ADR-010-external-services-for-heavy-or-domain-specific-work.yaml) | 重い処理や領域固有の生成処理は外部サービスとして同一リポジトリ内に分離する |
+| [ADR-011](./adr/ADR-011-strict-formats-and-deterministic-conversion.yaml) | サービス間のフォーマットは厳密に定義し、機械的な変換は決定論的に実装する |
 
 ## 12. 将来拡張
 
-現在のスコープは状態遷移図に限定しているが、パーサーとモデルを差し替えることで他の図種にも対応可能。
+### 12.1 補助サービスとして追加される拡張（ADR-010）
+
+ModelLogue本体ではなく、同一リポジトリ内の独立した補助サービスとして実装する。CLI＋APIを持ち、ModelLogueからもCI/CDからも呼び出せる。
+
+| 補助サービス | 機能 | 関連ADR |
+|------|------|--------|
+| Nスイッチカバレッジ生成器 | PlantUMLソース → テストケースCSV。複合状態にはレイヤード戦略 | ADR-009, ADR-010 |
+| 状態遷移表変換器 | PlantUMLソース ↔ 状態遷移表CSVの双方向変換（決定論的、CSV形式は厳密定義） | ADR-010, ADR-011 |
+
+### 12.2 ModelLogue本体の拡張
+
+他のモデル図種への対応は、パーサーとモデルとテーブル生成器を差し替えることで実現する。
 
 | 拡張 | パーサー追加 | モデル追加 | テーブル追加 |
 |------|-----------|----------|------------|
-| Nスイッチカバレッジ | 不要 | 不要 | NswitchCoverageGenerator |
 | アクティビティ図（BPMN風） | ActivityDiagramParser | ActivityModel | DecisionTable |
 | 要求帰納系統図 | RequirementsTreeParser | RequirementsModel | DerivationMatrix |
 | クラシフィケーションツリー | ClassificationTreeParser | ClassificationModel | FactorLevelTable |
 
-拡張時のアーキテクチャへの影響は最小限（パーサー＋モデル＋テーブルの差し替えのみ）。
+拡張時のアーキテクチャへの影響は最小限（パーサー＋モデル＋テーブルの差し替えのみ）。各図種にも対応する補助サービス（テスト生成器、CSV変換器など）が並ぶ可能性がある。

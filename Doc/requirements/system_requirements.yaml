@@ -3,8 +3,8 @@
 # Subject is always the artifact (component/system), omitted by convention.
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-version: "5.0"
-last_updated: "2026-04-07"
+version: "6.0"
+last_updated: "2026-04-08"
 
 # =============================================================================
 # PlantUML Subset Grammar
@@ -15,12 +15,22 @@ last_updated: "2026-04-07"
 #   StateName --> [*]             (final transition)
 #   StateName --> StateName : event [guard] / action
 #   state "Display Name" as alias
-#   state CompositeState {        (future extension)
-#     ...
+#   state CompositeName {         (composite state, ONE level only)
+#     [*] --> ChildState          (internal initial transition)
+#     ChildState --> ChildState : event
 #   }
+#   CompositeName --> AnyState : event   (group escape transition)
+#   AnyState --> CompositeName : event   (entry to composite's internal default)
 #
-# NOT supported (out of scope for review purpose):
-#   Styling, colors, notes, concurrency (--), history states
+# NOT supported (out of scope; rejected as syntax errors):
+#   Styling, colors, notes
+#   Nested-of-nested composite states (composite inside composite)
+#   Orthogonal regions (concurrency: --)
+#   History pseudo-states ([H], [H*])
+#   Dot-notation entry to a specific child (CompositeName.ChildState)
+#   Entry/exit point pseudo-states
+#
+# See ADR-009 for the rationale behind this minimal composite-state subset.
 
 # =============================================================================
 # Source Editing
@@ -29,22 +39,27 @@ last_updated: "2026-04-07"
 source_editing:
   SR-001:
     function: "Render PlantUML editor with syntax highlighting"
-    parent: [UR-002]
+    parent: [UR-002, UR-009]
     component: PlantUmlEditor
     acceptance_criteria:
       - "Display code editor with PlantUML syntax highlighting"
       - "Emit source change events on user input"
       - "Support paste from clipboard"
+      - "Accept PlantUML source loaded from outside the system (e.g. via clipboard or future load mechanism) as the entry point for a review session"
 
   SR-002:
     function: "Parse PlantUML subset into state machine model"
-    parent: [UR-001, UR-002, UR-003]
+    parent: [UR-001, UR-002, UR-003, UR-009]
     component: StateMachineParser
     acceptance_criteria:
       - "Parse states (including initial [*] and final [*])"
       - "Parse transitions with optional event, guard, and action"
       - "Parse state aliases (state \"Display Name\" as alias)"
-      - "Build StateMachineModel (states, events, transitions)"
+      - "Parse composite states with one level of nesting (state X { ... })"
+      - "Track parent-child relationships in the StateMachineModel"
+      - "Recognize composite-level transitions as group escape (source = composite name)"
+      - "Recognize the internal initial transition ([*] --> Child) inside a composite"
+      - "Build StateMachineModel (states with parentId, events, transitions)"
       - "Report syntax errors with line numbers"
     rules:
       - context: "Source contains syntax error"
@@ -53,6 +68,18 @@ source_editing:
       - context: "Source is valid"
         action: "User edits source"
         outcome: "Model updated after 500ms debounce"
+      - context: "Source contains a nested composite state (state X { state Y { ... } })"
+        action: "Parser encounters the second-level composite"
+        outcome: "Syntax error reported; the construct is not in the supported subset (ADR-009)"
+      - context: "Source contains an orthogonal region (composite with -- separator)"
+        action: "Parser encounters the separator"
+        outcome: "Syntax error reported; orthogonal regions are not supported (ADR-009)"
+      - context: "Source contains a history pseudo-state ([H] or [H*])"
+        action: "Parser encounters the history marker"
+        outcome: "Syntax error reported; history pseudo-states are not supported (ADR-009)"
+      - context: "Source contains dot-notation entry (Composite.Child)"
+        action: "Parser encounters the dot-notation reference"
+        outcome: "Syntax error reported; dot-notation entry is not supported (ADR-009)"
 
   SR-003:
     function: "Serialize state machine model to PlantUML source"
@@ -165,12 +192,16 @@ diagram_display:
 
 state_transition_table:
   SR-020:
-    function: "Generate State×Event matrix"
+    function: "Generate State×Event matrix in hybrid (layered) form"
     parent: [UR-003]
     component: StateEventMatrix
     acceptance_criteria:
-      - "Rows: states (excluding initial/final pseudo-states)"
+      - "Rows include both composite states and their child states (hybrid pattern, per industry convention and ISO/IEC/IEEE 29119-4)"
+      - "Initial/final pseudo-states are excluded from rows"
       - "Columns: events (deduplicated from all transitions)"
+      - "Composite-state rows hold group-escape transitions (transitions whose source is the composite itself)"
+      - "Child-state rows hold the transitions internal to the composite, plus any transitions from that specific child"
+      - "Child rows are visually indented under their parent row"
       - "Cell value: next state name (or empty if no transition)"
       - "Recalculate reactively when model changes"
     rules:
@@ -180,20 +211,32 @@ state_transition_table:
       - context: "Multiple transitions from same state on same event (different guards)"
         action: "Matrix is generated"
         outcome: "Cell shows all possible next states with their guards"
+      - context: "Composite state has a group-escape transition (e.g. CompositeName --> SomeOtherState : event)"
+        action: "Matrix is generated"
+        outcome: "The transition is shown on the composite-state row, not on each child row, so the DRY benefit of composite states is reflected in the matrix"
+      - context: "There are no composite states in the model"
+        action: "Matrix is generated"
+        outcome: "The matrix is effectively flat — only normal-state rows are present"
 
   SR-021:
-    function: "Generate PreState×PostState matrix"
+    function: "Generate PreState×PostState matrix in hybrid (layered) form"
     parent: [UR-003]
     component: StateStateMatrix
     acceptance_criteria:
-      - "Rows: source states"
-      - "Columns: target states"
-      - "Cell value: event name (or empty if no direct transition)"
+      - "Rows and columns include both composite states and their child states (hybrid pattern)"
+      - "Composite states appear as both row headers and column headers, in addition to their child states"
+      - "Child rows/columns are visually indented under their parent"
+      - "Cell value: event name(s) for the direct transition between source and target, or empty"
+      - "Group-escape transitions appear in the composite-state row"
+      - "Entry transitions targeting a composite appear in the composite-state column"
       - "Recalculate reactively when model changes"
     rules:
       - context: "Multiple events between same state pair"
         action: "Matrix is generated"
         outcome: "Cell shows all events separated by comma"
+      - context: "Transition targets a composite state (entry to its internal default)"
+        action: "Matrix is generated"
+        outcome: "Cell appears in the composite-state column, not duplicated to each child"
 
   SR-022:
     function: "Provide marker context to AI"
@@ -272,20 +315,22 @@ ai_chat:
 session_management:
   SR-040:
     function: "Manage session state in browser memory"
-    parent: [UR-002, UR-005, UR-007]
+    parent: [UR-002, UR-005, UR-007, UR-010]
     component: SessionStore
     acceptance_criteria:
       - "Initialize session with unique ID and timestamp"
       - "Store current PlantUML source"
       - "Maintain source change history"
+      - "Hold the session outcome (consensus, postponed, requirement-spec issue) when set by the user"
       - "Session data is volatile (browser memory only)"
 
   SR-041:
     function: "Export session as JSON"
-    parent: [UR-007]
+    parent: [UR-007, UR-010]
     component: ExportService
     acceptance_criteria:
-      - "Serialize session (source + messages + source history + metadata)"
+      - "Serialize session (source + messages + source history + outcome + metadata)"
+      - "Include the recorded session outcome so downstream workflows can act on it (per ADR-008, the actual notifications/integrations are composed in n8n outside ModelLogue)"
       - "Trigger browser file download with timestamped filename"
 
 # =============================================================================
@@ -397,7 +442,11 @@ data_model:
         type: string
         description: "Display name (from state \"name\" as alias, or id)"
       - name: type
-        type: "'normal' | 'initial' | 'final'"
+        type: "'normal' | 'composite' | 'initial' | 'final'"
+        description: "'composite' is a state that contains child states (one level only, per ADR-009)"
+      - name: parentId
+        type: "string | null"
+        description: "Id of the enclosing composite state, or null for top-level states"
 
   Transition:
     fields:
@@ -430,6 +479,21 @@ data_model:
         type: "SourceSnapshot[]"
       - name: markers
         type: "Marker[]"
+      - name: outcome
+        type: "SessionOutcome | null"
+        description: "Set when the review session is closed (UR-010); null while the session is open"
+
+  SessionOutcome:
+    description: "How a review session ended; downstream workflows in n8n act on this (per ADR-008)"
+    fields:
+      - name: status
+        type: "'consensus' | 'postponed' | 'spec_issue'"
+        description: "consensus: agreement reached; postponed: changes pending; spec_issue: upstream requirement problem"
+      - name: closedAt
+        type: "string (ISO 8601)"
+      - name: note
+        type: "string | null"
+        description: "Free-form note explaining the outcome"
 
   Marker:
     description: "A review marker drawn by the user on top of the diagram"
@@ -499,8 +563,21 @@ external_interfaces:
 # =============================================================================
 # Future Extensions (not in current scope)
 # =============================================================================
-# - N-switch coverage test case generation (0-3 switch, matrix calculation)
-#   → Additional tabs in analysis panel
+#
+# Implemented as auxiliary services in the same repository (per ADR-010),
+# callable from both ModelLogue and CI/CD pipelines:
+#
+# - N-switch coverage test case generator (UR-003 follow-up)
+#   - Input: PlantUML state diagram source (or StateMachineModel JSON)
+#   - Output: Test case CSV
+#   - Layered strategy applied to composite states (per the industry research)
+#
+# - Bidirectional state-table converter (UR-011)
+#   - PlantUML source ↔ State transition table CSV
+#   - Deterministic conversion (no LLM), strict CSV format definition
+#   - See ADR-011
+#
+# Other extensions, not yet placed:
 # - Activity diagram (BPMN-style) support
 # - Requirements derivation tree support
 # - Classification tree support

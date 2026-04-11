@@ -1,7 +1,7 @@
 # ModelLogue Test Strategy
 
-version: "1.0"
-last_updated: "2026-04-05"
+version: "2.0"
+last_updated: "2026-04-08"
 
 # =============================================================================
 # Overview
@@ -201,6 +201,121 @@ golden_test_cases:
           S1: { S2: "E2" }
           S2: { S0: "E3", S3: "E4" }
           S3: { S1: "E1" }
+
+  composite:
+    - id: "GT-020"
+      name: "Composite state with internal initial transition"
+      description: "Verify a one-level composite state is parsed and child states get parentId set"
+      plantuml: |
+        @startuml
+        state Operating {
+          [*] --> Idle
+          Idle --> Working : start
+          Working --> Idle : stop
+        }
+        [*] --> Operating
+        @enduml
+      expected:
+        composite_states: ["Operating"]
+        child_states_of_operating: ["Idle", "Working"]
+        normal_states_top_level: []
+        transitions_count_inside_operating: 3   # internal [*]->Idle, Idle->Working, Working->Idle
+
+    - id: "GT-021"
+      name: "Composite state with group escape transition"
+      description: "Verify that a transition whose source is the composite name is treated as group escape"
+      plantuml: |
+        @startuml
+        state ReviewLoop {
+          [*] --> Inspecting
+          Inspecting --> Asking : ask
+          Asking --> Inspecting : answered
+        }
+        [*] --> ReviewLoop
+        ReviewLoop --> Done : finished
+        Done --> [*]
+        @enduml
+      expected:
+        group_escape_transitions:
+          - source: "ReviewLoop"
+            target: "Done"
+            event: "finished"
+        # In the State×Event matrix, the row 'ReviewLoop' must hold the 'finished' transition,
+        # not the rows 'Inspecting' or 'Asking'.
+
+    - id: "GT-022"
+      name: "Hybrid State×Event matrix for a composite"
+      description: "Verify the hybrid pattern: composite row + child rows under it"
+      plantuml: |
+        @startuml
+        state Operating {
+          [*] --> Idle
+          Idle --> Working : start
+          Working --> Idle : stop
+        }
+        [*] --> Operating
+        Operating --> Failure : fault
+        Failure --> Operating : reset
+        @enduml
+      expected_state_event_matrix:
+        # Hybrid: composite states and child states both appear as rows.
+        # Order: composite first, then its children indented, then siblings.
+        rows: ["Operating", "  Idle", "  Working", "Failure"]
+        columns: ["fault", "reset", "start", "stop"]
+        cells:
+          Operating: { fault: "Failure" }
+          Idle: { start: "Working" }
+          Working: { stop: "Idle" }
+          Failure: { reset: "Operating" }
+
+  composite_rejected:
+    description: "Constructs that must be rejected with a syntax error per ADR-009"
+    - id: "GT-030"
+      name: "Reject nested composite state"
+      plantuml: |
+        @startuml
+        state Outer {
+          state Inner {
+            [*] --> A
+          }
+        }
+        @enduml
+      expected_error: "Nested composite state not supported"
+
+    - id: "GT-031"
+      name: "Reject orthogonal region"
+      plantuml: |
+        @startuml
+        state Parallel {
+          [*] --> A
+          --
+          [*] --> B
+        }
+        @enduml
+      expected_error: "Orthogonal region not supported"
+
+    - id: "GT-032"
+      name: "Reject history pseudo-state"
+      plantuml: |
+        @startuml
+        state Outer {
+          [*] --> A
+          A --> [H]
+        }
+        @enduml
+      expected_error: "History pseudo-state not supported"
+
+    - id: "GT-033"
+      name: "Reject dot-notation entry"
+      plantuml: |
+        @startuml
+        state Outer {
+          [*] --> A
+          A --> B
+        }
+        SomeOther --> Outer.B : event
+        @enduml
+      expected_error: "Dot-notation entry not supported"
 
 # =============================================================================
 # Test Data Format
