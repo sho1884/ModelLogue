@@ -4,6 +4,7 @@ import {
   generateStateEventMatrix,
   generateStateStateMatrix,
 } from '../../src/engines/matrixGenerator';
+import type { MatrixData } from '../../src/types/matrix';
 
 // GT-010 / GT-011: Matrix generation from test_strategy.yaml
 const MATRIX_SOURCE = `
@@ -17,6 +18,17 @@ S0 --> S0 : E5
 S3 --> S1 : E1
 @enduml`;
 
+function findCell(
+  matrix: MatrixData,
+  rowLabel: string,
+  colLabel: string
+): string | null {
+  const rowIndex = matrix.rows.findIndex((r) => r.label === rowLabel);
+  const colIndex = matrix.columnHeaders.indexOf(colLabel);
+  if (rowIndex === -1 || colIndex === -1) return null;
+  return matrix.cells[rowIndex][colIndex];
+}
+
 describe('MatrixGenerator', () => {
   describe('generateStateEventMatrix', () => {
     // GT-010
@@ -26,36 +38,35 @@ describe('MatrixGenerator', () => {
 
       const matrix = generateStateEventMatrix(model!);
 
-      expect(matrix.rowHeaders).toEqual(['S0', 'S1', 'S2', 'S3']);
+      expect(matrix.rows.map((r) => r.label)).toEqual([
+        'S0',
+        'S1',
+        'S2',
+        'S3',
+      ]);
+      expect(matrix.rows.every((r) => r.level === 0)).toBe(true);
+      expect(matrix.rows.every((r) => !r.isComposite)).toBe(true);
       expect(matrix.columnHeaders.sort()).toEqual(
         ['E1', 'E2', 'E3', 'E4', 'E5'].sort()
       );
 
-      // Helper to look up cell value
-      const cell = (state: string, event: string): string | null => {
-        const row = matrix.rowHeaders.indexOf(state);
-        const col = matrix.columnHeaders.indexOf(event);
-        if (row === -1 || col === -1) return undefined as never;
-        return matrix.cells[row][col];
-      };
-
       // S0 row
-      expect(cell('S0', 'E1')).toBe('S1');
-      expect(cell('S0', 'E2')).toBeNull();
-      expect(cell('S0', 'E3')).toBeNull();
-      expect(cell('S0', 'E4')).toBeNull();
-      expect(cell('S0', 'E5')).toBe('S0');
+      expect(findCell(matrix, 'S0', 'E1')).toBe('S1');
+      expect(findCell(matrix, 'S0', 'E2')).toBeNull();
+      expect(findCell(matrix, 'S0', 'E3')).toBeNull();
+      expect(findCell(matrix, 'S0', 'E4')).toBeNull();
+      expect(findCell(matrix, 'S0', 'E5')).toBe('S0');
 
       // S1 row
-      expect(cell('S1', 'E1')).toBeNull();
-      expect(cell('S1', 'E2')).toBe('S2');
+      expect(findCell(matrix, 'S1', 'E1')).toBeNull();
+      expect(findCell(matrix, 'S1', 'E2')).toBe('S2');
 
       // S2 row
-      expect(cell('S2', 'E3')).toBe('S0');
-      expect(cell('S2', 'E4')).toBe('S3');
+      expect(findCell(matrix, 'S2', 'E3')).toBe('S0');
+      expect(findCell(matrix, 'S2', 'E4')).toBe('S3');
 
       // S3 row
-      expect(cell('S3', 'E1')).toBe('S1');
+      expect(findCell(matrix, 'S3', 'E1')).toBe('S1');
     });
 
     it('shows guard annotations in cells', () => {
@@ -68,10 +79,7 @@ Idle --> Error : submit [invalid] / showError()
 
       const { model } = parse(source);
       const matrix = generateStateEventMatrix(model!);
-
-      const idleRow = matrix.rowHeaders.indexOf('Idle');
-      const submitCol = matrix.columnHeaders.indexOf('submit');
-      const cell = matrix.cells[idleRow][submitCol];
+      const cell = findCell(matrix, 'Idle', 'submit');
 
       // Multiple transitions with different guards
       expect(cell).toContain('Processing [valid]');
@@ -89,8 +97,51 @@ B --> [*]
       const { model } = parse(source);
       const matrix = generateStateEventMatrix(model!);
 
-      expect(matrix.rowHeaders).toEqual(['A', 'B']);
-      expect(matrix.rowHeaders).not.toContain('[*]');
+      expect(matrix.rows.map((r) => r.label)).toEqual(['A', 'B']);
+    });
+
+    // GT-022: Hybrid State×Event matrix for a composite
+    it('generates hybrid matrix with composite + child rows', () => {
+      const source = `
+@startuml
+state Operating {
+  [*] --> Idle
+  Idle --> Working : start
+  Working --> Idle : stop
+}
+[*] --> Operating
+Operating --> Failure : fault
+Failure --> Operating : reset
+@enduml`;
+
+      const { model } = parse(source);
+      const matrix = generateStateEventMatrix(model!);
+
+      // Rows: composite "Operating" first, then child states Idle/Working
+      // (at level 1, indented), then sibling "Failure" at level 0.
+      expect(matrix.rows.map((r) => r.label)).toEqual([
+        'Operating',
+        'Idle',
+        'Working',
+        'Failure',
+      ]);
+      expect(matrix.rows[0].isComposite).toBe(true);
+      expect(matrix.rows[0].level).toBe(0);
+      expect(matrix.rows[1].level).toBe(1); // Idle
+      expect(matrix.rows[2].level).toBe(1); // Working
+      expect(matrix.rows[3].level).toBe(0); // Failure
+
+      // Group escape transition sits on the composite row, not on the children
+      expect(findCell(matrix, 'Operating', 'fault')).toBe('Failure');
+      expect(findCell(matrix, 'Idle', 'fault')).toBeNull();
+      expect(findCell(matrix, 'Working', 'fault')).toBeNull();
+
+      // Internal transitions sit on the child rows
+      expect(findCell(matrix, 'Idle', 'start')).toBe('Working');
+      expect(findCell(matrix, 'Working', 'stop')).toBe('Idle');
+
+      // Failure sibling gets its own transition
+      expect(findCell(matrix, 'Failure', 'reset')).toBe('Operating');
     });
   });
 
@@ -102,30 +153,29 @@ B --> [*]
 
       const matrix = generateStateStateMatrix(model!);
 
-      expect(matrix.rowHeaders).toEqual(['S0', 'S1', 'S2', 'S3']);
+      expect(matrix.rows.map((r) => r.label)).toEqual([
+        'S0',
+        'S1',
+        'S2',
+        'S3',
+      ]);
       expect(matrix.columnHeaders).toEqual(['S0', 'S1', 'S2', 'S3']);
 
-      const cell = (from: string, to: string): string | null => {
-        const row = matrix.rowHeaders.indexOf(from);
-        const col = matrix.columnHeaders.indexOf(to);
-        return matrix.cells[row][col];
-      };
-
       // S0 row
-      expect(cell('S0', 'S0')).toBe('E5');
-      expect(cell('S0', 'S1')).toBe('E1');
-      expect(cell('S0', 'S2')).toBeNull();
-      expect(cell('S0', 'S3')).toBeNull();
+      expect(findCell(matrix, 'S0', 'S0')).toBe('E5');
+      expect(findCell(matrix, 'S0', 'S1')).toBe('E1');
+      expect(findCell(matrix, 'S0', 'S2')).toBeNull();
+      expect(findCell(matrix, 'S0', 'S3')).toBeNull();
 
       // S1 row
-      expect(cell('S1', 'S2')).toBe('E2');
+      expect(findCell(matrix, 'S1', 'S2')).toBe('E2');
 
       // S2 row
-      expect(cell('S2', 'S0')).toBe('E3');
-      expect(cell('S2', 'S3')).toBe('E4');
+      expect(findCell(matrix, 'S2', 'S0')).toBe('E3');
+      expect(findCell(matrix, 'S2', 'S3')).toBe('E4');
 
       // S3 row
-      expect(cell('S3', 'S1')).toBe('E1');
+      expect(findCell(matrix, 'S3', 'S1')).toBe('E1');
     });
 
     it('shows multiple events between same state pair', () => {
@@ -139,9 +189,41 @@ A --> B : run
       const { model } = parse(source);
       const matrix = generateStateStateMatrix(model!);
 
-      const row = matrix.rowHeaders.indexOf('A');
-      const col = matrix.columnHeaders.indexOf('B');
-      expect(matrix.cells[row][col]).toBe('go, run');
+      expect(findCell(matrix, 'A', 'B')).toBe('go, run');
+    });
+
+    it('includes composite state in both row and column axes', () => {
+      const source = `
+@startuml
+state Operating {
+  [*] --> Idle
+  Idle --> Working : start
+}
+[*] --> Operating
+Operating --> Failure : fault
+@enduml`;
+
+      const { model } = parse(source);
+      const matrix = generateStateStateMatrix(model!);
+
+      // Rows and columns both contain: Operating, Idle, Working, Failure
+      expect(matrix.rows.map((r) => r.label)).toEqual([
+        'Operating',
+        'Idle',
+        'Working',
+        'Failure',
+      ]);
+      expect(matrix.columnHeaders).toEqual([
+        'Operating',
+        'Idle',
+        'Working',
+        'Failure',
+      ]);
+
+      // Composite row holds the group-escape event
+      expect(findCell(matrix, 'Operating', 'Failure')).toBe('fault');
+      // Child transitions sit on child rows
+      expect(findCell(matrix, 'Idle', 'Working')).toBe('start');
     });
   });
 });

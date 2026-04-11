@@ -2,6 +2,7 @@ import { useUiStore, type AnalysisTab } from '../../stores/uiStore';
 import { useModelStore } from '../../stores/modelStore';
 import { SourceEditor } from './SourceEditor';
 import { MatrixView } from './MatrixView';
+import { ResizeHandle } from '../ResizeHandle';
 
 const tabs: { id: AnalysisTab; label: string }[] = [
   { id: 'source', label: 'Source' },
@@ -10,21 +11,37 @@ const tabs: { id: AnalysisTab; label: string }[] = [
   { id: 'ebnf', label: 'EBNF' },
 ];
 
+// Resize bounds for the analysis panel height.
+const MIN_HEIGHT = 100;
+const MAX_HEIGHT_RATIO = 0.7; // up to 70% of the viewport height
+
 export function AnalysisPanel() {
   const activeTab = useUiStore((s) => s.activeAnalysisTab);
   const setActiveTab = useUiStore((s) => s.setActiveAnalysisTab);
   const collapsed = useUiStore((s) => s.analysisPanelCollapsed);
   const togglePanel = useUiStore((s) => s.toggleAnalysisPanel);
   const height = useUiStore((s) => s.analysisPanelHeight);
+  const setHeight = useUiStore((s) => s.setAnalysisPanelHeight);
 
   const stateEventMatrix = useModelStore((s) => s.stateEventMatrix);
   const stateStateMatrix = useModelStore((s) => s.stateStateMatrix);
 
   return (
     <div
-      className="border-t border-gray-200 bg-white flex flex-col"
+      className="bg-white flex flex-col shrink-0"
       style={{ height: collapsed ? 32 : height }}
     >
+      {/* Resize handle (hidden when collapsed) */}
+      {!collapsed && (
+        <ResizeHandle
+          edge="top"
+          value={height}
+          onChange={setHeight}
+          min={MIN_HEIGHT}
+          max={Math.max(MIN_HEIGHT, window.innerHeight * MAX_HEIGHT_RATIO)}
+        />
+      )}
+
       {/* Tab bar with collapse toggle */}
       <div className="flex items-center border-b border-gray-200 bg-gray-50 shrink-0">
         <button
