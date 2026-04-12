@@ -67,7 +67,8 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
  */
 function normalizeResponse(data: unknown): ChatResponse {
   if (typeof data === 'string') {
-    return { text: data };
+    const suggestedSource = extractPlantUmlBlock(data);
+    return suggestedSource ? { text: data, suggestedSource } : { text: data };
   }
   if (data && typeof data === 'object') {
     const obj = data as Record<string, unknown>;
@@ -77,7 +78,9 @@ function normalizeResponse(data: unknown): ChatResponse {
       pickString(obj, 'message') ??
       pickString(obj, 'response') ??
       '';
-    const suggestedSource = pickString(obj, 'suggestedSource');
+    // First check if n8n already extracted the source (future: SR-032 in n8n)
+    const suggestedSource =
+      pickString(obj, 'suggestedSource') ?? extractPlantUmlBlock(text);
     return suggestedSource ? { text, suggestedSource } : { text };
   }
   return { text: '' };
@@ -89,6 +92,23 @@ function pickString(
 ): string | undefined {
   const value = obj[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * Extract a PlantUML source block from the AI response text.
+ *
+ * Looks for the first ```plantuml ... ``` fenced code block. If found,
+ * returns the content of the block (without the fence markers). Returns
+ * undefined if no block is found.
+ *
+ * Note: SR-032 says this extraction should happen in n8n, but for phase 1
+ * we do it here on the frontend. It can be moved to n8n later without
+ * changing the ChatResponse interface.
+ */
+export function extractPlantUmlBlock(text: string): string | undefined {
+  const pattern = /```plantuml\s*\n([\s\S]*?)```/;
+  const match = text.match(pattern);
+  return match ? match[1].trim() : undefined;
 }
 
 /**
