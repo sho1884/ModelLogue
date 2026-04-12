@@ -23,6 +23,8 @@ export interface ChatRequest {
   history: ChatHistoryEntry[];
   /** The new message the user is sending. */
   userMessage: string;
+  /** Human-readable marker + coordinate context (SR-022). */
+  markerContext: string;
 }
 
 export interface ChatResponse {
