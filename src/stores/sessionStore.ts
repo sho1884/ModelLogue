@@ -1,24 +1,15 @@
 import { create } from 'zustand';
-import type { ChatMessage, SourceSnapshot } from '../types/session';
+import type {
+  ChatMessage,
+  SourceSnapshot,
+  SessionOutcome,
+  SessionOutcomeStatus,
+  ReviewSession,
+} from '../types/session';
+import { useMarkerStore } from './markerStore';
+import { useChatStore } from './chatStore';
 
-interface SessionStore {
-  sessionId: string;
-  sessionName: string;
-  createdAt: string;
-  currentSource: string;
-  sourceHistory: SourceSnapshot[];
-  messages: ChatMessage[];
-
-  updateSource: (source: string, triggeredBy: string) => void;
-  applyProposal: (messageId: string, source: string) => void;
-  undoSource: () => void;
-}
-
-export const useSessionStore = create<SessionStore>((set, get) => ({
-  sessionId: crypto.randomUUID(),
-  sessionName: 'Untitled Session',
-  createdAt: new Date().toISOString(),
-  currentSource: `@startuml
+const INITIAL_SOURCE = `@startuml
 ' Sample: ModelLogue's own review process.
 ' Uses one-level composite states (per ADR-009) to express the phase structure
 ' of Antigravity's original diagram.
@@ -59,20 +50,50 @@ ReviewLoop --> SpecIssue : 仕様側の矛盾・漏れ等に気づいた
 Agreed --> [*]
 Postponed --> [*]
 SpecIssue --> [*]
-@enduml`,
+@enduml`;
+
+interface SessionStore {
+  sessionId: string;
+  sessionName: string;
+  createdAt: string;
+  currentSource: string;
+  sourceHistory: SourceSnapshot[];
+  messages: ChatMessage[];
+  outcome: SessionOutcome | null;
+
+  updateSource: (source: string, triggeredBy: string) => void;
+  applyProposal: (messageId: string, source: string) => void;
+  undoSource: () => void;
+  closeSession: (status: SessionOutcomeStatus, note: string | null) => void;
+  exportSession: () => ReviewSession;
+}
+
+function nextVersion(history: SourceSnapshot[]): number {
+  if (history.length === 0) return 1;
+  return history[history.length - 1].version + 1;
+}
+
+export const useSessionStore = create<SessionStore>((set, get) => ({
+  sessionId: crypto.randomUUID(),
+  sessionName: 'Untitled Session',
+  createdAt: new Date().toISOString(),
+  currentSource: INITIAL_SOURCE,
   sourceHistory: [],
   messages: [],
+  outcome: null,
 
   updateSource: (source, triggeredBy) => {
+    const history = get().sourceHistory;
     const snapshot: SourceSnapshot = {
       id: crypto.randomUUID(),
+      version: nextVersion(history),
       source: get().currentSource,
       timestamp: new Date().toISOString(),
       triggeredBy,
     };
     set({
       currentSource: source,
-      sourceHistory: [...get().sourceHistory, snapshot],
+      sourceHistory: [...history, snapshot],
     });
   },
 
@@ -80,6 +101,7 @@ SpecIssue --> [*]
     const store = get();
     const snapshot: SourceSnapshot = {
       id: crypto.randomUUID(),
+      version: nextVersion(store.sourceHistory),
       source: store.currentSource,
       timestamp: new Date().toISOString(),
       triggeredBy: messageId,
@@ -101,5 +123,46 @@ SpecIssue --> [*]
       currentSource: last.source,
       sourceHistory: history.slice(0, -1),
     });
+  },
+
+  closeSession: (status, note) => {
+    set({
+      outcome: {
+        status,
+        closedAt: new Date().toISOString(),
+        note,
+      },
+    });
+  },
+
+  exportSession: () => {
+    const store = get();
+    const chatMessages = useChatStore.getState().messages;
+    const markers = useMarkerStore.getState().markers;
+
+    // Build the final source snapshot (the current state = the latest version)
+    const finalVersion = nextVersion(store.sourceHistory);
+    const allSnapshots: SourceSnapshot[] = [
+      ...store.sourceHistory,
+      {
+        id: crypto.randomUUID(),
+        version: finalVersion,
+        source: store.currentSource,
+        timestamp: new Date().toISOString(),
+        triggeredBy: 'export',
+      },
+    ];
+
+    return {
+      id: store.sessionId,
+      name: store.sessionName,
+      createdAt: store.createdAt,
+      updatedAt: new Date().toISOString(),
+      plantUmlSource: store.currentSource,
+      messages: chatMessages,
+      sourceHistory: allSnapshots,
+      markers,
+      outcome: store.outcome,
+    } as ReviewSession;
   },
 }));

@@ -94,6 +94,7 @@ export function ChatPanel() {
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
   const applyProposal = useSessionStore((s) => s.applyProposal);
+  const markApplied = useChatStore((s) => s.markApplied);
 
   const isApplied = message.applied === true;
 
@@ -115,10 +116,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             content={message.content}
             suggestedSource={message.suggestedSource}
             isApplied={isApplied}
-            onApply={() =>
-              message.suggestedSource &&
-              applyProposal(message.id, message.suggestedSource)
-            }
+            onApply={() => {
+              if (message.suggestedSource) {
+                applyProposal(message.id, message.suggestedSource);
+                markApplied(message.id);
+              }
+            }}
           />
         )}
       </div>

@@ -5,6 +5,7 @@ import { useSessionStore } from './sessionStore';
 import { useModelStore } from './modelStore';
 import { useMarkerStore } from './markerStore';
 import { buildMarkerContext } from '../services/markerContext';
+import grammarSpec from '../grammars/stateDiagram.ebnf?raw';
 
 interface ChatStore {
   messages: ChatMessage[];
@@ -12,6 +13,7 @@ interface ChatStore {
   lastError: string | null;
 
   sendMessage: (content: string) => Promise<void>;
+  markApplied: (messageId: string) => void;
   clear: () => void;
 }
 
@@ -57,6 +59,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         history,
         userMessage: trimmed,
         markerContext,
+        grammarSpec,
       });
 
       const assistantMessage: ChatMessage = {
@@ -78,6 +81,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           e instanceof Error ? e.message : 'Chat request failed',
       });
     }
+  },
+
+  markApplied: (messageId) => {
+    set({
+      messages: get().messages.map((m) =>
+        m.id === messageId ? { ...m, applied: true } : m
+      ),
+    });
   },
 
   clear: () => set({ messages: [], lastError: null }),

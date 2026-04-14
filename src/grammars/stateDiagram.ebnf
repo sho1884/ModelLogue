@@ -1,0 +1,114 @@
+(* ModelLogue PlantUML State Diagram Subset Grammar *)
+(* Version: 1.0 *)
+(* Reference: ADR-009 (one-level composite states only) *)
+(*                                                       *)
+(* This grammar defines the ONLY syntax that ModelLogue  *)
+(* accepts. Any construct not listed here is rejected     *)
+(* with a syntax error.                                  *)
+
+(* ===== Top-level structure ===== *)
+
+diagram          = "@startuml" , newline ,
+                   { line , newline } ,
+                   "@enduml" ;
+
+line             = empty_line
+                 | comment
+                 | state_alias
+                 | composite_state
+                 | transition ;
+
+empty_line       = { whitespace } ;
+
+comment          = "'" , { any_char } ;
+
+(* ===== State declarations ===== *)
+
+state_alias      = "state" , whitespace ,
+                   '"' , label_text , '"' ,
+                   whitespace , "as" , whitespace ,
+                   state_id ;
+
+(* ===== Composite states (one level only, no nesting) ===== *)
+
+composite_state  = composite_head , newline ,
+                   { composite_line , newline } ,
+                   "}" ;
+
+composite_head   = "state" , whitespace ,
+                   [ '"' , label_text , '"' , whitespace , "as" , whitespace ] ,
+                   state_id , whitespace , "{" ;
+
+composite_line   = empty_line
+                 | comment
+                 | state_alias
+                 | transition ;
+
+(* NOTE: A composite_state CANNOT appear inside another     *)
+(*       composite_state. The parser enforces max depth = 1 *)
+
+(* ===== Transitions ===== *)
+
+transition       = state_ref , whitespace , arrow , whitespace , state_ref ,
+                   [ whitespace , ":" , whitespace , transition_label ] ;
+
+arrow            = "-->" | "->" ;
+
+state_ref        = state_id | initial_final ;
+
+initial_final    = "[*]" ;
+
+transition_label = event_name ,
+                   [ whitespace , "[" , guard_text , "]" ] ,
+                   [ whitespace , "/" , whitespace , action_text ] ;
+
+(* ===== Terminal symbols ===== *)
+
+state_id         = id_start , { id_cont } ;
+
+id_start         = letter | "_" | unicode_char ;
+id_cont          = letter | digit | "_" | unicode_char ;
+
+event_name       = { any_char_except_bracket_slash } ;
+  (* Event name: any text up to the first '[' or '/' *)
+
+guard_text       = { any_char_except_close_bracket } ;
+  (* Guard condition: any text inside [ ] *)
+
+action_text      = { any_char } ;
+  (* Action: any text after / to end of line *)
+
+label_text       = { any_char_except_double_quote } ;
+  (* Display label inside double quotes *)
+
+letter           = "A" | "B" | ... | "Z" | "a" | "b" | ... | "z" ;
+digit            = "0" | "1" | ... | "9" ;
+unicode_char     = (* any Unicode letter: hiragana, katakana, kanji, etc. *) ;
+whitespace       = " " | "\t" ;
+newline          = "\n" | "\r\n" ;
+any_char         = (* any character except newline *) ;
+
+(* ===== Explicitly NOT supported (ADR-009) ===== *)
+(*                                                *)
+(* The following PlantUML constructs are rejected  *)
+(* with a syntax error if detected:                *)
+(*                                                *)
+(*   - Nested composite states                    *)
+(*       state X { state Y { ... } }              *)
+(*                                                *)
+(*   - Orthogonal regions                         *)
+(*       state X { ... -- ... }                   *)
+(*                                                *)
+(*   - History pseudo-states                      *)
+(*       [H]  [H*]                                *)
+(*                                                *)
+(*   - Dot-notation direct entry                  *)
+(*       X.Y  (in transitions)                    *)
+(*                                                *)
+(*   - Entry/exit point pseudo-states             *)
+(*                                                *)
+(*   - Styling, colors, notes                     *)
+(*                                                *)
+(*   - Inline comments ( ' after code )           *)
+(*       Not part of the grammar; stripped before  *)
+(*       parsing as a preprocessing step.          *)

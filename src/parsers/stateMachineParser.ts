@@ -62,12 +62,18 @@ export function parseStateMachine(source: string): ParseResult {
 
   for (let i = 0; i < lines.length; i++) {
     const lineNum = i + 1;
-    const raw = lines[i].trim();
+    const rawWithComment = lines[i].trim();
 
-    // Skip empty lines and comments
-    if (raw === '' || raw.startsWith("'") || raw.startsWith('#')) {
+    // Skip empty lines and full-line comments
+    if (rawWithComment === '' || rawWithComment.startsWith("'") || rawWithComment.startsWith('#')) {
       continue;
     }
+
+    // Strip inline comments: everything after an unquoted ' is a comment.
+    // PlantUML uses ' as the comment marker. We must not strip quotes inside
+    // string literals ("..." in state aliases), so we find the first '
+    // that is outside of double-quoted strings.
+    const raw = stripInlineComment(rawWithComment);
 
     // @startuml / @enduml
     if (raw.startsWith('@startuml')) {
@@ -364,6 +370,24 @@ function parseTransitionLabel(label: string): {
     guard: guardPart?.trim() || null,
     action: actionPart?.trim() || null,
   };
+}
+
+/**
+ * Remove an inline comment from a line. PlantUML uses ' as the comment
+ * character. We must not strip apostrophes inside double-quoted strings
+ * (used in `state "Display Name" as alias`).
+ */
+function stripInlineComment(line: string): string {
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuote = !inQuote;
+    } else if (ch === "'" && !inQuote) {
+      return line.slice(0, i).trimEnd();
+    }
+  }
+  return line;
 }
 
 // Convenience: parse and classify in one call

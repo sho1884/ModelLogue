@@ -25,6 +25,8 @@ export interface ChatRequest {
   userMessage: string;
   /** Human-readable marker + coordinate context (SR-022). */
   markerContext: string;
+  /** EBNF grammar that the AI must follow when generating PlantUML (SR-050). */
+  grammarSpec: string;
 }
 
 export interface ChatResponse {
