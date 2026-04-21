@@ -10,6 +10,7 @@ import {
 } from '../engines/matrixGenerator';
 import { fetchSvg } from '../services/plantUmlService';
 import { extractCoordinates } from '../engines/svgCoordinateExtractor';
+import { useSessionStore } from './sessionStore';
 
 interface ModelStore {
   model: StateMachineModel | null;
@@ -43,6 +44,15 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         stateEventMatrix: generateStateEventMatrix(result.model),
         stateStateMatrix: generateStateStateMatrix(result.model),
       });
+      // SR-001 (v7.2): the moment a non-trivial parseable model exists,
+      // the session moves out of SEED phase. One-way transition.
+      // We require >=1 real state — the parser also returns an empty
+      // model object for empty / whitespace-only input, and that
+      // emptiness must NOT be treated as "model established" or the
+      // editor would lock at session start.
+      if (result.model.states.length > 0) {
+        useSessionStore.getState().markModelEstablished();
+      }
     } else {
       set({ parseErrors: result.errors });
     }

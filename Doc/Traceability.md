@@ -12,16 +12,16 @@ flowchart LR
         UR005["UR-005<br/>Discuss the model with AI<br/>AIとモデルについて対話する"]
         UR006["UR-006<br/>Apply AI suggestions<br/>AIの提案を適用する"]
         UR007["UR-007<br/>Export review session<br/>レビューセッションをエクスポートする"]
-        UR008["UR-008<br/>View PlantUML subset grammar<br/>PlantUMLサブセット文法を見る"]
-        UR009["UR-009<br/>Receive an initial model<br/>初版モデルを受け取る"]
+        UR008["UR-008<br/>Obtain PlantUML subset grammar (download)<br/>PlantUMLサブセット文法をDLする"]
+        UR009["UR-009<br/>Receive initial model (+ optional requirements text)<br/>初版モデル（＋要求仕様断片）を受け取る"]
         UR010["UR-010<br/>Close session with outcome<br/>結末を付けて終了する"]
         UR011["UR-011<br/>Convert source ↔ table<br/>ソースと表を相互変換する<br/>(補助サービスとして実装<br/>ADR-010, ADR-011)"]
+        UR012["UR-012<br/>Refer to requirements text<br/>要求仕様文を参照する"]
     end
 
     subgraph SE["Source Editing / ソース編集"]
-        SR001["SR-001<br/>Render PlantUML editor<br/>PlantUMLエディタを表示する"]
+        SR001["SR-001 (v7.1)<br/>Source read-only reference<br/>(seed-editable when empty)<br/>ソースを読み取り専用で表示<br/>（空時のみ seed 編集可）"]
         SR002["SR-002<br/>Parse PlantUML subset<br/>PlantUMLサブセットを解析する"]
-        SR003["SR-003<br/>Serialize model to PlantUML<br/>モデルをPlantUMLに変換する"]
     end
 
     subgraph DD["Diagram Display / 図の表示"]
@@ -41,11 +41,11 @@ flowchart LR
     end
 
     subgraph AC["AI Chat / AI対話"]
-        SR022["SR-022<br/>Provide marker context to AI<br/>マーカー情報をAIに渡す"]
+        SR022["SR-022<br/>Provide marker + grammar context<br/>マーカー情報と文法をAIに渡す"]
         SR030["SR-030<br/>Send chat message via n8n<br/>n8n経由でメッセージを送信する"]
         SR031["SR-031<br/>Render chat message list<br/>チャット一覧を表示する"]
         SR032["SR-032<br/>Extract PlantUML from AI response<br/>AI応答からPlantUMLを抽出する"]
-        SR033["SR-033<br/>Display source diff<br/>ソース差分を表示する"]
+        SR033["SR-033 (v7.1 redefined)<br/>Visual before/after model comparison<br/>モデル図 before/after 並置 + 差分オーバーレイ"]
         SR034["SR-034<br/>Apply proposed modification<br/>提案された修正を適用する"]
         SR035["SR-035<br/>Undo source modification<br/>ソース修正を元に戻す"]
     end
@@ -55,8 +55,21 @@ flowchart LR
         SR041["SR-041<br/>Export session as JSON<br/>セッションをJSONで出力する"]
     end
 
-    subgraph GD["Grammar Display / 文法表示"]
-        SR050["SR-050<br/>Display PlantUML subset grammar<br/>PlantUMLサブセット文法を表示する"]
+    subgraph RT["Requirements & Seeding / 要求仕様＆シード (v7.1)"]
+        SR080["SR-080<br/>Requirements tab (read-only during review)<br/>要求仕様タブ"]
+        SR081["SR-081<br/>Download EBNF grammar file<br/>EBNFファイルをDL"]
+        SR082["SR-082<br/>Generate initial model from requirements<br/>要求仕様から初版モデル生成"]
+        SR083["SR-083<br/>Receive seed bundle from outside<br/>外部シードバンドル受け取り"]
+    end
+
+    subgraph MD["Model Diff / モデル差分 (v7.1)"]
+        SR090["SR-090<br/>Compute model-level diff<br/>モデルレベル差分を計算"]
+    end
+
+    subgraph AE["Artifact Export / 個別エクスポート (v7.2)"]
+        SR100["SR-100<br/>Export PlantUML source (Copy / Save .puml)<br/>PlantUMLソースをコピー／保存"]
+        SR101["SR-101<br/>Export matrices (Copy TSV / Save CSV)<br/>マトリクスをTSVコピー／CSV保存"]
+        SR102["SR-102 ⏳ deferred<br/>Export generated test cases<br/>テストケース出力（補助サービス待ち）"]
     end
 
     subgraph IN["Infrastructure / インフラ"]
@@ -77,7 +90,7 @@ flowchart LR
     UR001 --> SR060
     UR001 --> SR070
 
-    %% UR-002: Edit PlantUML source
+    %% UR-002: Refer to the PlantUML source of the current model
     UR002 --> SR001
     UR002 --> SR002
     UR002 --> SR040
@@ -107,87 +120,112 @@ flowchart LR
     UR005 --> SR061
     UR005 --> SR072
 
-    %% UR-006: Apply AI suggestions
-    UR006 --> SR003
+    %% UR-006: Apply AI suggestions (visual before/after model comparison)
     UR006 --> SR032
     UR006 --> SR033
     UR006 --> SR034
     UR006 --> SR035
     UR006 --> SR072
+    UR006 --> SR090
 
-    %% UR-007: Export review session
+    %% UR-007: Save review evidence + lift individual artifacts (v7.2)
     UR007 --> SR040
     UR007 --> SR041
+    UR007 --> SR083
+    UR007 --> SR100
+    UR007 --> SR101
 
-    %% UR-008: View PlantUML subset grammar
-    UR008 --> SR050
-    UR008 --> SR071
+    %% UR-008: Grammar feeds the AI context and is downloadable
+    UR008 --> SR022
+    UR008 --> SR081
 
-    %% UR-009: Receive an initial model into the review session
+    %% UR-009: Receive initial model (+ optional requirements text) into the session
     UR009 --> SR001
     UR009 --> SR002
+    UR009 --> SR080
+    UR009 --> SR082
+    UR009 --> SR083
 
     %% UR-010: Close the review session with an outcome
     UR010 --> SR040
     UR010 --> SR041
+
+    %% UR-012: Refer to requirements text alongside the model
+    UR012 --> SR080
+    UR012 --> SR071
 ```
 
 ## 2. Traceability Matrix / トレーサビリティマトリクス
 
-| System Requirement / システム要件 | UR-001 | UR-002 | UR-003 | UR-004 | UR-005 | UR-006 | UR-007 | UR-008 | UR-009 | UR-010 | UR-011 |
-|----------------------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
+| System Requirement / システム要件 | UR-001 | UR-002 | UR-003 | UR-004 | UR-005 | UR-006 | UR-007 | UR-008 | UR-009 | UR-010 | UR-011 | UR-012 |
+|----------------------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
 | **Source Editing / ソース編集** |
-| SR-001 PlantUMLエディタを表示する |  | x |  |  |  |  |  |  | x |  |  |
-| SR-002 PlantUMLサブセットを解析する | x | x | x |  |  |  |  |  | x |  |  |
-| SR-003 モデルをPlantUMLに変換する |  |  |  |  |  | x |  |  |  |  |  |
+| SR-001 ソースを読み取り専用で表示（seed時のみ編集可）|  | x |  |  |  |  |  |  | x |  |  |  |
+| SR-002 PlantUMLサブセットを解析する | x | x | x |  |  |  |  |  | x |  |  |  |
+| ~~SR-003~~ モデルをPlantUMLに変換する（**Removed**） |  |  |  |  |  | — |  |  |  |  |  |  |
 | **Diagram Display / 図の表示** |
-| SR-010 SVGをパン・ズーム付きで表示する | x |  |  |  |  |  |  |  |  |  |  |
-| SR-011 SVG座標を抽出する | x |  |  | x |  |  |  |  |  |  |  |
-| SR-012 マーカーツールを選択する |  |  |  | x |  |  |  |  |  |  |  |
-| SR-013 ドラッグでマーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |
-| SR-014 マーカー色を管理する |  |  |  | x |  |  |  |  |  |  |  |
-| SR-015 マーカーを選択・移動・リサイズする |  |  |  | x |  |  |  |  |  |  |  |
-| SR-016 マーカーを削除する |  |  |  | x |  |  |  |  |  |  |  |
-| SR-017 マーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |
+| SR-010 SVGをパン・ズーム付きで表示する | x |  |  |  |  |  |  |  |  |  |  |  |
+| SR-011 SVG座標を抽出する | x |  |  | x |  |  |  |  |  |  |  |  |
+| SR-012 マーカーツールを選択する（default=pan） |  |  |  | x |  |  |  |  |  |  |  |  |
+| SR-013 ドラッグでマーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |  |
+| SR-014 マーカー色を管理する |  |  |  | x |  |  |  |  |  |  |  |  |
+| SR-015 マーカーを選択・移動・リサイズする |  |  |  | x |  |  |  |  |  |  |  |  |
+| SR-016 マーカーを削除する |  |  |  | x |  |  |  |  |  |  |  |  |
+| SR-017 マーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |  |
 | **State Transition Table / 状態遷移表** |
-| SR-020 状態×イベント表を生成する |  |  | x |  |  |  |  |  |  |  |  |
-| SR-021 遷移前×遷移後表を生成する |  |  | x |  |  |  |  |  |  |  |  |
+| SR-020 状態×イベント表を生成する |  |  | x |  |  |  |  |  |  |  |  |  |
+| SR-021 遷移前×遷移後表を生成する |  |  | x |  |  |  |  |  |  |  |  |  |
 | **AI Chat / AI対話** |
-| SR-022 マーカー情報をAIコンテキストに渡す |  |  |  | x | x |  |  |  |  |  |  |
-| SR-030 n8n経由でメッセージを送信する |  |  |  |  | x |  |  |  |  |  |  |
-| SR-031 チャット一覧を表示する |  |  |  |  | x |  |  |  |  |  |  |
-| SR-032 AI応答からPlantUMLを抽出する |  |  |  |  |  | x |  |  |  |  |  |
-| SR-033 ソース差分を表示する |  |  |  |  |  | x |  |  |  |  |  |
-| SR-034 提案された修正を適用する |  |  |  |  |  | x |  |  |  |  |  |
-| SR-035 ソース修正を元に戻す |  |  |  |  |  | x |  |  |  |  |  |
+| SR-022 マーカー情報＋EBNFをAIコンテキストに渡す |  |  |  | x | x |  |  | x |  |  |  |  |
+| SR-030 n8n経由でメッセージを送信する |  |  |  |  | x |  |  |  |  |  |  |  |
+| SR-031 チャット一覧を表示する |  |  |  |  | x |  |  |  |  |  |  |  |
+| SR-032 AI応答からPlantUMLを抽出する |  |  |  |  |  | x |  |  |  |  |  |  |
+| SR-033 モデル before/after 並置 + 差分ハイライト (v7.1 redefined) |  |  |  |  |  | x |  |  |  |  |  |  |
+| SR-034 提案された修正を適用する |  |  |  |  |  | x |  |  |  |  |  |  |
+| SR-035 ソース修正を元に戻す |  |  |  |  |  | x |  |  |  |  |  |  |
 | **Session Management / セッション管理** |
-| SR-040 セッション状態を管理する |  | x |  |  | x |  | x |  |  | x |  |
-| SR-041 セッションをJSONで出力する |  |  |  |  |  |  | x |  |  | x |  |
-| **Grammar Display / 文法表示** |
-| SR-050 PlantUMLサブセット文法を表示する |  |  |  |  |  |  |  | x |  |  |  |
+| SR-040 セッション状態を管理する |  | x |  |  | x |  | x |  |  | x |  |  |
+| SR-041 セッションをJSONで出力する（requirementsText を含む） |  |  |  |  |  |  | x |  |  | x |  |  |
+| **Grammar / 文法** |
+| ~~SR-050~~ EBNFタブ（**Removed** in v7.1、SR-081 に置換）|  |  |  |  |  |  |  | — |  |  |  |  |
 | **Infrastructure / インフラ** |
-| SR-060 PlantUML Server稼働確認 | x |  |  |  |  |  |  |  |  |  |  |
-| SR-061 n8n接続確認 |  |  |  |  | x |  |  |  |  |  |  |
+| SR-060 PlantUML Server稼働確認 | x |  |  |  |  |  |  |  |  |  |  |  |
+| SR-061 n8n接続確認 |  |  |  |  | x |  |  |  |  |  |  |  |
 | **UI Layout / UI構成** |
-| SR-070 図をプライマリビューとして表示する | x |  |  |  |  |  |  |  |  |  |  |
-| SR-071 タブ付き解析パネルを表示する |  | x | x |  |  |  |  | x |  |  |  |
-| SR-072 チャットパネルを表示する |  |  |  |  | x | x |  |  |  |  |  |
+| SR-070 図をプライマリビューとして表示する | x |  |  |  |  |  |  |  |  |  |  |  |
+| SR-071 タブ付き解析パネル（Requirements/Source/S×E/S×S） |  | x | x |  |  |  |  |  |  |  |  | x |
+| SR-072 チャットパネル + ProposalView |  |  |  |  | x | x |  |  |  |  |  |  |
+| **Requirements & Seeding / 要求仕様＆シード (v7.1)** |
+| SR-080 要求仕様タブ（レビュー中は読み取り専用）|  |  |  |  |  |  |  |  | x |  |  | x |
+| SR-081 EBNFファイルをダウンロード |  |  |  |  |  |  |  | x |  |  |  |  |
+| SR-082 要求仕様から初版モデルを生成（チャット shortcut） |  |  |  |  |  |  |  |  | x |  |  |  |
+| SR-083 外部シードバンドル `{requirementsText, plantUmlSource}` を受け取る |  |  |  |  |  |  |  |  | x |  |  |  |
+| **Model Diff / モデル差分 (v7.1)** |
+| SR-090 モデルレベル差分を計算（SR-033 が利用）|  |  |  |  |  | x |  |  |  |  |  |  |
+| **Artifact Export / 個別エクスポート (v7.2)** |
+| SR-100 PlantUML ソース Copy / Save .puml |  |  |  |  |  |  | x |  |  |  |  |  |
+| SR-101 マトリクス Copy TSV / Save CSV |  |  |  |  |  |  | x |  |  |  |  |  |
+| SR-102 ⏳ deferred テストケース Copy / Save |  |  | x |  |  |  | x |  |  |  |  |  |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 
 ## 3. Category Breakdown / カテゴリ別内訳
 
 ```mermaid
-pie title System Requirements by Category / システム要件カテゴリ別
-    "Source Editing / ソース編集" : 3
+pie title System Requirements by Category (v7.2) / システム要件カテゴリ別
+    "Source Editing / ソース編集" : 2
     "Diagram Display / 図の表示" : 8
-    "State Transition Table / 状態遷移表" : 2
-    "AI Chat / AI対話" : 7
+    "State Transition Table / 状態遷移表" : 3
+    "AI Chat / AI対話" : 6
     "Session Management / セッション管理" : 2
-    "Grammar Display / 文法表示" : 1
     "Infrastructure / インフラ" : 2
     "UI Layout / UI構成" : 3
+    "Requirements & Seeding (v7.1)" : 4
+    "Model Diff (v7.1)" : 1
+    "Artifact Export (v7.2)" : 3
 ```
+
+> SR-003（Serialize model）は removed、SR-050（EBNF tab）も v7.1 で removed のため件数から除外。SR-050 の役割は SR-081（ダウンロード）に置き換えた。
 
 ## 4. Related Documents / 関連文書
 

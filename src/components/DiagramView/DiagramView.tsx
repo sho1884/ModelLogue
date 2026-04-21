@@ -6,6 +6,7 @@ import {
 } from 'react-zoom-pan-pinch';
 import { useModelStore } from '../../stores/modelStore';
 import { useMarkerStore } from '../../stores/markerStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { MarkerToolbar } from './MarkerToolbar';
 import { MarkerShape } from './MarkerShape';
 import type {
@@ -34,7 +35,11 @@ const HANDLE_SIZE = 8;
 
 export function DiagramView() {
   const svgString = useModelStore((s) => s.svgString);
+  const svgFetchError = useModelStore((s) => s.svgFetchError);
+  const currentSource = useSessionStore((s) => s.currentSource);
   const [svgInfo, setSvgInfo] = useState<SvgInfo | null>(null);
+
+  const isEmpty = currentSource.trim() === '';
 
   // Build a Blob URL for the SVG so we can render it via <img> safely.
   useEffect(() => {
@@ -48,8 +53,28 @@ export function DiagramView() {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgString, 'image/svg+xml');
     const svgEl = doc.querySelector('svg');
-    const width = parseFloat(svgEl?.getAttribute('width') ?? '400');
-    const height = parseFloat(svgEl?.getAttribute('height') ?? '300');
+
+    // Read the nominal SVG dimensions. Prefer width/height attrs, but
+    // fall back to the viewBox when those are missing or nonsensical
+    // (parseFloat('%') or '' yields NaN which would collapse the
+    // canvas dashed border to auto-size and the model would appear to
+    // overflow an ill-sized frame).
+    const readDim = (attr: 'width' | 'height'): number => {
+      const raw = parseFloat(svgEl?.getAttribute(attr) ?? '');
+      if (Number.isFinite(raw) && raw > 0) return raw;
+      const vb = svgEl?.getAttribute('viewBox');
+      if (vb) {
+        const parts = vb.split(/\s+/).map(parseFloat);
+        const idx = attr === 'width' ? 2 : 3;
+        const fromViewBox = parts[idx];
+        if (Number.isFinite(fromViewBox) && fromViewBox > 0) {
+          return fromViewBox;
+        }
+      }
+      return attr === 'width' ? 400 : 300;
+    };
+    const width = readDim('width');
+    const height = readDim('height');
 
     setSvgInfo({ url, width, height });
     return () => URL.revokeObjectURL(url);
@@ -57,17 +82,51 @@ export function DiagramView() {
 
   return (
     <div className="flex-1 flex flex-col bg-white" style={{ minHeight: 0 }}>
-      <MarkerToolbar />
+      {/* SR-070 / SR-035 (v7.2): the toolbar is always rendered so that
+          Undo / Redo remain accessible even when undoing all the way
+          back to an empty model. The marker drawing tools inside the
+          toolbar hide themselves when there is nothing to mark on. */}
+      <MarkerToolbar markersHidden={isEmpty} />
       <div className="flex-1 relative overflow-hidden">
-        {svgInfo ? (
+        {isEmpty ? (
+          <EmptyState />
+        ) : svgInfo ? (
           <DiagramCanvas svgInfo={svgInfo} />
+        ) : svgFetchError ? (
+          <div className="flex items-center justify-center h-full text-sm text-red-500 px-6 text-center">
+            PlantUML Server error: {svgFetchError}
+          </div>
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-gray-400">
-            Waiting for PlantUML Server...
+            Rendering diagram…
           </div>
         )}
       </div>
       <Toast />
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-6 bg-white">
+      <div className="max-w-md text-center text-gray-600">
+        <div className="text-base font-medium text-gray-800 mb-2">
+          No model yet.
+        </div>
+        <p className="text-sm leading-relaxed">
+          Describe what the model should do in the{' '}
+          <span className="font-medium text-gray-800">Requirements</span>{' '}
+          tab, then press{' '}
+          <span className="font-medium text-gray-800">Generate model</span>{' '}
+          — or paste a PlantUML source into the{' '}
+          <span className="font-medium text-gray-800">Source</span> tab.
+        </p>
+        <p className="text-xs text-gray-400 mt-3">
+          ModelLogue accepts a constrained subset of PlantUML state-diagram
+          syntax. See the EBNF download in the header.
+        </p>
+      </div>
     </div>
   );
 }
@@ -318,13 +377,35 @@ function DiagramCanvas({ svgInfo }: { svgInfo: SvgInfo }) {
     return () => ro.disconnect();
   }, []);
 
-  // Center the canvas in the wrapper at scale 1.
+  // Auto-fit the canvas into the pane on first load: scale down so the
+  // whole canvas is visible (never scale above 1, so small diagrams
+  // don't get blurrily enlarged). Then center the scaled canvas.
+  const initialScale =
+    wrapperSize && canvasWidth > 0 && canvasHeight > 0
+      ? Math.min(1, wrapperSize.w / canvasWidth, wrapperSize.h / canvasHeight)
+      : 1;
   const initialPositionX = wrapperSize
-    ? (wrapperSize.w - canvasWidth) / 2
+    ? (wrapperSize.w - canvasWidth * initialScale) / 2
     : 0;
   const initialPositionY = wrapperSize
-    ? (wrapperSize.h - canvasHeight) / 2
+    ? (wrapperSize.h - canvasHeight * initialScale) / 2
     : 0;
+
+  // SR-070 (v7.2): re-fit whenever the model size or the pane size
+  // actually changes. TransformWrapper's initialScale / initialPosition
+  // props only apply at mount, so without this an Apply that grows the
+  // diagram leaves the old scale in place and the new canvas appears
+  // to overflow the pane. Deferred with rAF so the new canvas DOM size
+  // is committed before we compute the transform.
+  useEffect(() => {
+    const t = transformRef.current;
+    if (!t || !wrapperSize) return;
+    const handle = requestAnimationFrame(() => {
+      t.setTransform(initialPositionX, initialPositionY, initialScale, 0);
+    });
+    return () => cancelAnimationFrame(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [svgInfo.width, svgInfo.height, wrapperSize?.w, wrapperSize?.h]);
 
   const isPanMode = activeTool === 'pan';
 
@@ -358,7 +439,7 @@ function DiagramCanvas({ svgInfo }: { svgInfo: SvgInfo }) {
           ref={transformRef}
           minScale={0.1}
           maxScale={5}
-          initialScale={1}
+          initialScale={initialScale}
           initialPositionX={initialPositionX}
           initialPositionY={initialPositionY}
           limitToBounds={false}
@@ -374,7 +455,20 @@ function DiagramCanvas({ svgInfo }: { svgInfo: SvgInfo }) {
               >
                 <div
                   className="relative bg-white border border-dashed border-gray-300"
-                  style={{ width: canvasWidth, height: canvasHeight }}
+                  style={{
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    // react-zoom-pan-pinch's transform-component is a
+                    // `display: flex` container with our !w-full !h-full
+                    // forcing it to the pane width. Without
+                    // flex-shrink: 0 the canvas collapses to the
+                    // container width (rather than keeping its own
+                    // declared width), which looks like a horizontal-
+                    // only squeeze — the canvas shrinks horizontally
+                    // but not vertically — and the PlantUML img inside
+                    // overflows the dashed border.
+                    flexShrink: 0,
+                  }}
                 >
                   <img
                     src={svgInfo.url}

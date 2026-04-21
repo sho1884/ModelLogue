@@ -2,8 +2,22 @@
 # Format: Task expression (Value Engineering)
 # Writing convention: Short verb phrase describing user task
 
-version: "6.0"
-last_updated: "2026-04-08"
+version: "7.2"
+last_updated: "2026-04-15"
+
+# Version 7.0 highlights:
+#   - Reframed as a review tool where PlantUML source and requirements text
+#     are BOTH read-only references during review. All model changes flow
+#     through AI dialogue → Apply, so every change is captured in the
+#     dialogue log (Dialogue as Asset).
+#   - UR-002 "Edit PlantUML source" removed. Source seeding happens at
+#     session start (import / generate-from-requirements / first paste),
+#     not during review.
+#   - UR-008 reframed: the EBNF grammar is not a tab in the UI; users who
+#     need it download the static file.
+#   - New UR-012: Refer to the target requirements text alongside the model.
+#   - UR-009 widened: an initial PlantUML source AND (optionally) a matching
+#     requirements text fragment can be received together.
 
 requirements:
   UR-001:
@@ -17,11 +31,18 @@ requirements:
     priority: high
 
   UR-002:
-    task: "Edit PlantUML source"
+    task: "Refer to the PlantUML source of the current model"
     background: >
-      Author writes or modifies PlantUML state diagram source code.
-      The tool supports a simplified subset of PlantUML state diagram
-      syntax, optimized for review rather than full-featured drawing.
+      The PlantUML source is the canonical representation of the model
+      under review, but during a review session it is read-only. All
+      model changes flow through AI dialogue and the Apply action, which
+      keeps every change attributable to an entry in the dialogue log.
+      Reviewers still need to SEE the source at any time — to cite a
+      specific line in discussion, to understand what the AI is about
+      to change, and to hand-inspect the proposed edit before applying.
+      Direct source editing was intentionally removed in v7.0; typos or
+      small tweaks are handled by asking the AI in natural language so
+      that the intent is captured in the log (Dialogue as Asset).
     priority: high
 
   UR-003:
@@ -75,36 +96,76 @@ requirements:
   UR-006:
     task: "Apply AI suggestions"
     background: >
-      Author applies AI-proposed PlantUML modifications with one click.
-      Changes are reflected in diagram, table, and source simultaneously.
+      When the AI proposes a PlantUML modification, the reviewer judges
+      it by comparing the CURRENT model and the PROPOSED model visually
+      — diagram before and after, placed side-by-side, with added /
+      removed / changed states and transitions highlighted on the
+      proposed side (using the same overlay mechanism as review
+      markers). A raw text diff is not enough: people chose to use a
+      diagram precisely because comparing intent in natural language
+      is hard. Apply reflects the change into source, diagram, and
+      tables simultaneously; Undo reverts the latest Apply.
     priority: medium
 
   UR-007:
-    task: "Export review session"
+    task: "Save the review evidence and lift individual artifacts out of the session"
     background: >
-      Author exports the review session (PlantUML source + dialogue log
-      + analysis artifacts) as a file for review evidence.
-      Session data is volatile (browser memory only).
+      Two related but distinct needs:
+
+        a) Save the WHOLE review as evidence — final PlantUML source,
+           requirements text, full chat log, every applied source
+           snapshot, markers, outcome, and metadata — as a single
+           JSON file. This is what the reviewer hands off as the
+           record of the review (and what they re-open later to
+           continue from where they left off).
+
+        b) Lift INDIVIDUAL artifacts out of the session for use in
+           other tools: the final PlantUML source on its own, the
+           state-transition matrices as CSV / TSV for spreadsheets,
+           and (when the auxiliary service lands) generated test
+           cases as CSV. Both Copy-to-clipboard and Save-as-file
+           paths matter — Copy for paste-into-anywhere flows, Save
+           for archive / commit / CI handoff.
+
+      Session data remains volatile in browser memory (Volatile
+      Canvas); persistence happens via these export actions.
     priority: medium
 
   UR-008:
-    task: "View PlantUML subset grammar"
+    task: "Obtain the PlantUML subset grammar definition"
     background: >
-      Author refers to the constrained PlantUML grammar (EBNF)
-      to understand which syntax is supported for state diagrams.
+      The supported PlantUML subset is defined by a static EBNF file
+      (src/grammars/stateDiagram.ebnf). It is already included in every
+      AI chat request so generated PlantUML stays inside the subset
+      (SR-022). Humans rarely need to read it in-app; when they do, a
+      download / open-in-new-tab action from Help is sufficient. The
+      original idea of a dedicated EBNF tab in the analysis panel is
+      dropped in v7.0.
     priority: low
 
   UR-009:
-    task: "Receive an initial model into the review session"
+    task: "Receive an initial model (and optionally its requirements text) into the review session"
     background: >
-      Before a review can start, an initial PlantUML model must
-      already exist. The way it is produced (AI auto-generation
-      from a requirement spec, hand-writing by a human, fetching
-      from a Git repository, etc.) varies by site and is composed
-      using n8n workflows. ModelLogue itself only needs to be able
-      to receive whatever PlantUML source comes in. See ADR-008 for
-      the scope boundary between ModelLogue and the surrounding
-      workflow.
+      Before a review can start, an initial PlantUML model must exist.
+      The way it is produced varies by site:
+        a) Supplied from outside (n8n workflow, Git repo, CI pipeline,
+           external extraction from a larger requirement document).
+           In this case ModelLogue also accepts a matching requirements
+           text fragment so the reviewer has the same context the
+           initial model was written from.
+        b) Generated inside ModelLogue by pasting a small requirements
+           text into the Requirements tab and pressing "Generate model",
+           which is a shortcut for "ask AI to author the initial model
+           from this requirements text" via the same chat channel.
+        c) First-time paste of PlantUML source when the session is
+           still empty (one-shot seed; the source becomes read-only
+           once any content is present).
+
+      ADR-008 boundary remains: heavy extraction from a large
+      requirements document belongs OUTSIDE ModelLogue (n8n etc.).
+      What ModelLogue accepts is a short requirements fragment
+      scoped to the model at hand (typical target: a few thousand
+      characters).
     priority: high
 
   UR-010:
@@ -118,6 +179,22 @@ requirements:
       workflows. ModelLogue itself needs to provide a way to
       package the session as evidence and hand it off. See ADR-008
       for the scope boundary.
+    priority: medium
+
+  UR-012:
+    task: "Refer to the target requirements text alongside the model"
+    background: >
+      During a review, people work on the diagram but also need to
+      remember WHY that model exists — which requirements it is meant
+      to satisfy. ModelLogue keeps a short requirements text (scoped
+      to this model, not a full spec document) visible on its own tab.
+      The text is read-only during review; it is seeded at session
+      start (from outside, or by pasting / typing on the tab before
+      the model is generated) and stays fixed thereafter. Updating
+      the requirements text to reflect the final, agreed model is
+      done OUTSIDE the session — given the final model, re-deriving
+      the natural-language requirements is a separate task and is
+      composed as an n8n workflow (ADR-008).
     priority: medium
 
   UR-011:

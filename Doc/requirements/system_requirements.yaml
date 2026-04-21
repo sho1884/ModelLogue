@@ -3,8 +3,57 @@
 # Subject is always the artifact (component/system), omitted by convention.
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-version: "6.0"
-last_updated: "2026-04-08"
+version: "7.2"
+last_updated: "2026-04-15"
+
+# Version 7.2 highlights (planned, not yet implemented):
+#   - SR-001 lock condition fixed: lock fires on first SUCCESSFUL parse,
+#     not on first non-empty content. Pasting invalid PlantUML no longer
+#     traps the user.
+#   - SR-035 extended: Redo as a counterpart to Undo. Undo/Redo controls
+#     move out of the chat panel and live on the diagram toolbar where
+#     they belong (they affect the model, not the chat).
+#   - SR-041 acceptance: the Save dialog enumerates what is included in
+#     the JSON ("Final source", "Requirements", "Chat log", "Snapshots",
+#     "Markers", "Outcome").
+#   - SR-070 acceptance: when no model exists yet, the diagram pane shows
+#     a custom empty-state guide instead of calling PlantUML Server with
+#     an empty source (which returns the PlantUML default welcome image
+#     and misleads users about what syntax is accepted).
+#   - SR-072 acceptance: Undo control no longer lives in the chat panel.
+#   - SR-080 lock condition aligned with SR-001 (first successful parse).
+#   - SR-083 extended: Open-saved-review accepts the ReviewSession shape
+#     emitted by Save & finish (extracts requirementsText + plantUmlSource
+#     + sessionName), so save→reload round-trips work with no external
+#     tooling. Bundle name in the UI changes from "Seed Import" to
+#     "Open saved review…".
+#   - SR-100 (new): export the final PlantUML source from the Source tab
+#     (Copy / Save .puml).
+#   - SR-101 (new): export each state-transition matrix from its tab
+#     (Copy as TSV / Save as CSV).
+#   - SR-102 (placeholder, deferred): export generated test cases when
+#     the auxiliary test-generation service (UR-003 follow-up) lands.
+#   - UI language unified to plain English. Outcome badge labels become
+#     "Agreed" / "Postponed" / "Spec issue". Header buttons:
+#     "Save & finish…" / "Open saved review…" / "Download grammar".
+#
+# Version 7.1 highlights (kept for history; all implemented in 7.1):
+#   - SR-001: source becomes read-only during review.
+#   - SR-012: default marker tool changes from "select" to "pan".
+#   - SR-033 redefined: visual before/after model comparison.
+#   - SR-050 removed: EBNF becomes a downloadable static file.
+#   - SR-071 tab set: Requirements | Source | State×Event | State×State.
+#   - SR-080 series: Requirements tab, model-generation shortcut, external
+#     seed interface, EBNF download.
+#   - SR-090: model-level diff computation feeding SR-033.
+
+# Each SR carries a `status` field:
+#   implemented : in the current codebase, behaves as described
+#   planned     : approved for the next implementation round; doc is the
+#                 contract, not the current code
+#   deferred    : defined but deliberately not scheduled; do not implement
+#                 without revisiting this spec first (per the doc-first rule)
+#   removed     : kept here for history only; no longer pursued
 
 # =============================================================================
 # PlantUML Subset Grammar
@@ -38,19 +87,40 @@ last_updated: "2026-04-08"
 
 source_editing:
   SR-001:
-    function: "Render PlantUML editor with syntax highlighting"
+    function: "Display PlantUML source (read-only during review; editable while seeding until a parseable model exists)"
     parent: [UR-002, UR-009]
-    component: PlantUmlEditor
+    component: SourceView
+    status: implemented
     acceptance_criteria:
-      - "Display code editor with PlantUML syntax highlighting"
-      - "Emit source change events on user input"
-      - "Support paste from clipboard"
-      - "Accept PlantUML source loaded from outside the system (e.g. via clipboard or future load mechanism) as the entry point for a review session"
+      - "Render PlantUML source with syntax highlighting"
+      - "Lock model: the editor is editable while the session is in the SEED phase, read-only once it has entered the REVIEW phase"
+      - "REVIEW phase is entered the first time a PARSEABLE model with at least one real state has been established (via seed paste, Generate model, Apply of an AI proposal, or Open-saved-review import). Empty / whitespace-only input does NOT count, so the editor is editable from session start"
+      - "Until then, the user may freely edit, paste, and re-paste — invalid PlantUML never traps them"
+      - "Once in REVIEW phase the lock is permanent for that session: changes come exclusively through AI-proposal Apply, so every change is captured in the dialogue log"
+      - "Parse errors during seed are shown inline (line + message) so the user can fix and try again"
+      - "Support copy-to-clipboard and select-all on the displayed source even when read-only"
+    rules:
+      - context: "Session is in SEED phase, source is empty"
+        action: "User pastes a valid PlantUML source"
+        outcome: "Source is accepted; parse succeeds → REVIEW phase starts and the editor locks"
+      - context: "Session is in SEED phase"
+        action: "User pastes PlantUML source that fails to parse"
+        outcome: "Parse errors are displayed; the editor stays editable so the user can fix or replace it; the session remains in SEED phase"
+      - context: "Session is in REVIEW phase"
+        action: "User tries to type in the source area"
+        outcome: "Input is ignored; a hint explains that model edits happen via chat"
+    notes: |
+      Direct source editing during REVIEW was removed in v7.1 because
+      unlogged edits break the Dialogue-as-Asset property of the
+      session. v7.2 fixes the seed-phase trap: invalid PlantUML used
+      to lock the editor with no escape; now the lock only fires on a
+      successful parse.
 
   SR-002:
     function: "Parse PlantUML subset into state machine model"
     parent: [UR-001, UR-002, UR-003, UR-009]
     component: StateMachineParser
+    status: implemented
     acceptance_criteria:
       - "Parse states (including initial [*] and final [*])"
       - "Parse transitions with optional event, guard, and action"
@@ -59,6 +129,9 @@ source_editing:
       - "Track parent-child relationships in the StateMachineModel"
       - "Recognize composite-level transitions as group escape (source = composite name)"
       - "Recognize the internal initial transition ([*] --> Child) inside a composite"
+      - "Strip inline comments (' comment) before parsing; quotes inside \"...\" string literals are preserved"
+      - "Skip full-line comments (lines starting with ' or #)"
+      - "Silently skip non-semantic PlantUML directives that do not affect the state-machine model, so AI-generated proposals are not rejected over presentation hints the subset doesn't use. Tolerated prefixes (case-insensitive): hide / show / skinparam / !theme / !pragma / !include / !define / scale / title / caption / header / footer / mainframe / legend / end legend / note / end note / left to right direction / top to bottom direction. ADR-009's hard rejections (history, orthogonal regions, dot-notation entry, nested composites) remain errors"
       - "Build StateMachineModel (states with parentId, events, transitions)"
       - "Report syntax errors with line numbers"
     rules:
@@ -68,6 +141,9 @@ source_editing:
       - context: "Source is valid"
         action: "User edits source"
         outcome: "Model updated after 500ms debounce"
+      - context: "Line has an inline comment after real code (Foo --> Bar ' note)"
+        action: "Parser processes the line"
+        outcome: "The comment is stripped; the code portion is parsed normally"
       - context: "Source contains a nested composite state (state X { state Y { ... } })"
         action: "Parser encounters the second-level composite"
         outcome: "Syntax error reported; the construct is not in the supported subset (ADR-009)"
@@ -85,10 +161,13 @@ source_editing:
     function: "Serialize state machine model to PlantUML source"
     parent: [UR-006]
     component: StateMachineSerializer
-    acceptance_criteria:
-      - "Convert StateMachineModel back to valid PlantUML source"
-      - "Preserve event, guard, and action on transitions"
-      - "Round-trip: parse → serialize produces equivalent source"
+    status: removed
+    removed_reason: |
+      Not needed. Undo is implemented by restoring full-source snapshots
+      from SessionStore.sourceHistory, so round-trip serialization was
+      never required. If a future feature needs to synthesize PlantUML
+      from a model (e.g., model-first editing tools), resurrect this SR.
+    acceptance_criteria: []
 
 # =============================================================================
 # Diagram Display
@@ -102,6 +181,7 @@ diagram_display:
     function: "Display PlantUML SVG with pan and zoom"
     parent: [UR-001]
     component: DiagramView
+    status: implemented
     acceptance_criteria:
       - "Fetch SVG from PlantUML Server (Deflate + Base64 encoding)"
       - "Display SVG as-is, preserving PlantUML's layout and edge routing"
@@ -118,26 +198,31 @@ diagram_display:
     function: "Extract element coordinates from PlantUML SVG"
     parent: [UR-001, UR-004]
     component: SvgCoordinateExtractor
+    status: implemented
     acceptance_criteria:
-      - "Parse SVG to extract state positions (x, y, width, height)"
+      - "Parse SVG to extract state positions (x, y, width, height) in the SVG's user-coordinate (viewBox) space"
+      - "Correctly handle PlantUML's `<g transform=\"translate(...)\">` wrappers — a node's position is the composition of its ancestors' transforms, not the raw x/y attribute on the shape. Implemented by inserting the SVG off-screen in the live DOM (position: absolute, negative offsets, visibility: hidden — but NOT width/height: 0, which collapsed layout and returned empty bounding boxes) and reading getBoundingClientRect + SVGSVGElement.getScreenCTM().inverse() so the browser composes every transform kind (translate / scale / rotate / matrix) for us. Any `<?xml ... ?>` or `<!DOCTYPE ...>` prelude is stripped before assigning to innerHTML so the SVG namespace resolves correctly. Consequence: cannot be unit-tested in node-only environments (getBoundingClientRect/getScreenCTM need a real layout engine); correctness is verified in the browser"
       - "Map SVG elements to StateMachineModel states by text content"
-      - "Coordinate map is shared with the AI as context (model side of the marker context)"
+      - "Coordinate map is shared with the AI as context (model side of the marker context) and drives the diff overlay positions in SR-033"
 
   SR-012:
-    function: "Provide marker tool selection"
-    parent: [UR-004]
+    function: "Provide diagram tool selection"
+    parent: [UR-001, UR-004]
     component: MarkerToolbar
+    status: implemented
     acceptance_criteria:
-      - "Toolbar offers three tools: ellipse, rectangle, arrow"
+      - "Toolbar offers five tools: select, pan, ellipse, rectangle, arrow"
       - "Active tool is visually highlighted"
-      - "Default tool is ellipse"
+      - "Default tool on session start is PAN. Rationale: at session start there are no markers to select, so starting in select mode leaves the user with no useful action"
+      - "Pan lets the user drag the canvas around; the other drawing tools create markers; select activates hit-testing on existing markers"
 
   SR-013:
     function: "Draw marker by drag"
     parent: [UR-004]
     component: MarkerOverlay
+    status: implemented
     acceptance_criteria:
-      - "Drag on the diagram with active tool to create a marker"
+      - "Drag on the diagram with an active marker tool (ellipse, rectangle, arrow) to create a marker"
       - "Ellipse and rectangle take the dragged bounding box"
       - "Arrow takes the drag start as tail and drag end as head"
       - "New marker is assigned an unused color from the palette"
@@ -151,6 +236,7 @@ diagram_display:
     function: "Manage marker colors from a fixed palette"
     parent: [UR-004]
     component: MarkerStore
+    status: implemented
     acceptance_criteria:
       - "Palette contains four colors: red, blue, green, purple"
       - "New markers are assigned an unused color (no two markers share a color)"
@@ -161,6 +247,7 @@ diagram_display:
     function: "Select, move, and resize markers"
     parent: [UR-004]
     component: MarkerOverlay
+    status: implemented
     acceptance_criteria:
       - "Click a marker to select it"
       - "Selected marker shows handles for resize / endpoint adjustment"
@@ -172,6 +259,7 @@ diagram_display:
     function: "Delete marker"
     parent: [UR-004]
     component: MarkerOverlay
+    status: implemented
     acceptance_criteria:
       - "Press Delete or Backspace while a marker is selected to remove it"
       - "Right-click a marker to open a context menu with a Delete item"
@@ -181,6 +269,7 @@ diagram_display:
     function: "Render marker overlay over the SVG"
     parent: [UR-004]
     component: MarkerOverlay
+    status: implemented
     acceptance_criteria:
       - "Markers are drawn in their assigned color on a layer above the PlantUML SVG"
       - "Marker geometry is stored in SVG coordinate space so it stays aligned during pan/zoom"
@@ -195,6 +284,7 @@ state_transition_table:
     function: "Generate State×Event matrix in hybrid (layered) form"
     parent: [UR-003]
     component: StateEventMatrix
+    status: implemented
     acceptance_criteria:
       - "Rows include both composite states and their child states (hybrid pattern, per industry convention and ISO/IEC/IEEE 29119-4)"
       - "Initial/final pseudo-states are excluded from rows"
@@ -222,6 +312,7 @@ state_transition_table:
     function: "Generate PreState×PostState matrix in hybrid (layered) form"
     parent: [UR-003]
     component: StateStateMatrix
+    status: implemented
     acceptance_criteria:
       - "Rows and columns include both composite states and their child states (hybrid pattern)"
       - "Composite states appear as both row headers and column headers, in addition to their child states"
@@ -239,12 +330,14 @@ state_transition_table:
         outcome: "Cell appears in the composite-state column, not duplicated to each child"
 
   SR-022:
-    function: "Provide marker context to AI"
-    parent: [UR-004, UR-005]
-    component: MarkerStore, ChatPanel
+    function: "Provide marker and grammar context to AI"
+    parent: [UR-004, UR-005, UR-008]
+    component: MarkerStore, ChatPanel, markerContext service
+    status: implemented
     acceptance_criteria:
       - "AI chat requests include the current marker list (id, type, color, geometry)"
       - "AI chat requests include the model element coordinate map (SR-011)"
+      - "AI chat requests include the EBNF grammar spec so the AI's generated PlantUML conforms to the supported subset"
       - "AI is expected to interpret which model elements each marker is pointing at, and ask the reviewer to clarify if it is ambiguous"
 
 # =============================================================================
@@ -256,16 +349,30 @@ ai_chat:
     function: "Send chat message to AI via n8n"
     parent: [UR-005]
     component: N8nService
+    status: implemented
     acceptance_criteria:
       - "POST to n8n webhook with current PlantUML source as context"
-      - "Include conversation history in request"
-      - "Stream response tokens via SSE"
-      - "Handle n8n/API errors gracefully"
+      - "Include conversation history, marker context, and grammar spec in request"
+      - "Include requirementsText in the request when it is non-empty (SR-080), so the AI can keep generated/proposed models aligned with the original intent"
+      - "Include responseLanguage in the request — derived from the requirements text if present (CJK characters → 'ja', else 'en'), otherwise from the user's first message; the n8n system prompt instructs the AI to respond consistently in that language and never mix languages within a single response"
+      - "Receive a single JSON response (non-streaming in phase 1)"
+      - "Handle n8n/API errors gracefully — empty bodies and non-JSON bodies surface as actionable messages, not as 'Unexpected end of JSON input'"
+      - "Retry once with a short backoff on transient upstream errors (network failure, HTTP 502/503/504); the second failure is surfaced to the user. Combined with n8n's own Retry-On-Fail this absorbs most Gemini capacity blips without a manual re-send"
+      - "Auto-reask on parse failure: if the assistant's suggestedSource fails to parse against the supported subset (after SR-002's tolerance rules), automatically post a follow-up USER message quoting the parse errors and re-send to the AI. Cap at 2 auto-retries per original user ask; after that, leave the last unparseable proposal visible and let the user handle it manually. Each retry is a visible user+assistant exchange in the chat log so the dialogue asset captures exactly what happened"
+    notes: |
+      The actual language-locking instruction lives in the n8n system
+      prompt; the frontend only computes and sends the field. Recommended
+      n8n prompt addition (paste into the system prompt of the AI Agent
+      node): "Respond in the language indicated by `responseLanguage`
+      ('ja' = Japanese, 'en' = English). Use that single language for
+      the entire reply, including any explanations around the proposed
+      PlantUML code block. Never mix languages within one response."
 
   SR-031:
     function: "Render chat message list"
     parent: [UR-005]
-    component: MessageList
+    component: ChatPanel
+    status: implemented
     acceptance_criteria:
       - "Display user and AI messages with distinct styles"
       - "Display timestamp on each message"
@@ -274,39 +381,83 @@ ai_chat:
   SR-032:
     function: "Extract PlantUML source from AI response"
     parent: [UR-006]
-    component: "n8n workflow"
+    component: n8nService
+    status: implemented
+    implementation_note: |
+      ADR-005 mandates extraction on the n8n side. In phase 1 we extract
+      on the frontend (services/n8nService.ts::extractPlantUmlBlock) for
+      speed of iteration. The response normalizer already accepts a
+      pre-extracted suggestedSource field, so moving this to n8n is a
+      drop-in replacement when we revisit ADR-005.
     acceptance_criteria:
       - "Detect ```plantuml code blocks in AI response"
       - "Extract complete PlantUML source from code block"
-      - "Return structured JSON with text and suggestedSource fields"
+      - "Return structured value with text and suggestedSource fields"
 
   SR-033:
-    function: "Display source diff for AI proposals"
+    function: "Present AI-proposed modifications as a visual before/after model comparison"
     parent: [UR-006]
-    component: SourceDiffView
+    component: ProposalView
+    status: implemented
     acceptance_criteria:
-      - "Show visual diff between current and proposed source"
-      - "Highlight added, removed, and changed lines"
-      - "Display Apply button alongside the diff"
+      - "When the AI response contains a suggestedSource, request PlantUML Server to render the proposed source as a second SVG"
+      - "Display the before-model SVG and the proposed-model SVG side-by-side inside the chat message"
+      - "The 'before' side is FROZEN at Apply time: the source that was live the moment the user clicked Apply gets snapshotted on the chat message, and the proposal view keeps comparing against that snapshot forever after — Undo / Redo do NOT shift past proposals' before/after relationship. (For an unapplied proposal, the live current source is used so the user can judge the change against the latest state.)"
+      - "The 'before' SVG is rederived from the snapshotted before-source by re-fetching from PlantUML Server (NOT snapshotted from the live svgString, which is debounced and can lag behind the source it was generated from — that mismatch caused diff overlay rectangles to land off-position)"
+      - "Overlay and underlying PlantUML SVG must share the same rendered viewport. BOTH the inline proposal view and the full-screen modal use the same pattern: the container fixes its aspect ratio to the SVG viewBox's aspect ratio (CSS aspect-ratio) with width=viewBox-width and maxWidth/maxHeight=100%; both SVGs are absolute-positioned inset-0 and CSS-forced to fill via [&>svg]:!w-full !h-full. The !important is essential — PlantUML ships `<svg>` with inline `style=\"width:NNNpx\"`, which otherwise beats plain Tailwind classes and keeps the underlying SVG at its native pixel size while the overlay stretches"
+      - "viewBox fallback: when the PlantUML `<svg>` has no viewBox attr (some output paths omit it), synthesize `0 0 width height` from the width/height attrs so the overlay still renders instead of silently disappearing"
+      - "Compute a model-level diff (SR-090) and overlay ADD / REMOVE / CHANGE highlights using the same native SVG overlay mechanism as review markers"
+      - "Mark each diff item on the side where the affected node still exists: removed states overlay the CURRENT (left) SVG; added states overlay the PROPOSED (right) SVG; changed states overlay BOTH sides so the user can compare the same anchor before and after"
+      - "Color convention: green = added, red = removed, orange = changed (guard/event/action text diff)"
+      - "Diff counts in the summary (+N / −M / ~K states) reflect ONLY the frames actually rendered. Pseudo-states (initial/final) have no label to anchor a frame to and compositions aren't framed by the current extractor, so they're excluded from the visible state-level diff; their child-state changes still show individually. This prevents the 'summary says 3 but I only see 1' mismatch"
+      - "Render the proposed raw source as collapsible detail below the two diagrams (for reviewers who want to read the text)"
+      - "Keep the Apply button alongside the comparison; Apply commits the proposed source into session state via SR-034"
+      - "When the proposed source fails to parse, fall back to showing only the raw source with a parse-error notice (no right-side SVG)"
+      - "An 'Expand' action opens a full-screen modal showing the same before/after comparison at a readable size, with independent pan/zoom + fit-to-view on each side and the same diff overlay on the proposed side"
+      - "The modal does NOT render review markers on either side — comparison focuses on structural diff, not on the reviewer's prior annotations (markers remain on the main diagram behind the modal, accessible once closed)"
+      - "The modal offers Apply (commit + close) and Close (cancel) actions; ESC or background click cancel-closes"
+    rules:
+      - context: "Proposed source is identical to current source (empty diff)"
+        action: "Proposal view renders"
+        outcome: "Show a note (no changes) and hide the Apply button"
+      - context: "PlantUML Server is unreachable when rendering the proposed SVG"
+        action: "Proposal view tries to render"
+        outcome: "Show the current SVG on the left, a placeholder plus the raw proposed source on the right, and keep Apply available"
+    notes: |
+      v7.0 had SR-033 as a text-level diff; v7.1 replaces that with a
+      visual model comparison because the user chose a diagram
+      precisely to avoid judging changes in text. The overlay reuses
+      the marker overlay primitive (same native-SVG layer) to avoid
+      introducing a new diagram framework.
 
   SR-034:
     function: "Apply proposed source modification"
     parent: [UR-006]
-    component: SessionStore
+    component: SessionStore + ChatStore
+    status: implemented
     acceptance_criteria:
       - "Replace current source with proposed source"
-      - "Record snapshot in source history"
-      - "Mark the ChatMessage as applied"
+      - "Record snapshot in source history (with version number)"
+      - "Mark the ChatMessage as applied (in ChatStore)"
       - "Trigger model re-parse, diagram re-render, table re-calculate"
+      - "Auto-apply when the proposal arrives while the current source is empty (initial-generation case): there is nothing meaningful to compare the proposal against, so requiring a user click is noise. The auto-applied message still shows ✓ Applied and its Proposal view (empty vs proposed) for reference"
+      - "Auto-apply is gated on parse success — an unparseable suggestedSource is never auto-applied (otherwise a bad first generation would poison the session with an unparseable current source). SR-030's auto-reask handles the unparseable case; the final parseable proposal is the one auto-apply picks up"
+      - "For initial-generation messages (applied with an empty frozenBeforeSource, OR about-to-auto-apply while the live source is still empty and the proposal parses), the chat bubble hides the Proposal view entirely and shows only the AI's text. There is no meaningful before/after to display, so the 2-column comparison would be noise. The actual applied model is visible in the diagram pane"
 
   SR-035:
-    function: "Undo source modification"
+    function: "Undo and Redo applied source modifications"
     parent: [UR-006]
-    component: SessionStore
+    component: SessionStore + DiagramToolbar
+    status: implemented
     acceptance_criteria:
-      - "Restore previous source from history"
-      - "Trigger model re-parse, diagram re-render, table re-calculate"
-      - "Disable undo when no history exists"
+      - "Undo restores the previous source from history; pushes the displaced source onto a redo stack"
+      - "Redo restores the next source from the redo stack; pushes the displaced source back onto undo history"
+      - "Any new Apply (or Generate-model result, or seed-import) clears the redo stack — the new branch becomes canonical"
+      - "Trigger model re-parse, diagram re-render, table re-calculate after Undo or Redo"
+      - "Undo and Redo controls live on the diagram toolbar (next to the marker tools), NOT on the chat panel — they affect the model, so they belong with the model"
+      - "Undo / Redo are visible at all times during the session, even when the diagram pane is in empty state (SR-070) — otherwise the user could undo back to empty and lose any way to redo forward"
+      - "Disable Undo when no undo history exists; disable Redo when no redo history exists (do not hide — keep the affordance visible so the user knows the feature exists)"
+      - "Tooltips: Undo = 'Undo the last applied proposal', Redo = 'Redo the next applied proposal'"
 
 # =============================================================================
 # Session Management
@@ -317,6 +468,7 @@ session_management:
     function: "Manage session state in browser memory"
     parent: [UR-002, UR-005, UR-007, UR-010]
     component: SessionStore
+    status: implemented
     acceptance_criteria:
       - "Initialize session with unique ID and timestamp"
       - "Store current PlantUML source"
@@ -325,13 +477,19 @@ session_management:
       - "Session data is volatile (browser memory only)"
 
   SR-041:
-    function: "Export session as JSON"
+    function: "Save the review session as a JSON file (review evidence)"
     parent: [UR-007, UR-010]
-    component: ExportService
+    component: SessionStore.exportSession (invoked from SaveAndFinishDialog)
+    status: implemented
     acceptance_criteria:
-      - "Serialize session (source + messages + source history + outcome + metadata)"
-      - "Include the recorded session outcome so downstream workflows can act on it (per ADR-008, the actual notifications/integrations are composed in n8n outside ModelLogue)"
-      - "Trigger browser file download with timestamped filename"
+      - "Serialize session (source + requirementsText + messages + source history + markers + outcome + metadata)"
+      - "requirementsText is included verbatim alongside plantUmlSource, so the evidence captures WHAT was being modeled and WHY"
+      - "Trigger browser file download with a timestamped filename (e.g. modellogue-review-2026-04-15-1234.json)"
+      - "The Save dialog explicitly enumerates what the JSON contains, so the user understands their work is preserved (not discarded)"
+      - "Contents checklist shown in the dialog: Final PlantUML source / Requirements text / Full chat log / All applied source snapshots / Markers / Outcome and optional note / Session metadata"
+      - "Primary action label is 'Download JSON' so it is obvious that a file is produced"
+      - "Header entry point label is 'Save & finish…' (NOT a destructive-sounding 'Close session')"
+      - "The saved JSON is a valid input to SR-083 (Open saved review): saving and re-importing recovers the requirements text and the final source"
 
 # =============================================================================
 # Grammar Display
@@ -339,13 +497,17 @@ session_management:
 
 grammar_display:
   SR-050:
-    function: "Display PlantUML subset grammar"
+    function: "Display PlantUML subset grammar (in an EBNF tab)"
     parent: [UR-008]
     component: EbnfView
-    acceptance_criteria:
-      - "Display EBNF grammar for supported state diagram subset"
-      - "Grammar is a static file (not LLM-generated)"
-      - "Syntax highlighting for EBNF notation"
+    status: removed
+    removed_reason: |
+      Dropped in v7.1. A dedicated in-app EBNF tab is not worth the
+      screen real estate — the AI already receives the grammar on
+      every request (SR-022) and humans who want to read it are better
+      served by a plain file download (SR-081). Resurrect this SR only
+      if a concrete UI need arises.
+    acceptance_criteria: []
 
 # =============================================================================
 # Infrastructure
@@ -356,6 +518,7 @@ infrastructure:
     function: "Check PlantUML Server health"
     parent: [UR-001]
     component: PlantUmlService
+    status: implemented
     acceptance_criteria:
       - "Send health check request to PlantUML Server"
       - "Display connection status in status bar"
@@ -364,6 +527,7 @@ infrastructure:
     function: "Check n8n connectivity"
     parent: [UR-005]
     component: N8nService
+    status: implemented
     acceptance_criteria:
       - "Send health check request to n8n webhook endpoint"
       - "Display n8n connection status in status bar"
@@ -384,36 +548,196 @@ infrastructure:
 
 ui_layout:
   SR-070:
-    function: "Render state machine diagram as primary view"
+    function: "Render state machine diagram as primary view, with an empty-state guide"
     parent: [UR-001]
     component: DiagramView
+    status: implemented
     acceptance_criteria:
       - "Diagram occupies the main screen area (center, largest)"
       - "Diagram area resizes when analysis panel resizes"
       - "Diagram area maximizes when analysis panel is collapsed"
+      - "When PlantUML source is empty (no model yet), the diagram pane shows a custom EMPTY STATE message instead of fetching from PlantUML Server"
+      - "Empty-state copy points the user at the two real entry paths: 'Describe what the model should do in the Requirements tab, then press Generate model — or paste a PlantUML source into the Source tab.'"
+      - "Empty state must NOT show the PlantUML default welcome image, because that image suggests full PlantUML syntax is accepted (it is not — only the subset in ADR-009)"
+      - "Marker drawing tools and overlay are hidden in empty state (nothing to mark on yet) — but Undo / Redo controls (SR-035) remain visible so the user can restore a previous model after undoing all the way back to empty"
+      - "Auto-fit on initial render AND whenever an Apply changes the canvas size: the view opens (and re-fits) at a scale that contains the whole canvas inside the pane (capped at 1.0 so small diagrams are not blurrily enlarged) and the canvas is centered. Without the Apply-time refit, TransformWrapper's initialScale applies only at mount, so a later Apply that grows the diagram would leave the old scale in place and make the bigger canvas appear to overflow the pane. Home (⌂) on the zoom toolbar returns to the current auto-fit state"
 
   SR-071:
     function: "Render resizable analysis panel with tabs"
-    parent: [UR-002, UR-003, UR-008]
-    component: AnalysisPanel
+    parent: [UR-002, UR-003, UR-012]
+    component: AnalysisPanel (with ResizeHandle)
+    status: implemented
     acceptance_criteria:
       - "Bottom pull-up panel with tab navigation"
-      - "Source tab: PlantUML editor (SR-001)"
+      - "Tabs in this order: Requirements | Source | State×Event | State×State"
+      - "Requirements tab: editable requirements text during seed, read-only once a model exists (SR-080)"
+      - "Source tab: PlantUML source view (SR-001), read-only during review"
       - "State×Event tab: state transition matrix (SR-020)"
       - "State×State tab: pre/post state matrix (SR-021)"
-      - "EBNF tab: grammar display (SR-050)"
-      - "Vertically resizable via drag handle"
+      - "No EBNF tab (SR-050 removed); EBNF is available via the download action (SR-081)"
+      - "Vertically resizable via a drag handle on the top edge of the panel"
       - "Collapsible to maximize diagram area"
 
   SR-072:
-    function: "Render chat panel"
+    function: "Render chat panel with proposal view"
     parent: [UR-005, UR-006]
-    component: ChatPanel
+    component: ChatPanel (with ResizeHandle) + ProposalView
+    status: implemented
     acceptance_criteria:
       - "Right side panel spanning full height"
-      - "Contains message list (SR-031)"
-      - "Contains chat input field"
-      - "Contains source diff view when AI proposes changes (SR-033)"
+      - "Horizontally resizable via a drag handle on the left edge of the panel"
+      - "Contains message list (SR-031) and chat input field"
+      - "Does NOT host the Undo control (relocated to the diagram toolbar in SR-035) — the chat panel is for dialogue, not for model-state navigation"
+      - "When the AI proposes a source change, renders the ProposalView (SR-033) inside the assistant message: before/after model SVGs side-by-side with diff overlay, collapsible raw source, and an Apply button"
+      - "Falls back gracefully when the proposal cannot be rendered (parse error, PlantUML Server unreachable) per SR-033 rules"
+
+# =============================================================================
+# Requirements Text & Model Seeding (new in v7.1)
+# =============================================================================
+# The review session now carries a short requirements text alongside the
+# PlantUML source. Both are read-only references during review; both are
+# seeded at session start. Heavy extraction from a larger requirements
+# document stays OUTSIDE ModelLogue (ADR-008).
+
+requirements_text:
+  SR-080:
+    function: "Provide a Requirements tab holding a short, read-only-during-review requirements text"
+    parent: [UR-009, UR-012]
+    component: RequirementsTab + RequirementsStore
+    status: implemented
+    acceptance_criteria:
+      - "Requirements text is displayed on its own tab inside the analysis panel (SR-071)"
+      - "Lock condition aligned with SR-001: editable while the session is in SEED phase, read-only once REVIEW phase is entered (first successful parse of a model)"
+      - "Character-count indicator visible; soft limit 4000 characters, hard limit 8000 characters"
+      - "Exceeding the hard limit prevents Generate Model (SR-082) and shows a hint to extract requirements externally (ADR-008)"
+      - "The text is part of ReviewSession and is included in exported JSON (SR-041)"
+      - "A history of requirements text changes is NOT maintained in v7.1/v7.2 (the text is treated as fixed once seeded); Undo/Redo do not touch it"
+    rules:
+      - context: "Session is in SEED phase"
+        action: "User pastes or types into the Requirements tab"
+        outcome: "The text is accepted as the initial requirements seed"
+      - context: "Session is in REVIEW phase (a parseable model exists)"
+        action: "User tries to edit the requirements text"
+        outcome: "Input is ignored; a hint explains that requirements are fixed during review and re-derivation is an external step (ADR-008)"
+
+  SR-081:
+    function: "Offer the PlantUML subset grammar as a downloadable file"
+    parent: [UR-008]
+    component: Header or Help menu
+    status: implemented
+    acceptance_criteria:
+      - "A visible action (link or button) lets the user download src/grammars/stateDiagram.ebnf as-is"
+      - "Filename on download: modellogue-state-diagram-grammar.ebnf"
+      - "No in-app rendering or syntax highlighting of the file — download only"
+
+  SR-082:
+    function: "Generate an initial model from the requirements text"
+    parent: [UR-009]
+    component: RequirementsTab + ChatStore
+    status: implemented
+    acceptance_criteria:
+      - "A Generate Model button is shown on the Requirements tab"
+      - "The button is ENABLED only when: requirements text is non-empty AND current PlantUML source is empty"
+      - "Pressing the button sends a chat message through the normal chat pipeline (SR-030), with a fixed prefix such as 'Generate a PlantUML state diagram that satisfies the following requirements:' followed by the requirements text"
+      - "The message appears in the chat log as a user turn, so that the intent is captured in the dialogue log (Dialogue as Asset)"
+      - "The resulting assistant message flows through the normal suggestedSource → Apply path (SR-032, SR-034); there is no hidden side-channel"
+      - "Since the initial generation runs while the session source is empty, SR-034's auto-apply kicks in — the user does not have to click Apply to adopt the very first model. Subsequent proposals (after a model already exists) follow the normal click-to-apply flow"
+      - "After Apply, both the requirements text and the source become read-only for the remainder of the session"
+
+  SR-083:
+    function: "Open a previously saved review or an externally prepared starter file (file import)"
+    parent: [UR-007, UR-009]
+    component: SessionBootstrap
+    status: implemented
+    acceptance_criteria:
+      - "Header action is labelled 'Open saved review…' (NOT 'Seed Import' — that label was opaque to most users)"
+      - "Accept a JSON file in either of two shapes, transparently to the user:"
+      - "  - SeedBundle: { requirementsText?, plantUmlSource?, sessionName? } — produced by an external workflow (n8n / CI)"
+      - "  - ReviewSession: a JSON file produced by Save & finish (SR-041) — the importer extracts requirementsText, plantUmlSource, sessionName and discards chat log / source history / markers / outcome (Volatile Canvas: only the seed parts round-trip)"
+      - "All seed fields are optional; any missing field is treated as an empty seed"
+      - "Imported values go through the same seed path as manual paste; if the imported source parses successfully the session enters REVIEW phase immediately"
+      - "If a non-empty session is being replaced, confirm first"
+      - "Tooltip: 'Load a previously saved review (.json) to continue, or a starter file prepared by an external workflow.'"
+    notes: |
+      v7.2 widens the importer to accept the Save-and-finish output so
+      reviewers have an obvious save → reload round-trip without any
+      external tooling. The Volatile Canvas property is preserved by
+      not rehydrating chat / markers / history — only the static seed
+      fields come back.
+
+# =============================================================================
+# Model-Level Diff (new in v7.1, feeds SR-033)
+# =============================================================================
+
+model_diff:
+  SR-090:
+    function: "Compute a model-level diff between two StateMachineModel values"
+    parent: [UR-006]
+    component: modelDiff engine
+    status: implemented
+    acceptance_criteria:
+      - "Input: (before: StateMachineModel, after: StateMachineModel)"
+      - "Output: { addedStates, removedStates, changedStates, addedTransitions, removedTransitions, changedTransitions }"
+      - "State match key: state id (alias or PlantUML name). A rename counts as remove+add unless the id is preserved"
+      - "Transition match key: (sourceStateId, targetStateId, event) — if all three match, the transition is considered the same; differences in guard or action make it 'changed'"
+      - "Pure function, no I/O, no UI knowledge — consumed by SR-033 to drive overlay highlights"
+      - "Empty result when before and after are structurally identical (ignoring whitespace in source)"
+
+# =============================================================================
+# Artifact Export (per-tab Copy / Save) — new in v7.2
+# =============================================================================
+# The Save & finish JSON (SR-041) bundles the whole review as evidence.
+# These SRs cover the OTHER export use case: lifting an individual
+# artifact (final source / table / future test cases) out of the session
+# so it can be used in another tool. Two surfaces per artifact:
+#   - Copy: write to clipboard for a paste-into-anywhere workflow
+#   - Save: download as a file with the format conventional for that
+#           artifact (.puml for PlantUML, .csv for tables)
+
+artifact_export:
+  SR-100:
+    function: "Export the current PlantUML source from the Source tab"
+    parent: [UR-007]
+    component: SourceView (Copy / Save .puml actions)
+    status: implemented
+    acceptance_criteria:
+      - "A Copy button copies the current PlantUML source to the clipboard"
+      - "A Save button downloads the source as a .puml file"
+      - "Filename follows the pattern: modellogue-<sessionName-slug>-<YYYY-MM-DD-HHMM>.puml"
+      - "Both actions are visible whenever a non-empty source is displayed (REVIEW phase)"
+      - "Copy success is acknowledged with a transient indicator (e.g. 'Copied!' for ~1.5s)"
+    notes: |
+      The final source IS the model. Reviewers and downstream tools
+      need it stand-alone — not buried inside a JSON evidence bundle.
+
+  SR-101:
+    function: "Export each state-transition matrix from its tab"
+    parent: [UR-007]
+    component: MatrixView (Copy as TSV / Save as CSV actions)
+    status: implemented
+    acceptance_criteria:
+      - "Both the State×Event tab and the State×State tab carry the same Copy / Save action set"
+      - "Copy writes BOTH text/html (a real <table>) AND text/plain (CSV, RFC 4180) to the clipboard via ClipboardItem"
+      - "Excel / Sheets / Numbers / Word import the HTML payload directly as a formatted table; plain-text consumers (repo commits, AI prompts, the future test-generation tool) get canonical CSV"
+      - "Composite-state row labels are emphasised (bold) in the HTML table; child rows are indented with leading non-breaking spaces so the hybrid layout survives in the destination tool"
+      - "Save downloads the matrix as a CSV file with quoted fields per RFC 4180 (commas, quotes, newlines inside cells are escaped)"
+      - "TSV/CSV layout mirrors the on-screen hybrid pattern: composite-state rows are followed by their indented child rows; column headers are events (S×E) or target states (S×S)"
+      - "Filename pattern: modellogue-<sessionName-slug>-state-event-<YYYY-MM-DD-HHMM>.csv (resp. -state-state-)"
+      - "Both actions are disabled while the matrix is empty (no model)"
+
+  SR-102:
+    function: "Export generated test cases (placeholder)"
+    parent: [UR-003]
+    component: (test generation auxiliary service, ADR-010)
+    status: deferred
+    deferred_reason: |
+      The N-switch coverage test generator (UR-003 follow-up) is
+      planned as an external auxiliary service per ADR-010, not part
+      of the ModelLogue body. Once it lands, this SR mirrors SR-101's
+      Copy/Save pattern for the generated test-case CSV. Stub kept
+      here so the export pattern is consistent across artifacts when
+      the time comes.
+    acceptance_criteria: []
 
 # =============================================================================
 # Data Model
@@ -473,6 +797,9 @@ data_model:
         type: "string (ISO 8601)"
       - name: plantUmlSource
         type: string
+      - name: requirementsText
+        type: string
+        description: "Short requirements text scoped to this model (SR-080, v7.1). Read-only during review; exported as evidence"
       - name: messages
         type: "ChatMessage[]"
       - name: sourceHistory
@@ -556,9 +883,32 @@ external_interfaces:
   n8n_chat_webhook:
     endpoint: "{n8n_base_url}/webhook/modellogue-chat"
     method: POST
-    input: "Current PlantUML source + conversation history + user message"
-    output: "AI text response (streaming via SSE)"
+    input: |
+      JSON body with: currentSource (PlantUML), history (prior turns),
+      userMessage (new user turn), markerContext (human-readable marker +
+      coordinate summary, SR-022), grammarSpec (EBNF of the supported
+      PlantUML subset, SR-022), requirementsText (short requirements
+      fragment scoped to this model, optional, SR-030/SR-080).
+    output: |
+      JSON object with: text (AI free-form reply) and optional
+      suggestedSource (PlantUML extracted from a ```plantuml code block).
+      Phase 1 is non-streaming; n8n returns a single response.
     note: "n8n internally calls Gemini API; API key managed on n8n side"
+
+  session_bootstrap_bundle:
+    channel: "URL query parameters (?requirements=...&source=...) and/or file import"
+    schema: |
+      {
+        "requirementsText": "string (optional, UTF-8)",
+        "plantUmlSource":   "string (optional, UTF-8)",
+        "sessionName":      "string (optional)"
+      }
+    note: |
+      Documented boundary with ADR-008's surrounding workflow. n8n or a
+      CI pipeline composes this bundle (e.g. by extracting a
+      requirements fragment from a larger document and generating an
+      initial PlantUML source). ModelLogue consumes the bundle at
+      session start per SR-083 and then locks seed editing.
 
 # =============================================================================
 # Future Extensions (not in current scope)

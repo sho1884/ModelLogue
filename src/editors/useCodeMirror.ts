@@ -2,7 +2,7 @@
 
 import { useRef, useEffect } from 'react';
 import { EditorView, keymap } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { searchKeymap } from '@codemirror/search';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -11,11 +11,17 @@ import { plantumlLanguage } from './plantumlLanguage';
 interface UseCodeMirrorOptions {
   value: string;
   onChange: (value: string) => void;
+  readOnly?: boolean;
 }
 
-export function useCodeMirror({ value, onChange }: UseCodeMirrorOptions) {
+export function useCodeMirror({
+  value,
+  onChange,
+  readOnly = false,
+}: UseCodeMirrorOptions) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const readOnlyCompartment = useRef(new Compartment()).current;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -37,6 +43,10 @@ export function useCodeMirror({ value, onChange }: UseCodeMirrorOptions) {
         oneDark,
         updateListener,
         EditorView.lineWrapping,
+        readOnlyCompartment.of([
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly),
+        ]),
       ],
     });
 
@@ -54,6 +64,18 @@ export function useCodeMirror({ value, onChange }: UseCodeMirrorOptions) {
     // Only create editor once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reconfigure readOnly when the flag changes
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: readOnlyCompartment.reconfigure([
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly),
+      ]),
+    });
+  }, [readOnly, readOnlyCompartment]);
 
   // Sync external value changes into editor
   useEffect(() => {

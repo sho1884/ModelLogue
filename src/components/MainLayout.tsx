@@ -8,6 +8,8 @@ import { useModelStore } from '../stores/modelStore';
 import { useUiStore } from '../stores/uiStore';
 import { checkHealth as checkPlantUmlHealth } from '../services/plantUmlService';
 import { checkHealth as checkN8nHealth } from '../services/n8nService';
+import { isMockMode } from '../services/mockAi';
+import { ScenarioRunner } from '../debug/ScenarioRunner';
 
 // Resize bounds for the chat panel width.
 const MIN_CHAT_WIDTH = 200;
@@ -28,10 +30,17 @@ export function MainLayout() {
     parseSource(currentSource);
   }, [currentSource, parseSource]);
 
-  // Fetch SVG with debounce (500ms)
+  // Fetch SVG with debounce (500ms). SR-070 (v7.2): when the source is
+  // empty, do NOT call PlantUML Server — that returns a default welcome
+  // image which would mislead users about supported syntax. The empty
+  // SVG state is what DiagramView renders the empty-state guide from.
   useEffect(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
+    }
+    if (currentSource.trim() === '') {
+      useModelStore.setState({ svgString: null, svgFetchError: null });
+      return;
     }
     debounceRef.current = setTimeout(() => {
       fetchCoordinates(currentSource);
@@ -74,6 +83,9 @@ export function MainLayout() {
       <div style={{ width: chatPanelWidth }} className="shrink-0">
         <ChatPanel />
       </div>
+
+      {/* Debug: scripted scenario runner (only when mock AI is active) */}
+      {isMockMode() && <ScenarioRunner />}
     </div>
   );
 }

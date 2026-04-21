@@ -31,7 +31,10 @@ function pickAvailableColor(used: Set<MarkerColor>): MarkerColor | null {
 
 export const useMarkerStore = create<MarkerStore>((set, get) => ({
   markers: [],
-  activeTool: 'select',
+  // SR-012 (v7.1): pan is the default. At session start there are no
+  // markers to select, so pan gives the user a useful first action
+  // (drag the canvas) instead of an inert select mode.
+  activeTool: 'pan',
   selectedMarkerId: null,
   toastMessage: null,
 

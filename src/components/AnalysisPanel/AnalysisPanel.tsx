@@ -2,13 +2,14 @@ import { useUiStore, type AnalysisTab } from '../../stores/uiStore';
 import { useModelStore } from '../../stores/modelStore';
 import { SourceEditor } from './SourceEditor';
 import { MatrixView } from './MatrixView';
+import { RequirementsTab } from './RequirementsTab';
 import { ResizeHandle } from '../ResizeHandle';
 
 const tabs: { id: AnalysisTab; label: string }[] = [
+  { id: 'requirements', label: 'Requirements' },
   { id: 'source', label: 'Source' },
   { id: 'state-event', label: 'State\u00D7Event' },
   { id: 'state-state', label: 'State\u00D7State' },
-  { id: 'ebnf', label: 'EBNF' },
 ];
 
 // Resize bounds for the analysis panel height.
@@ -72,17 +73,21 @@ export function AnalysisPanel() {
       {/* Tab content */}
       {!collapsed && (
         <div className="flex-1 overflow-hidden">
+          {activeTab === 'requirements' && <RequirementsTab />}
           {activeTab === 'source' && <SourceEditor />}
           {activeTab === 'state-event' && (
-            <MatrixView matrix={stateEventMatrix} title="State \\ Event" />
+            <MatrixView
+              matrix={stateEventMatrix}
+              title="State \ Event"
+              exportSuffix="state-event"
+            />
           )}
           {activeTab === 'state-state' && (
-            <MatrixView matrix={stateStateMatrix} title="From \\ To" />
-          )}
-          {activeTab === 'ebnf' && (
-            <div className="flex items-center justify-center h-full text-sm text-gray-400">
-              EBNF grammar (coming soon)
-            </div>
+            <MatrixView
+              matrix={stateStateMatrix}
+              title="From \ To"
+              exportSuffix="state-state"
+            />
           )}
         </div>
       )}

@@ -181,4 +181,49 @@ Idle --> Active : go
     expect(result.errors).toHaveLength(0);
     expect(result.model!.transitions).toHaveLength(2);
   });
+
+  it('tolerates non-semantic PlantUML directives (hide / skinparam / theme / title etc.)', () => {
+    const source = `
+@startuml
+hide empty description
+skinparam state BackgroundColor #fafafa
+!theme cerulean
+title A stopwatch
+left to right direction
+scale 1.5
+
+state "計測停止" as Off
+state "計測中" as Active {
+  state "通常表示" as Running
+  state "ラップ表示" as LapDisplayed
+  [*] --> Running
+  Running --> LapDisplayed : LAP / ラップタイムを記録
+  LapDisplayed --> Running : LAP / 現在時刻を表示
+}
+state "一時停止" as Paused
+
+[*] --> Off
+Off --> Active : START / 計測開始
+Active --> Paused : START / 計測停止
+Paused --> Active : START / 計測再開
+Active --> Off : RESET / 計測をリセット
+Paused --> Off : RESET / 計測をリセット
+@enduml`;
+
+    const result = parse(source);
+    expect(result.errors).toEqual([]);
+    expect(result.model).not.toBeNull();
+
+    const model = result.model!;
+    // "Active" is a composite; Running / LapDisplayed are inside it
+    const composite = model.states.find((s) => s.id === 'Active');
+    expect(composite?.type).toBe('composite');
+    const normalChildren = model.states.filter(
+      (s) => s.parentId === 'Active' && s.type === 'normal'
+    );
+    expect(normalChildren.map((s) => s.id).sort()).toEqual([
+      'LapDisplayed',
+      'Running',
+    ]);
+  });
 });

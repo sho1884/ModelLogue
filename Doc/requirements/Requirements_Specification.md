@@ -3,9 +3,10 @@
 | Item / 項目 | Content / 内容 |
 |------|---------|
 | Document / 文書 | ModelLogue Requirements Specification / ModelLogue 要求仕様書 |
-| Version / バージョン | 6.0 (Draft / ドラフト) |
+| Version / バージョン | 7.2 (planned / 承認済・未実装) |
 | Created / 作成日 | 2026-04-08 |
-| Status / 状態 | Under Review / レビュー中 |
+| Last Updated / 最終更新 | 2026-04-15 |
+| Status / 状態 | v7.2 planned: lock-on-successful-parse, Undo+Redo on diagram toolbar, save-dialog contents checklist, empty-state guide, Open-saved-review accepts saved JSON, per-artifact Copy/Save (source as .puml, matrices as CSV/TSV), UI in plain English. v7.1 = implemented baseline. |
 
 ---
 
@@ -57,16 +58,17 @@ This document defines requirements for ModelLogue, a model review platform for s
 | ID | Task / タスク | Priority / 優先度 |
 |----|------|----------|
 | UR-001 | Review state machine diagram / 状態遷移図をレビューする | High / 高 |
-| UR-002 | Edit PlantUML source / PlantUMLソースを編集する | High / 高 |
+| UR-002 | Refer to the PlantUML source of the current model (read-only) / 現在のモデルのソースを参照する（読み取り専用） | High / 高 |
 | UR-003 | View state transition table / 状態遷移表を見る | High / 高 |
 | UR-004 | Place markers on the diagram / 図にマーカーを配置する | High / 高 |
 | UR-005 | Discuss the model with AI / AIとモデルについて対話する | High / 高 |
-| UR-006 | Apply AI suggestions / AIの提案を適用する | Medium / 中 |
-| UR-007 | Export review session / レビューセッションをエクスポートする | Medium / 中 |
-| UR-008 | View PlantUML subset grammar / PlantUMLサブセット文法を見る | Low / 低 |
-| UR-009 | Receive an initial model into the review session / レビューセッションに初版モデルを受け取る | High / 高 |
+| UR-006 | Apply AI suggestions (judged via visual before/after) / モデル図 before/after で提案を判断して適用する | Medium / 中 |
+| UR-007 | Save the review evidence and lift individual artifacts / レビュー証跡を保存し個別成果物を取り出す | Medium / 中 |
+| UR-008 | Obtain PlantUML subset grammar (download) / PlantUMLサブセット文法を取得（DL） | Low / 低 |
+| UR-009 | Receive an initial model (+ optional requirements text) / 初版モデル（＋任意で要求仕様断片）を受け取る | High / 高 |
 | UR-010 | Close the review session with an outcome / 結末を付けてレビューセッションを終了する | Medium / 中 |
 | UR-011 | Convert between state machine source and state transition table / 状態マシンソースと状態遷移表を相互変換する | Medium / 中 |
+| UR-012 | Refer to the target requirements text alongside the model / モデルと並べて要求仕様文を参照する | Medium / 中 |
 
 > **Note 1**: UR-009とUR-010の前後（初版生成手段、終了後フィードバック先）はn8nワークフローで現場ごとに構成する。ModelLogue本体は入出力の境界に専念する。詳細は [ADR-008](../adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) を参照。
 >
@@ -82,9 +84,9 @@ This document defines requirements for ModelLogue, a model review platform for s
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
-| SR-001 | Render PlantUML editor with syntax highlighting / 構文ハイライト付きエディタを表示する | UR-002, UR-009 |
+| SR-001 | Display PlantUML source (read-only during review; editable in SEED phase until first successful parse) / ソースを表示。SEED 中は編集可、最初の構文成功でロック **(v7.2 planned)** | UR-002, UR-009 |
 | SR-002 | Parse PlantUML subset into state machine model / PlantUMLサブセットを状態マシンモデルに解析する | UR-001, UR-002, UR-003, UR-009 |
-| SR-003 | Serialize state machine model to PlantUML source / 状態マシンモデルをPlantUMLソースに変換する | UR-006 |
+| ~~SR-003~~ | ~~Serialize state machine model to PlantUML source~~ — **Removed**: unnecessary; Undo restores full-source snapshots. | — |
 
 **PlantUML Subset Grammar / PlantUMLサブセット文法** (SR-002):
 
@@ -152,7 +154,7 @@ MarkerStore + Coordinate Map → AI chat context
 |----|----------|--------|
 | SR-020 | Generate State×Event matrix in hybrid form / 状態×イベントマトリクスをハイブリッド形式で生成する | UR-003 |
 | SR-021 | Generate PreState×PostState matrix in hybrid form / 遷移前×遷移後マトリクスをハイブリッド形式で生成する | UR-003 |
-| SR-022 | Provide marker context to AI / マーカー情報をAIコンテキストに渡す | UR-004, UR-005 |
+| SR-022 | Provide marker and grammar context to AI / マーカー情報とEBNF文法をAIコンテキストに渡す | UR-004, UR-005, UR-008 |
 
 #### ハイブリッドパターン (Hybrid Pattern)
 
@@ -201,22 +203,22 @@ ModelLogueの状態遷移表は、業界調査（ISO/IEC/IEEE 29119-4、MATLAB S
 | SR-030 | Send chat message to AI via n8n / n8n経由でAIにメッセージを送信する | UR-005 |
 | SR-031 | Render chat message list / チャットメッセージ一覧を表示する | UR-005 |
 | SR-032 | Extract PlantUML source from AI response / AIの応答からPlantUMLソースを抽出する | UR-006 |
-| SR-033 | Display source diff for AI proposals / AI提案のソース差分を表示する | UR-006 |
+| SR-033 | Present AI-proposed modifications as a visual before/after model comparison / モデル図 before/after を並置 + 差分オーバーレイで提案を提示する **(v7.1 redefined)** | UR-006 |
 | SR-034 | Apply proposed source modification / 提案されたソース修正を適用する | UR-006 |
-| SR-035 | Undo source modification / ソース修正を元に戻す | UR-006 |
+| SR-035 | Undo and Redo applied source modifications (controls live on the diagram toolbar) / Undo/Redo（ダイアグラムツールバー上） **(v7.2)** | UR-006 |
 
 ### 3.5 Session Management / セッション管理
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
 | SR-040 | Manage session state in browser memory / ブラウザメモリでセッション状態を管理する | UR-002, UR-005, UR-007, UR-010 |
-| SR-041 | Export session as JSON / セッションをJSONとしてエクスポートする | UR-007, UR-010 |
+| SR-041 | Save the review session as a JSON file (Save dialog enumerates contents) / セッションをJSONで保存（ダイアログに含有物リスト） **(v7.2)** | UR-007, UR-010 |
 
-### 3.6 Grammar Display / 文法表示
+### 3.6 Grammar Access / 文法へのアクセス
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
-| SR-050 | Display PlantUML subset grammar / PlantUMLサブセット文法を表示する | UR-008 |
+| ~~SR-050~~ | ~~Display PlantUML subset grammar (EBNF tab)~~ — **Removed in v7.1** (replaced by SR-081 download) | — |
 
 ### 3.7 Infrastructure / インフラ
 
@@ -225,29 +227,94 @@ ModelLogueの状態遷移表は、業界調査（ISO/IEC/IEEE 29119-4、MATLAB S
 | SR-060 | Check PlantUML Server health / PlantUML Serverの稼働状態を確認する | UR-001 |
 | SR-061 | Check n8n connectivity / n8nの接続状態を確認する | UR-005 |
 
-### 3.8 UI Layout / UI構成
+### 3.8 Requirements & Seeding / 要求仕様＆シード (v7.1)
+
+| ID | Function / 機能 | Parent / 親 |
+|----|----------------|-------------|
+| SR-080 | Provide a Requirements tab (lock condition aligned with SR-001) / 要求仕様タブ（ロック条件を SR-001 と整合） **(v7.2)** | UR-009, UR-012 |
+| SR-081 | Offer the PlantUML subset grammar as a downloadable file / EBNF文法をファイルダウンロードで提供 | UR-008 |
+| SR-082 | Generate an initial model from the requirements text (chat shortcut) / 要求仕様から初版モデルを生成（チャット shortcut） | UR-009 |
+| SR-083 | Open a previously saved review or an externally prepared starter (file import; accepts SeedBundle OR ReviewSession shape) / 保存済みレビューまたは外部シードを開く（両形式受理） **(v7.2)** | UR-007, UR-009 |
+
+**設計意図**:
+
+- 要求仕様は「このモデル分の**断片**」だけを扱う（目安 4000 字、上限 8000 字）。大きな要求仕様書の抽出は依然として ModelLogue の外で行う（ADR-008 境界維持）
+- 要求仕様もソースも、レビュー中は**読み取り専用の参照**。レビューの本質は「モデル図を介した要求仕様のブラッシュアップ」だが、自然言語への反映は**最終モデル確定後に外部で**実施する
+- モデル生成ボタン = 要求仕様を含むチャットメッセージを投げる shortcut。裏側は通常のチャットと同じで、意図は対話ログに残る
+- 外部シードバンドル = URL クエリパラメータ or ファイル import で `{ requirementsText?, plantUmlSource? }` を受け取る。n8n や CI から投入できる正式 I/F
+
+### 3.9 Model Diff / モデル差分 (v7.1)
+
+| ID | Function / 機能 | Parent / 親 |
+|----|----------------|-------------|
+| SR-090 | Compute a model-level diff between two StateMachineModel values / モデルレベル差分を計算する | UR-006 |
+
+SR-033（提案の視覚化）はこの SR-090 が返す差分データを使って、提案側 SVG に add(緑)/remove(赤)/change(橙) のオーバーレイを描く。
+
+### 3.10 Artifact Export / 個別エクスポート (v7.2)
+
+| ID | Function / 機能 | Parent / 親 |
+|----|----------------|-------------|
+| SR-100 | Export the current PlantUML source from the Source tab (Copy / Save .puml) / Source タブから .puml をコピー／保存 | UR-007 |
+| SR-101 | Export each state-transition matrix from its tab (Copy as TSV / Save as CSV) / マトリクスを TSV コピー／CSV 保存 | UR-007 |
+| SR-102 ⏳ deferred | Export generated test cases (placeholder, awaits the auxiliary test-generation service) / テストケースの出力（補助サービス追加待ち） | UR-003 |
+
+**設計意図**:
+
+- **Save & finish JSON (SR-041)** は「レビュー証跡を一括で渡す/保管する」用途。中身はチェックリストでダイアログに明示
+- **個別エクスポート (SR-100/101)** は「成果物を**他のツールで使う**」用途（PlantUML をドキュメントへ、表を Excel へ、テストを CI へ）
+- 役割が混ざらないように、エクスポート系は **2 系統明確に分離**する
+
+### 3.11 Deferred & Removed SRs / 未実装・削除SR一覧
+
+`system_requirements.yaml` の `status` フィールドで機械可読に管理している。`planned` は v7.1 で承認済だが未実装、`deferred` は現時点で見送り、`removed` は廃止。
+
+**Removed / 削除**:
+
+| ID | Function / 機能 | Reason / 理由 |
+|----|----------------|---------------|
+| SR-003 | Serialize state machine model to PlantUML source | Undoは sourceHistory の全文スナップショット復元で実装、モデル→ソースの往復変換は不要 |
+| SR-050 | Display PlantUML subset grammar (EBNF tab) | v7.1 で廃止。SR-081（ダウンロード）で代替 |
+
+**Deferred / 見送り**:
+
+| 項目 | Reason / 理由 |
+|------|---------------|
+| i18n（UR外・横断） | Phase 1 では UI 文字列直書きで運用。3言語目の追加、または言語トグルが必要になった時点で導入 |
+
+> planned SR は `system_requirements.yaml` を仕様の契約として扱い、コードより先に確定させる（ドキュメント・ファースト）。実装着手前にこの仕様書と YAML を必ず見直す。
+
+### 3.12 UI Layout / UI構成
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
-| SR-070 | Render state machine diagram as primary view / 状態マシン図をプライマリビューとして表示する | UR-001 |
-| SR-071 | Render resizable analysis panel with tabs / リサイズ可能なタブ付き解析パネルを表示する | UR-002, UR-003, UR-008 |
-| SR-072 | Render chat panel / チャットパネルを表示する | UR-005, UR-006 |
+| SR-070 | Render the diagram as primary view, with an empty-state guide when no model exists / プライマリビュー＋モデル未投入時のエンプティステート **(v7.2)** | UR-001 |
+| SR-071 | Render resizable analysis panel with tabs (Requirements / Source / S×E / S×S) / タブ付き解析パネル（要求仕様・ソース・S×E・S×S）**(v7.1 tab set)** | UR-002, UR-003, UR-012 |
+| SR-072 | Render chat panel with ProposalView (no longer hosts Undo — relocated per SR-035) / チャットパネル + 提案ビュー（Undo は移設） **(v7.2)** | UR-005, UR-006 |
 
-**Screen Layout / 画面構成**:
+**Screen Layout / 画面構成 (v7.2)**:
 
 ```
-┌──────────────────────────────────┬──────────────┐
-│  Diagram View                    │  Chat/Review  │
-│  PlantUML SVG + marker overlay   │  Panel        │
-│  [⬭ ▭ ⇢]   ← marker tool buttons │  チャット      │
-├── drag to resize ────────────────┤              │
-│  ▲ Analysis Panel [tabs]        │              │
-│  [Source|State×Event|State×State|EBNF]          │
-│  解析パネル                       │              │
-├──────────────────────────────────┴──────────────┤
-│  Status Bar / ステータスバー                      │
-└──────────────────────────────────────────────────┘
+┌── Header ────────────────────────────────────────────────────────┐
+│  ModelLogue   <session>          [Save & finish…] [Open saved    │
+│                                   review…] [Download grammar]    │
+├──────────────────────────────────────────────────┬──────────────┤
+│  Diagram View                                    │  Chat        │
+│  [marker tools] [↶ Undo] [↷ Redo]               │  messages    │
+│  PlantUML SVG + marker overlay                   │  + Proposal  │
+│   (or empty-state guide when no model yet)       │    View      │
+├── drag to resize ────────────────────────────────┤              │
+│  Analysis Panel  [Requirements|Source|S×E|S×S]   │  input       │
+├──────────────────────────────────────────────────┴──────────────┤
+│  Status Bar                                                      │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+Notes:
+- Undo / Redo live on the diagram toolbar (SR-035) — they affect the model, not the chat
+- Empty-state guide replaces the diagram pane until a parseable model exists (SR-070)
+- Source tab shows **Copy** / **Save .puml** actions (SR-100); each matrix tab shows **Copy** / **Save .csv** (SR-101)
+- ProposalView: 提案があるメッセージ内で、**現モデル SVG（左） / 提案モデル SVG（右）** を並置。提案側には SR-090 の差分に基づく緑/赤/橙オーバーレイを重ねる。下には提案ソースの折りたたみ表示と Apply ボタン。⛶ Open larger comparison でフルスクリーンモーダルへ。
 
 ---
 
@@ -296,9 +363,10 @@ interface Transition {
 interface ReviewSession {
   id: string;
   name: string;
-  createdAt: string;   // ISO 8601
-  updatedAt: string;   // ISO 8601
+  createdAt: string;        // ISO 8601
+  updatedAt: string;        // ISO 8601
   plantUmlSource: string;
+  requirementsText: string; // v7.1: short, scoped requirements fragment (SR-080)
   messages: ChatMessage[];
   sourceHistory: SourceSnapshot[];
   markers: Marker[];
@@ -348,9 +416,9 @@ Marker geometry is in the SVG coordinate space (the space of the PlantUML SVG). 
 |---|---|
 | Endpoint | `{n8n_base_url}/webhook/modellogue-chat` |
 | Method | POST |
-| Input | PlantUML source + conversation history + user message |
-| Output | AI response (streaming via SSE) |
-| Note | n8n calls Gemini API; API key managed on n8n side |
+| Input | JSON: `currentSource` (PlantUML), `history` (prior turns), `userMessage`, `markerContext` (human-readable marker + coordinate summary), `grammarSpec` (EBNF of the supported subset) |
+| Output | JSON: `text` (AI reply), optional `suggestedSource` (PlantUML extracted from a ```plantuml code block). Phase 1 は非ストリーミング |
+| Note | n8n calls Gemini API; API key managed on n8n side. Phase 1 は ```plantuml ブロック抽出をフロントエンド側で実施（ADR-005 Phase 2 でn8n側に移設予定） |
 
 ---
 

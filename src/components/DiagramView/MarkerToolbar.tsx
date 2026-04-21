@@ -1,4 +1,5 @@
 import { useMarkerStore } from '../../stores/markerStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import type { DiagramTool } from '../../types/marker';
 
 function PointerIcon() {
@@ -25,27 +26,65 @@ const tools: {
   { type: 'arrow', label: 'Arrow marker', render: () => '➜' },
 ];
 
-export function MarkerToolbar() {
+// SR-035 (v7.2): Undo / Redo live on the diagram toolbar — they affect
+// the model, so they belong with the model. They stay visible at all
+// times, even in empty state (SR-070) — otherwise undoing back to empty
+// would hide the redo affordance and trap the user.
+
+interface MarkerToolbarProps {
+  /** Hide the marker-drawing buttons when there is no diagram to mark on. */
+  markersHidden?: boolean;
+}
+
+export function MarkerToolbar({ markersHidden = false }: MarkerToolbarProps) {
   const activeTool = useMarkerStore((s) => s.activeTool);
   const setActiveTool = useMarkerStore((s) => s.setActiveTool);
+  const sourceHistory = useSessionStore((s) => s.sourceHistory);
+  const redoStack = useSessionStore((s) => s.redoStack);
+  const undoSource = useSessionStore((s) => s.undoSource);
+  const redoSource = useSessionStore((s) => s.redoSource);
+
+  const canUndo = sourceHistory.length > 0;
+  const canRedo = redoStack.length > 0;
 
   return (
     <div className="flex items-center gap-1 px-2 py-1 border-b border-gray-200 bg-gray-50">
-      <span className="text-xs text-gray-500 mr-2">Tool:</span>
-      {tools.map((tool) => (
-        <button
-          key={tool.type}
-          onClick={() => setActiveTool(tool.type)}
-          title={tool.label}
-          className={`px-2 py-1 text-base rounded inline-flex items-center justify-center ${
-            activeTool === tool.type
-              ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
-              : 'text-gray-600 hover:bg-gray-100 border border-transparent'
-          }`}
-        >
-          {tool.render()}
-        </button>
-      ))}
+      {!markersHidden && (
+        <>
+          <span className="text-xs text-gray-500 mr-2">Tool:</span>
+          {tools.map((tool) => (
+            <button
+              key={tool.type}
+              onClick={() => setActiveTool(tool.type)}
+              title={tool.label}
+              className={`px-2 py-1 text-base rounded inline-flex items-center justify-center ${
+                activeTool === tool.type
+                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                  : 'text-gray-600 hover:bg-gray-100 border border-transparent'
+              }`}
+            >
+              {tool.render()}
+            </button>
+          ))}
+          <div className="mx-2 h-5 w-px bg-gray-300" />
+        </>
+      )}
+      <button
+        onClick={undoSource}
+        disabled={!canUndo}
+        title="Undo the last applied proposal"
+        className="px-2 py-1 text-base rounded inline-flex items-center justify-center text-gray-600 hover:bg-gray-100 border border-transparent disabled:text-gray-300 disabled:hover:bg-transparent"
+      >
+        ↶
+      </button>
+      <button
+        onClick={redoSource}
+        disabled={!canRedo}
+        title="Redo the next applied proposal"
+        className="px-2 py-1 text-base rounded inline-flex items-center justify-center text-gray-600 hover:bg-gray-100 border border-transparent disabled:text-gray-300 disabled:hover:bg-transparent"
+      >
+        ↷
+      </button>
     </div>
   );
 }

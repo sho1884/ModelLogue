@@ -1,8 +1,9 @@
 # ModelLogue アーキテクチャ設計書
 
-**バージョン**: 6.0
+**バージョン**: 7.2 (planned / 承認済・未実装)
 **作成日**: 2026-04-08
-**ステータス**: ドラフト
+**最終更新**: 2026-04-15
+**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。
 
 ---
 
@@ -134,15 +135,15 @@ Source変更
 ### 3.2 チャットフロー
 
 ```
-ユーザーメッセージ + コンテキスト（Source）
+ユーザーメッセージ + コンテキスト（currentSource + history + markerContext + grammarSpec）
   → n8n webhook → Gemini API → レスポンス
-  → n8nが ```plantuml``` コードブロックを検出・抽出
-  → 構造化JSON { text, suggestedSource } を返却
-  → フロントエンドで差分ビュー表示 → 「適用」→ Source更新
+  → 構造化JSON { text, suggestedSource? } を返却
+  → フロントエンドで提案ソースを表示（コードブロック＋Applyボタン）
+  → Apply → SessionStore.applyProposal / ChatStore.markApplied → Source更新
   → Source変更 → Parser再実行 → 全パイプライン再実行
 ```
 
-AIレスポンスの解析（コードブロック抽出）はn8n側で行い、フロントエンドには構造化データのみを渡す。
+AIレスポンスの解析（```plantuml コードブロック抽出）はADR-005に従いn8n側で行うのが正だが、Phase 1では反復速度を優先してフロントエンド（`services/n8nService.ts::extractPlantUmlBlock`）で実装している。n8nが `suggestedSource` を事前抽出して返すパスも既に受け入れ済みなので、Phase 2以降でn8n側に移設してもフロントエンドの変更は不要（ドロップイン置換）。
 
 ### 3.3 プロンプト管理
 
@@ -179,51 +180,51 @@ AIレスポンスの解析（コードブロック抽出）はn8n側で行い、
 
 ```
 App
-├── Header
-│   ├── Logo
-│   ├── SessionName
-│   └── ExportButton
+├── Header                             # セッション名 + Close Session ボタン
 ├── MainLayout
 │   ├── WorkArea（左側）
 │   │   ├── DiagramView
-│   │   │   ├── MarkerToolbar [⬭ ▭ ⇢]
-│   │   │   ├── SvgPreview（PlantUML SVG + pan/zoom）
-│   │   │   └── MarkerOverlay（ネイティブSVG）
-│   │   └── AnalysisPanel（リサイズ可能・折りたたみ可能）
-│   │       ├── TabBar [Source | S×E | S×S | EBNF]
-│   │       ├── PlantUmlEditor（CodeMirror — Source tab）
-│   │       ├── StateEventMatrixView（S×E tab）
-│   │       ├── StateStateMatrixView（S×S tab）
-│   │       └── EbnfView（EBNF tab）
-│   └── ChatPanel（右側・全高さ）
-│       ├── MessageList
-│       │   ├── UserMessage
-│       │   └── AssistantMessage
-│       │       └── SourceDiffView → ApplyButton
-│       └── ChatInput
-└── StatusBar
-    ├── PlantUmlServerStatus
-    └── N8nStatus
+│   │   │   ├── MarkerToolbar        # [select | pan | ⬭ | ▭ | ⇢]
+│   │   │   └── (inline) PlantUML SVG + MarkerShape[] オーバーレイ
+│   │   │                              # SVG表示・pan/zoom・マーカー描画は
+│   │   │                              # DiagramView.tsx 内で一体化
+│   │   ├── ResizeHandle              # AnalysisPanel の上端（縦方向リサイズ）
+│   │   └── AnalysisPanel
+│   │       │                          # タブは内部でswitch実装（TabBar分離なし）
+│   │       ├── SourceEditor          # CodeMirror — Source tab
+│   │       ├── MatrixView            # S×E / S×S タブで共通利用
+│   │       └── EBNF tab              # 現在は「coming soon」プレースホルダ
+│   │                                  # （SR-050 deferred）
+│   ├── ResizeHandle                  # ChatPanel の左端（横方向リサイズ）
+│   └── ChatPanel                     # 右側・全高さ
+│       │                              # メッセージ一覧・入力欄・提案ソースブロック＋Apply
+│       │                              # ボタンは ChatPanel.tsx 単一ファイルに集約
+│       └── (inline) messages / input / suggested-source + Apply
+├── StatusBar                         # PlantUML Server / n8n 接続状態
+└── CloseSessionDialog                # ポータル表示・3つの outcome + note + JSON ダウンロード
 ```
+
+※ Phase 1 では画面要素の細分化を意図的に抑え、TabBar / MessageList / SourceDiffView といった子コンポーネントは親ファイルに統合されている。将来の拡張（SR-033の本格的な差分ビュー、EBNFViewなど）で必要になった時点で分離する。
 
 ## 5. ステート管理
 
 Zustandを使用。ストアは責務ごとに分離する。
 
 ```typescript
-// SessionStore — ソース＆履歴管理
+// SessionStore — ソース＆履歴管理（エクスポート機能も内包）
 interface SessionStore {
   sessionId: string;
   sessionName: string;
   createdAt: string;
   currentSource: string;
   sourceHistory: SourceSnapshot[];
-  outcome: SessionOutcome | null;  // セッションが終了するとセットされる（UR-010）
+  outcome: SessionOutcome | null;
 
   updateSource: (source: string, triggeredBy: string) => void;
   applyProposal: (messageId: string, source: string) => void;
   undoSource: () => void;
-  setOutcome: (outcome: SessionOutcome) => void;
+  closeSession: (status: SessionOutcomeStatus, note: string | null) => void;
+  exportSession: () => ReviewSession;  // 別Serviceには切り出さず、ストアが生成
 }
 
 interface SessionOutcome {
@@ -238,16 +239,21 @@ interface ModelStore {
   parseError: string | null;
   stateEventMatrix: MatrixData | null;
   stateStateMatrix: MatrixData | null;
+  coordinates: CoordinateMap;  // SvgCoordinateExtractor が埋める（SR-011）
 
   parseSource: (source: string) => void;
+  setCoordinates: (map: CoordinateMap) => void;
 }
 
-// ChatStore — AI対話管理
+// ChatStore — AI対話管理（メッセージの正本はこちら。SessionStoreのmessagesは未使用）
 interface ChatStore {
   messages: ChatMessage[];
-  isStreaming: boolean;
+  isSending: boolean;             // Phase 1 は非ストリーミング（単発JSON）
+  lastError: string | null;
 
   sendMessage: (content: string) => Promise<void>;
+  markApplied: (messageId: string) => void;  // Apply時にChatPanelから呼ぶ
+  clear: () => void;
 }
 
 // UiStore — レイアウト＆接続状態
@@ -418,30 +424,30 @@ interface ChatResponse {
   suggestedSource?: string;
 }
 
-interface N8nService {
-  chat(params: {
-    currentSource: string;
-    messages: ChatMessage[];
-    userMessage: string;
-  }): Promise<ChatResponse>;
+interface ChatRequest {
+  currentSource: string;                   // コンテキストとしてのPlantUMLソース
+  history: { role: 'user' | 'assistant'; content: string }[];
+  userMessage: string;
+  markerContext: string;                   // マーカー + 座標のヒト可読サマリ（SR-022）
+  grammarSpec: string;                     // EBNF 全文（SR-022, SR-050）
+}
 
+interface N8nService {
+  chat(req: ChatRequest): Promise<ChatResponse>;
   checkHealth(): Promise<boolean>;
 }
 ```
 
-- n8n Webhookへ HTTP POST
-- n8nがLLM応答を解析し、構造化JSON（text + suggestedSource）を返却
-- フロントエンドはJSONを受け取って表示するだけ
+- n8n Webhookへ HTTP POST（単発JSONレスポンス。Phase 1はSSEを使わない）
+- 受信したJSONは `{ text, output, message, response }` のいずれかのフィールドから本文を取り出す正規化ロジックを通す
+- Phase 1 では ```plantuml コードブロック抽出をフロントエンド側（`extractPlantUmlBlock`）で実施。ADR-005 の方針（n8n側で抽出）は維持し、Phase 2 でn8nワークフローに移設予定
+- n8n が `suggestedSource` を事前抽出して返すパスもそのまま受け入れる（ドロップイン置換可能）
 
-### 6.7 Export Service
+### 6.7 セッションエクスポート
 
-```typescript
-interface ExportService {
-  exportAsJson(session: ReviewSession): void;
-}
-```
+独立した ExportService は設けず、`SessionStore.exportSession()` が `ReviewSession` オブジェクトを組み立てて返す。呼び出し側（`CloseSessionDialog`）が `JSON.stringify` → Blob ダウンロードまで行う。
 
-- ReviewSessionをJSON文字列化 → Blobダウンロード
+組み立て時に `ChatStore.messages` と `MarkerStore.markers` を読み出してまとめる点がポイント（メッセージの正本は ChatStore 側にあるため）。
 
 ## 7. n8nオーケストレーター設計
 
@@ -449,15 +455,16 @@ interface ExportService {
 
 | エンドポイント | 用途 |
 |--------------|------|
-| `POST /webhook/modellogue-chat` | チャット中継（SSEレスポンス） |
+| `POST /webhook/modellogue-chat` | チャット中継（単発JSONレスポンス。Phase 1） |
 
 ### 7.2 チャット中継ワークフロー
 
 ```
-Webhook受信 → コンテキスト組み立て（systemPrompt + source + history）
-→ Gemini API呼び出し → レスポンス受信
-→ ```plantuml``` コードブロック検出・抽出
-→ 構造化JSON返却
+Webhook受信 → コンテキスト組み立て（systemPrompt + currentSource + history + markerContext + grammarSpec）
+→ Gemini API呼び出し（AI Agent node, Retry On Fail）→ レスポンス受信
+→ 単発JSONで返却
+  （Phase 1: ```plantuml コードブロック抽出はフロントエンド側で実施）
+  （Phase 2: ADR-005 に従いここで抽出し suggestedSource を付与）
 ```
 
 **Webhook仕様**:
@@ -469,11 +476,19 @@ Content-Type: application/json
 Request:
 {
   "currentSource": "...",
-  "messages": [...],
-  "userMessage": "..."
+  "history": [{ "role": "user", "content": "..." }, ...],
+  "userMessage": "...",
+  "markerContext": "Marker m-1 (red ellipse) overlaps state Idle ...",
+  "grammarSpec": "(* ModelLogue PlantUML State Diagram Subset Grammar *) ..."
 }
 
-Response:
+Response (Phase 1):
+{
+  "text": "この状態遷移図には...\n```plantuml\n@startuml\n...\n```\n",
+  // suggestedSource はフロントエンドで text から抽出する
+}
+
+Response (Phase 2 目標):
 {
   "text": "この状態遷移図には...",
   "suggestedSource": "@startuml\n[*] --> Idle\n..."
@@ -548,54 +563,44 @@ ModelLogue/
 │   ├── main.tsx
 │   ├── App.tsx
 │   ├── components/
-│   │   ├── Header/
+│   │   ├── Header/Header.tsx
 │   │   ├── DiagramView/
-│   │   │   ├── DiagramView.tsx             # SVG + overlay layout
-│   │   │   ├── SvgPreview.tsx               # PlantUML SVG + pan/zoom
-│   │   │   ├── MarkerToolbar.tsx            # ⬭ ▭ ⇢ buttons
-│   │   │   └── MarkerOverlay.tsx            # ネイティブSVGマーカー描画
+│   │   │   ├── DiagramView.tsx              # SVG + オーバーレイ + pan/zoom（統合）
+│   │   │   ├── MarkerToolbar.tsx            # [select | pan | ⬭ | ▭ | ⇢]
+│   │   │   └── MarkerShape.tsx              # 個別マーカー描画（楕円/矩形/矢印）
 │   │   ├── AnalysisPanel/
-│   │   │   ├── AnalysisPanel.tsx
-│   │   │   ├── TabBar.tsx
-│   │   │   ├── PlantUmlEditor.tsx         # CodeMirror
-│   │   │   ├── StateEventMatrixView.tsx
-│   │   │   ├── StateStateMatrixView.tsx
-│   │   │   └── EbnfView.tsx
+│   │   │   ├── AnalysisPanel.tsx            # タブ切替は内部で switch
+│   │   │   ├── SourceEditor.tsx             # CodeMirror
+│   │   │   └── MatrixView.tsx               # S×E / S×S で共通利用
 │   │   ├── ChatPanel/
-│   │   │   ├── ChatPanel.tsx
-│   │   │   ├── MessageList.tsx
-│   │   │   ├── SourceDiffView.tsx
-│   │   │   └── ChatInput.tsx
-│   │   ├── StatusBar/
+│   │   │   └── ChatPanel.tsx                # メッセージ・入力・提案ソース+Apply 統合
+│   │   ├── StatusBar/StatusBar.tsx
+│   │   ├── ResizeHandle.tsx                 # 縦横リサイズ共通部品
+│   │   ├── CloseSessionDialog.tsx           # outcome 入力 + JSON ダウンロード
 │   │   └── MainLayout.tsx
 │   ├── parsers/
-│   │   ├── stateMachineParser.ts
-│   │   └── stateMachineSerializer.ts
+│   │   └── stateMachineParser.ts            # Serializer は不要と判断（SR-003 removed）
 │   ├── engines/
 │   │   ├── matrixGenerator.ts
 │   │   └── svgCoordinateExtractor.ts
 │   ├── services/
 │   │   ├── plantUmlService.ts
 │   │   ├── n8nService.ts
-│   │   └── exportService.ts
+│   │   └── markerContext.ts                 # マーカー+座標のヒト可読サマリ生成
 │   ├── stores/
-│   │   ├── sessionStore.ts
+│   │   ├── sessionStore.ts                  # exportSession もここ
 │   │   ├── modelStore.ts
 │   │   ├── chatStore.ts
 │   │   ├── markerStore.ts
 │   │   └── uiStore.ts
 │   ├── grammars/
-│   │   └── stateDiagram.ebnf
-│   ├── i18n/
-│   │   ├── index.ts
-│   │   ├── en.json
-│   │   └── ja.json
+│   │   └── stateDiagram.ebnf                # ?raw import で文字列として取り込む
 │   ├── types/
 │   │   ├── stateMachine.ts
 │   │   ├── session.ts
 │   │   └── matrix.ts
-│   └── utils/
-│       └── plantumlEncoder.ts
+│   └── vite-env.d.ts
+│   # 注: i18n/ は当初計画にあったが Phase 1 では未実装（UI英日対応は deferred）
 ├── tests/
 │   ├── unit/
 │   │   ├── stateMachineParser.test.ts
@@ -667,3 +672,206 @@ ModelLogue本体ではなく、同一リポジトリ内の独立した補助サ�
 | クラシフィケーションツリー | ClassificationTreeParser | ClassificationModel | FactorLevelTable |
 
 拡張時のアーキテクチャへの影響は最小限（パーサー＋モデル＋テーブルの差し替えのみ）。各図種にも対応する補助サービス（テスト生成器、CSV変換器など）が並ぶ可能性がある。
+
+---
+
+## 13. v7.1 変更（planned）
+
+v7.0 の記述はそのまま MVP の現状記録として残す。ここでは v7.1 で変わる点を差分として記す。実装着手前の合意用。
+
+### 13.1 方針の変更点
+
+- **ソースは読み取り専用の参照**に格下げ。手編集は「セッションが空の時の一度だけ（seed）」にのみ許可。以降はすべて AI 提案 → Apply で変更する。未ログの直接編集を排除し、「Dialogue as Asset」を破綻なく保つ。
+- **要求仕様タブを新設**（SR-080）。このモデル分の短い要求仕様文（目安 4000 字、上限 8000 字）を、セッション中は読み取り専用で常時参照できる。レビュー後の自然言語反映は ModelLogue の外で行う（ADR-008 境界維持）。
+- **モデル生成ボタン（SR-082）**: 要求仕様文を込めてチャットへ「初版モデルを作って」と投げる shortcut。通常のチャット経路を使うので意図は対話ログに残る。
+- **EBNF タブは廃止**。代わりにダウンロードリンク（SR-081）で静的ファイルを提供。
+- **提案の視覚化**: `SourceDiffView` は廃止し、モデル図 before/after の**並置 + 差分オーバーレイ**による `ProposalView` に置き換え（SR-033）。差分は純粋アルゴリズムでモデルレベルに計算（SR-090）。オーバーレイはマーカーと同じネイティブ SVG 層を再利用。
+- **デフォルトマーカーツールを pan に**（SR-012）。セッション開始時はマーカーが無いので select は実質無意味だった。
+
+### 13.2 新しいコンポーネント / ストア
+
+```typescript
+// RequirementsStore — 要求仕様文の保持（セッション中は読み取り専用）
+interface RequirementsStore {
+  requirementsText: string;
+  setRequirementsText: (text: string) => void;  // seed 時のみ有効
+  isSeedable: () => boolean;                    // text が空 かつ source が空 の時 true
+  characterCount: () => number;                 // UI の文字数表示用
+}
+```
+
+`RequirementsStore.setRequirementsText` は内部で `isSeedable()` をチェックし、ロック済みなら no-op（開発時は console.warn）。
+
+```typescript
+// modelDiff — 純粋関数（SR-090）
+interface ModelDiff {
+  addedStates: State[];
+  removedStates: State[];
+  changedStates: { before: State; after: State }[];
+  addedTransitions: Transition[];
+  removedTransitions: Transition[];
+  changedTransitions: { before: Transition; after: Transition }[];
+}
+
+function diffModels(before: StateMachineModel, after: StateMachineModel): ModelDiff;
+```
+
+`src/engines/modelDiff.ts` に配置。I/O もフレームワーク依存もなし。
+
+```typescript
+// ProposalView — チャットメッセージ内で提案を視覚化
+interface ProposalViewProps {
+  currentSource: string;
+  suggestedSource: string;       // SR-032 で抽出済み
+  onApply: () => void;
+  messageId: string;
+}
+```
+
+責務: 提案ソースに対して PlantUML Server にもう一度レンダリング要求を出し、返ってきた SVG の上に `diffModels` の結果をマッピングしたオーバーレイを描く。レイアウトは現モデル SVG との左右並置。オーバーレイは既存の `MarkerShape` / `MarkerOverlay` 層と同じ `SvgCoordinateExtractor` の出力を再利用する。
+
+### 13.3 セッションブートストラップ（SR-083）
+
+```
+URL ?requirements=...&source=...&sessionName=...
+  OR
+<input type="file"> → JSON { requirementsText?, plantUmlSource?, sessionName? }
+  ↓
+SessionStore.bootstrap({...}) 
+  → RequirementsStore.setRequirementsText (空でなければロック)
+  → SessionStore.updateSource (空でなければロック)
+  → その後は通常のレビュー（全 seed 消費済み）
+```
+
+URL パラメータは長文に向かないので、長い要求仕様の渡し方は `postMessage` やファイル import を推奨（n8n 側から投入する想定）。
+
+### 13.4 タブ構成の変更
+
+`AnalysisPanel` のタブセット:
+
+```
+v7.0:  [ Source | S×E | S×S | EBNF(placeholder) ]
+v7.1:  [ Requirements | Source | S×E | S×S ]
+```
+
+EBNF は Header か Help メニューに「EBNF をダウンロード」アクションとして移動。
+
+### 13.5 データモデルの追加
+
+`ReviewSession` に `requirementsText: string` を追加（エクスポート JSON に含まれる）。`sourceHistory` に相当する `requirementsHistory` は **v7.1 では持たない**（text は seed 時点で固定される運用）。
+
+### 13.6 n8n チャット I/F の追加フィールド
+
+既存の `ChatRequest` に `requirementsText?: string` を追加。n8n 側は要求仕様があれば system prompt 冒頭に注入する運用（具体のプロンプト設計は n8n ワークフロー側の話なので本設計書では指定しない）。
+
+### 13.7 ADR への影響
+
+- **ADR-008 は維持**。v7.1 の補則（短い要求仕様断片の受け取り口だけを本体に設け、大抽出と再導出は外部に残す）を ADR-008 YAML の `v7_1_amendment` ブロックに追記済み。
+- 新規 ADR は作らない。
+
+### 13.8 実装順の目安
+
+1. `RequirementsStore` + Requirements タブ（読み取り・seed 編集）
+2. SR-012 のデフォルトを pan に、EBNF タブを download リンクに置換
+3. `SourceEditor` を読み取り専用モードに変更（seed 編集は session が空の時のみ）
+4. `modelDiff` エンジンの純粋実装 + ユニットテスト（SR-090）
+5. `ProposalView`（SVG 再生成 + オーバーレイ）で `ChatPanel` の既存ソース提案表示を置き換える
+6. `SessionStore.bootstrap` と URL / ファイル import の I/F（SR-083）
+7. `exportSession` に `requirementsText` を含める
+
+---
+
+## 14. v7.2 変更（planned）
+
+v7.2 は v7.1 のスモークテストで判明した UX 課題を解消する。仕様の骨格は変えず、状態遷移と UI 配置・文言を直す。
+
+### 14.1 セッション状態を SEED / REVIEW の 2 フェーズに明確化
+
+v7.1 では「source が非空」を lock 条件にしていたため、**シード時に文法エラー入りの PlantUML を貼ると再編集できなくなって詰む**問題があった。v7.2 では SEED → REVIEW の状態遷移を**最初の successful parse**で起こす。
+
+```typescript
+// SessionStore に追加
+interface SessionStore {
+  // ...
+  hasEstablishedModel: boolean;          // SEED → REVIEW フラグ（true 化したら戻らない）
+  markModelEstablished: () => void;      // model parse が成功した瞬間に呼ぶ
+}
+```
+
+`markModelEstablished` は **modelStore.parseSource が成功（model !== null）した瞬間に呼ばれる**（modelStore から sessionStore に通知、または selector で派生）。`SourceEditor` と `RequirementsTab` の `isSeedable` 判定はこのフラグを参照する。
+
+### 14.2 Undo / Redo（diagram toolbar に移設）
+
+```typescript
+interface SessionStore {
+  sourceHistory: SourceSnapshot[];   // undo stack
+  redoStack: SourceSnapshot[];       // 新規
+  undoSource: () => void;            // history → redoStack へ push
+  redoSource: () => void;            // redoStack → history へ push
+}
+```
+
+ルール: **applyProposal / updateSource / bootstrap が走ると redoStack をクリア**（新しい分岐が canonical になる）。
+
+UI: `MarkerToolbar` の右隣に `↶ Undo` / `↷ Redo` を 2 ボタンで配置。enable/disable で affordance は維持（hide しない）。
+
+### 14.3 Save dialog（CloseSessionDialog → SaveAndFinishDialog）
+
+ファイル名・コンポーネント名も改名。ダイアログには **「This file will contain」のチェックリスト**を出す:
+
+- Final PlantUML source — the model you ended up with
+- Requirements text — what you started from
+- Full chat log — the dialogue that shaped the model
+- All applied source snapshots — every step of the model's evolution
+- Markers — review annotations on the diagram
+- Outcome and optional note
+- Session metadata
+
+主アクション: **Download JSON**（旧「セッション終了」相当の主操作だが、ファイル生成であることが明示される）。
+
+### 14.4 Open saved review（旧 Seed Import）
+
+Header ボタン名を `Seed Import` → `Open saved review…` に変更。`bootstrapFromBundle` を以下のいずれの shape も受理するように拡張:
+
+- **SeedBundle**: `{ requirementsText?, plantUmlSource?, sessionName? }`（外部ワークフロー由来）
+- **ReviewSession**: Save & finish が出力する完全な ReviewSession JSON。importer は `requirementsText` / `plantUmlSource` / `sessionName` だけを抽出し、`messages` / `sourceHistory` / `markers` / `outcome` は破棄（Volatile Canvas を維持）
+
+判定ロジック: パース後の object に `messages` フィールドがあれば ReviewSession として扱い、抽出 → SeedBundle 化 → 既存パスへ。
+
+### 14.5 DiagramView エンプティステート（SR-070）
+
+`currentSource.trim() === ''` の時:
+- **PlantUML Server を呼ばない**（welcome image を抑止）
+- 中央に英語の案内: *"No model yet. Describe what the model should do in the Requirements tab, then press Generate model — or paste a PlantUML source into the Source tab."*
+- マーカーツールバーとオーバーレイは非表示
+
+### 14.6 個別エクスポート（SR-100 / SR-101）
+
+新規ヘルパー: `src/services/clipboard.ts`（Copy with toast）と `src/engines/matrixSerializer.ts`（matrix → TSV / CSV）。
+
+```typescript
+// matrixSerializer.ts
+export function matrixToTsv(m: MatrixData): string;  // clipboard 用
+export function matrixToCsv(m: MatrixData): string;  // file 用 (RFC 4180)
+```
+
+UI: SourceEditor のヘッダ右に `Copy` / `Save .puml`、MatrixView のヘッダ右に `Copy` / `Save .csv`。共通の小さなコンポーネント `<ExportActions />` を作って 2 ボタンを統一。
+
+### 14.7 英語 UI 統一
+
+文言マッピングは Requirements_Specification.md 側に記載。コード上は CloseSessionDialog と Header の Outcome バッジ、Status Bar、ProposalView/Modal の日本語残りを英語化。i18next は引き続き未導入（deferred）。
+
+### 14.8 実装順
+
+1. SessionStore に `hasEstablishedModel` / `redoStack` / `redoSource` 追加
+2. modelStore.parseSource 成功時に sessionStore に通知（subscribe か派生 selector）
+3. SourceEditor / RequirementsTab を新 lock 条件に
+4. ChatPanel から Undo を撤去、MarkerToolbar 横に Undo/Redo 配置
+5. DiagramView エンプティステート（source 空時は SVG fetch しない）
+6. Header の文言と `Open saved review` 化
+7. SaveAndFinishDialog にリネーム＋ contents checklist
+8. bootstrapFromBundle が ReviewSession 形式も受理
+9. matrixSerializer + clipboard helper、Source タブ + MatrixView に Copy/Save 配置
+10. ProposalView/Modal/Outcome バッジ英語化
+11. tsc / vitest / build
+

@@ -1,13 +1,20 @@
-// Extract state positions from PlantUML-generated SVG
+// Extract state positions from PlantUML-generated SVG.
 //
-// PlantUML state diagram SVG structure:
-//   - Each state is a <g> containing:
-//     - <rect rx="12.5" ...> (rounded rect for the state box)
-//     - <line> (separator between name area and lower area)
-//     - <text> (state name)
-//   - Initial state [*]: <ellipse fill="#222222"> (single filled circle)
-//   - Final state [*]: two <ellipse> elements (outer hollow + inner filled)
-//   - Links: <g class="link" data-entity-1="..." data-entity-2="...">
+// Pure function: parse the SVG string, walk each shape's ancestor chain,
+// sum every `translate(tx, ty)` transform encountered, add that to the
+// shape's local x/y. PlantUML state diagrams only use translate
+// transforms, so summation is complete for the supported subset.
+//
+// Earlier versions tried off-screen DOM insertion + getBoundingClientRect
+// + getScreenCTM. That path was fragile in practice (empty results for
+// hidden holders in some browsers, unexpected null CTMs, etc.), so the
+// project chose to fall back to this predictable pure-function approach.
+//
+// PlantUML state-diagram SVG shape (for matching):
+//   - Each state is a <g> containing <rect> (rounded) and <text>
+//   - Initial state [*]: single filled <ellipse>
+//   - Final state [*]: two concentric <ellipse> elements
+//   - Links: <g class="link" ...>
 
 import type { StateMachineModel } from '../types/stateMachine';
 
@@ -20,59 +27,111 @@ export interface Coordinates {
 
 export type CoordinateMap = Map<string, Coordinates>;
 
+// Match every translate() occurrence in a transform attribute. Values
+// may be comma- or whitespace-separated, with an optional second
+// argument (defaults to 0 per SVG spec).
+const TRANSLATE_PATTERN =
+  /translate\s*\(\s*([-+\d.eE]+)(?:[\s,]+([-+\d.eE]+))?\s*\)/g;
+
+function sumAncestorTranslate(
+  el: Element,
+  root: Element
+): { tx: number; ty: number } {
+  let tx = 0;
+  let ty = 0;
+  let current: Element | null = el;
+  while (current && current !== root) {
+    const transform = current.getAttribute('transform');
+    if (transform) {
+      TRANSLATE_PATTERN.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = TRANSLATE_PATTERN.exec(transform)) !== null) {
+        tx += parseFloat(m[1]);
+        ty += parseFloat(m[2] ?? '0');
+      }
+    }
+    current = current.parentElement;
+  }
+  return { tx, ty };
+}
+
 export function extractCoordinates(
   svgString: string,
   model: StateMachineModel
 ): CoordinateMap {
   const result: CoordinateMap = new Map();
+  if (!svgString) return result;
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const root = doc.documentElement;
+  if (!root || root.tagName !== 'svg') return result;
 
-  // Strategy: find <g> groups that contain both <rect> and <text>,
-  // then match text content to state labels/IDs
-  const groups = doc.querySelectorAll('g');
-
-  for (const g of groups) {
-    // Skip link groups
+  // Normal states: scan every <g>'s direct children in DOM order and
+  // pair each state-body <rect> (identified by the `rx` rounded-corner
+  // attribute PlantUML always sets on state bodies) with the NEXT
+  // <text> sibling.
+  //
+  // Why the pair walk: in the default top-to-bottom layout PlantUML
+  // wraps each state in its own <g> with exactly [rect, text] as
+  // children. But with `left to right direction`, ALL states become
+  // flat siblings of a single outer <g>, interleaved as
+  // rect/text/rect/text/... An earlier implementation that took only
+  // `:scope > rect` + `:scope > text` from each <g> missed every
+  // state after the first in the horizontal case.
+  const allGroups = Array.from(root.querySelectorAll('g'));
+  for (const g of allGroups) {
     if (g.classList.contains('link')) continue;
+    const children = Array.from(g.children);
+    for (let i = 0; i < children.length; i++) {
+      const rect = children[i];
+      if (rect.tagName !== 'rect') continue;
+      if (!rect.hasAttribute('rx')) continue;
 
-    const rect = g.querySelector('rect');
-    const text = g.querySelector('text');
-    if (!rect || !text) continue;
+      // Next <text> before the next state rect.
+      let text: Element | null = null;
+      for (let j = i + 1; j < children.length; j++) {
+        const sib = children[j];
+        if (sib.tagName === 'text') {
+          text = sib;
+          break;
+        }
+        if (sib.tagName === 'rect' && sib.hasAttribute('rx')) break;
+      }
+      if (!text) continue;
 
-    const textContent = text.textContent?.trim();
-    if (!textContent) continue;
+      const textContent = text.textContent?.trim();
+      if (!textContent) continue;
 
-    // Match to a state by label or ID
-    const state = model.states.find(
-      (s) =>
-        s.type === 'normal' &&
-        (s.label === textContent || s.id === textContent)
-    );
-    if (!state) continue;
+      const state = model.states.find(
+        (s) =>
+          s.type === 'normal' &&
+          (s.label === textContent || s.id === textContent)
+      );
+      if (!state) continue;
 
-    const x = parseFloat(rect.getAttribute('x') ?? '0');
-    const y = parseFloat(rect.getAttribute('y') ?? '0');
-    const width = parseFloat(rect.getAttribute('width') ?? '0');
-    const height = parseFloat(rect.getAttribute('height') ?? '0');
-
-    if (width > 0 && height > 0) {
-      result.set(state.id, { x, y, width, height });
+      const { tx, ty } = sumAncestorTranslate(rect, root);
+      const x = parseFloat(rect.getAttribute('x') ?? '0') + tx;
+      const y = parseFloat(rect.getAttribute('y') ?? '0') + ty;
+      const width = parseFloat(rect.getAttribute('width') ?? '0');
+      const height = parseFloat(rect.getAttribute('height') ?? '0');
+      if (width > 0 && height > 0) {
+        result.set(state.id, { x, y, width, height });
+      }
     }
   }
 
-  // Handle pseudo-states (initial/final) via ellipse elements
-  const ellipses = doc.querySelectorAll('ellipse');
-  const processedEllipses = new Set<Element>();
+  // Pseudo-states via <ellipse>. Final: two concentric at the same
+  // center. Initial: a single filled ellipse.
+  const ellipses = Array.from(root.querySelectorAll('ellipse'));
+  const processed = new Set<Element>();
 
-  // Final state: two ellipses at same center (outer hollow + inner filled)
-  // Identify finals first (they have pairs)
   const ellipsesByCenter = new Map<string, Element[]>();
   for (const el of ellipses) {
-    const cx = el.getAttribute('cx') ?? '0';
-    const cy = el.getAttribute('cy') ?? '0';
-    const key = `${cx},${cy}`;
+    const { tx, ty } = sumAncestorTranslate(el, root);
+    const cx = parseFloat(el.getAttribute('cx') ?? '0') + tx;
+    const cy = parseFloat(el.getAttribute('cy') ?? '0') + ty;
+    const key = `${cx.toFixed(2)},${cy.toFixed(2)}`;
     const list = ellipsesByCenter.get(key) ?? [];
     list.push(el);
     ellipsesByCenter.set(key, list);
@@ -80,12 +139,12 @@ export function extractCoordinates(
 
   for (const [, group] of ellipsesByCenter) {
     if (group.length >= 2) {
-      // Final state: two ellipses at same center
       const finalState = model.states.find((s) => s.type === 'final');
-      if (finalState) {
-        const el = group[0]; // use the larger one
-        const cx = parseFloat(el.getAttribute('cx') ?? '0');
-        const cy = parseFloat(el.getAttribute('cy') ?? '0');
+      if (finalState && !result.has(finalState.id)) {
+        const el = group[0];
+        const { tx, ty } = sumAncestorTranslate(el, root);
+        const cx = parseFloat(el.getAttribute('cx') ?? '0') + tx;
+        const cy = parseFloat(el.getAttribute('cy') ?? '0') + ty;
         const rx = parseFloat(el.getAttribute('rx') ?? '10');
         const ry = parseFloat(el.getAttribute('ry') ?? '10');
         result.set(finalState.id, {
@@ -94,20 +153,20 @@ export function extractCoordinates(
           width: rx * 2,
           height: ry * 2,
         });
-        group.forEach((e) => processedEllipses.add(e));
+        group.forEach((e) => processed.add(e));
       }
     }
   }
 
-  // Initial state: single filled ellipse not yet processed
   for (const el of ellipses) {
-    if (processedEllipses.has(el)) continue;
+    if (processed.has(el)) continue;
     const fill = el.getAttribute('fill') ?? '';
     if (fill && fill !== 'none') {
       const initialState = model.states.find((s) => s.type === 'initial');
       if (initialState && !result.has(initialState.id)) {
-        const cx = parseFloat(el.getAttribute('cx') ?? '0');
-        const cy = parseFloat(el.getAttribute('cy') ?? '0');
+        const { tx, ty } = sumAncestorTranslate(el, root);
+        const cx = parseFloat(el.getAttribute('cx') ?? '0') + tx;
+        const cy = parseFloat(el.getAttribute('cy') ?? '0') + ty;
         const rx = parseFloat(el.getAttribute('rx') ?? '10');
         const ry = parseFloat(el.getAttribute('ry') ?? '10');
         result.set(initialState.id, {
@@ -117,7 +176,7 @@ export function extractCoordinates(
           height: ry * 2,
         });
       }
-      break; // first filled ellipse is the initial state
+      break;
     }
   }
 

@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { parse } from '../../parsers/stateMachineParser';
 import type { ChatMessage } from '../../types/session';
+import { ProposalView } from './ProposalView';
 
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages);
   const isSending = useChatStore((s) => s.isSending);
   const lastError = useChatStore((s) => s.lastError);
   const sendMessage = useChatStore((s) => s.sendMessage);
-  const sourceHistory = useSessionStore((s) => s.sourceHistory);
 
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -30,9 +31,8 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      <div className="px-3 py-2 border-b border-gray-200 text-sm font-medium text-gray-700 shrink-0 flex items-center justify-between">
-        <span>Chat</span>
-        {sourceHistory.length > 0 && <UndoButton />}
+      <div className="px-3 py-2 border-b border-gray-200 text-sm font-medium text-gray-700 shrink-0">
+        Chat
       </div>
 
       <div
@@ -98,6 +98,39 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
   const isApplied = message.applied === true;
 
+  const handleApply = () => {
+    if (!message.suggestedSource) return;
+    // SR-033 (v7.2): freeze the before SOURCE on the message before the
+    // apply mutates the live source. The before SVG is rederived from
+    // this source on render, not snapshotted, so coordinate extraction
+    // is guaranteed to use a (svg, source) pair that came from the
+    // same render. (Snapshotting the live SVG could capture a stale
+    // image because PlantUML Server renders are debounced.)
+    const beforeSource = useSessionStore.getState().currentSource;
+    applyProposal(message.id, message.suggestedSource);
+    markApplied(message.id, { beforeSource });
+  };
+
+  // SR-034 (v7.2): auto-apply the very first proposal when the session
+  // source is still empty — there's nothing to compare against, so
+  // requiring a user click is noise. Gated on parse success so an
+  // unparseable first proposal does NOT poison the session.
+  useEffect(() => {
+    if (
+      message.role !== 'assistant' ||
+      !message.suggestedSource ||
+      message.applied
+    ) {
+      return;
+    }
+    if (useSessionStore.getState().currentSource.trim() !== '') return;
+    const { model, errors } = parse(message.suggestedSource);
+    if (!model || errors.length > 0) return;
+    handleApply();
+    // Run only when this message first mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -113,15 +146,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           </div>
         ) : (
           <AssistantContent
-            content={message.content}
-            suggestedSource={message.suggestedSource}
+            message={message}
             isApplied={isApplied}
-            onApply={() => {
-              if (message.suggestedSource) {
-                applyProposal(message.id, message.suggestedSource);
-                markApplied(message.id);
-              }
-            }}
+            onApply={handleApply}
           />
         )}
       </div>
@@ -130,21 +157,48 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 }
 
 function AssistantContent({
-  content,
-  suggestedSource,
+  message,
   isApplied,
   onApply,
 }: {
-  content: string;
-  suggestedSource?: string;
+  message: ChatMessage;
   isApplied: boolean;
   onApply: () => void;
 }) {
-  // Remove the ```plantuml block from the display text since we show
-  // it separately with the Apply button.
-  const displayText = suggestedSource
-    ? content.replace(/```plantuml\s*\n[\s\S]*?```/, '').trim()
-    : content;
+  const liveSource = useSessionStore((s) => s.currentSource);
+
+  // For an applied message: use the source snapshotted at apply time so
+  // the diff stays anchored to "what THIS proposal actually changed".
+  // For a still-pending proposal: use the live source so the user can
+  // judge it against the latest model.
+  const beforeSource = message.frozenBeforeSource ?? liveSource;
+
+  // SR-034 (v7.2): initial-generation proposals have no meaningful
+  // "before" — don't render the before/after Proposal view at all for
+  // them. Applies both to messages that have already been auto-applied
+  // (frozenBeforeSource captured as empty) AND to messages that WILL
+  // be auto-applied shortly (live source empty, proposal parses).
+  const isInitialGen = useMemo(() => {
+    if (message.applied && !message.frozenBeforeSource?.trim()) return true;
+    if (
+      !message.applied &&
+      message.suggestedSource &&
+      liveSource.trim() === ''
+    ) {
+      const r = parse(message.suggestedSource);
+      return r.model !== null && r.errors.length === 0;
+    }
+    return false;
+  }, [
+    message.applied,
+    message.frozenBeforeSource,
+    message.suggestedSource,
+    liveSource,
+  ]);
+
+  const displayText = message.suggestedSource
+    ? message.content.replace(/```plantuml\s*\n[\s\S]*?```/, '').trim()
+    : message.content;
 
   return (
     <div>
@@ -153,43 +207,15 @@ function AssistantContent({
           {displayText}
         </div>
       )}
-      {suggestedSource && (
-        <div className="border-t border-gray-200 bg-gray-50 rounded-b-lg">
-          <div className="px-3 py-1.5 flex items-center justify-between">
-            <span className="text-xs text-gray-500">
-              PlantUML修正案
-            </span>
-            {isApplied ? (
-              <span className="text-xs text-green-600 font-medium">
-                ✓ Applied
-              </span>
-            ) : (
-              <button
-                onClick={onApply}
-                className="px-2 py-0.5 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700"
-              >
-                Apply
-              </button>
-            )}
-          </div>
-          <pre className="px-3 py-2 text-xs text-gray-600 overflow-auto max-h-40 border-t border-gray-200">
-            {suggestedSource}
-          </pre>
-        </div>
+      {message.suggestedSource && !isInitialGen && (
+        <ProposalView
+          currentSource={beforeSource}
+          suggestedSource={message.suggestedSource}
+          isApplied={isApplied}
+          onApply={onApply}
+        />
       )}
     </div>
   );
 }
 
-function UndoButton() {
-  const undoSource = useSessionStore((s) => s.undoSource);
-  return (
-    <button
-      onClick={undoSource}
-      title="Undo last applied change"
-      className="px-2 py-0.5 text-xs font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-    >
-      ↩ Undo
-    </button>
-  );
-}

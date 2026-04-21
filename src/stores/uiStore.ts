@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 
-export type AnalysisTab = 'source' | 'state-event' | 'state-state' | 'ebnf';
+export type AnalysisTab =
+  | 'requirements'
+  | 'source'
+  | 'state-event'
+  | 'state-state';
 
 interface UiStore {
   analysisPanelHeight: number;
@@ -22,7 +26,7 @@ interface UiStore {
 export const useUiStore = create<UiStore>((set) => ({
   analysisPanelHeight: 250,
   analysisPanelCollapsed: false,
-  activeAnalysisTab: 'source',
+  activeAnalysisTab: 'requirements',
   chatPanelWidth: 320,
 
   plantUmlStatus: 'disconnected',

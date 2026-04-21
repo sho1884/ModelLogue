@@ -49,6 +49,14 @@ const HISTORY_STATE_PATTERN = /\[H\*?\]/;
 const DOT_NOTATION_PATTERN =
   /(?:^|\s)[\w\u3040-\u9FFF]+\.[\w\u3040-\u9FFF]+\s*(?:-->|->)|(?:-->|->)\s*[\w\u3040-\u9FFF]+\.[\w\u3040-\u9FFF]+/;
 
+// Non-semantic PlantUML directives we accept but do nothing with.
+// These affect presentation only (styling, visibility hints, rendering
+// direction), not the state-machine model itself, so silently skipping
+// them keeps legitimate AI-generated proposals parseable while still
+// enforcing the semantic subset (ADR-009).
+const IGNORED_DIRECTIVE_PATTERN =
+  /^(?:hide\b|show\b|skinparam\b|!theme\b|!pragma\b|!include\b|!define\b|scale\b|title\b|caption\b|header\b|footer\b|mainframe\b|legend\b|end\s+legend\b|note\b|end\s+note\b|left\s+to\s+right\s+direction\b|top\s+to\s+bottom\s+direction\b)/i;
+
 export function parseStateMachine(source: string): ParseResult {
   const errors: ParseError[] = [];
   const stateMap = new Map<string, State>();
@@ -86,6 +94,31 @@ export function parseStateMachine(source: string): ParseResult {
     }
 
     if (!insideBlock) continue;
+
+    // Tolerate (but ignore) non-semantic PlantUML directives. The AI
+    // occasionally emits these even when told not to (they're common in
+    // tutorials, so the model learned them). Since they don't affect the
+    // state-machine semantics, treating them as syntax errors would
+    // break legitimate proposals for no benefit.
+    //
+    // Examples covered:
+    //   hide empty description
+    //   hide stereotype
+    //   skinparam ...
+    //   !theme cerulean
+    //   !pragma useVerticalIf on
+    //   scale 1.5
+    //   title / caption / header / footer ...
+    //   left to right direction
+    //   top to bottom direction
+    //   mainframe ...
+    //   note ... / end note   ← visual only, not modeled
+    //
+    // ADR-009's hard rejections (history, orthogonal, dot-notation,
+    // nested composites) stay as errors below.
+    if (IGNORED_DIRECTIVE_PATTERN.test(raw)) {
+      continue;
+    }
 
     // Rejected constructs (ADR-009)
     if (currentParentId !== null && ORTHOGONAL_REGION_PATTERN.test(raw)) {

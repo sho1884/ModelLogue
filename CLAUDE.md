@@ -34,7 +34,9 @@ ModelLogue/
 │   │   └── test_strategy.yaml
 │   ├── Traceability.md         # トレーサビリティ（Mermaid系統図＋マトリクス）
 │   ├── architecture.md         # アーキテクチャ設計書
-│   └── Security_Design.md      # セキュリティ設計書
+│   ├── Security_Design.md      # セキュリティ設計書
+│   ├── ADR_Index.md            # ADR一覧（adrスキルで自動生成）
+│   └── adr/                    # ADR本体（YAML）。`adr` スキル経由で追加・更新
 ├── n8n/
 │   └── workflows/              # n8n workflow templates (JSON)
 ├── Prototype/                  # プロトタイプコード（本番とは隔離）
@@ -43,11 +45,11 @@ ModelLogue/
 │   ├── components/             # React コンポーネント
 │   ├── parsers/                # PlantUMLサブセットパーサー
 │   ├── engines/                # 純粋アルゴリズム（マトリクス生成、SVG座標抽出）
-│   ├── services/               # 外部サービス連携（PlantUML, n8n）
+│   ├── services/               # 外部サービス連携（PlantUML, n8n, markerContext）
 │   ├── stores/                 # Zustand ストア
 │   ├── types/                  # TypeScript 型定義
-│   ├── grammars/               # EBNF 静的定義
-│   └── i18n/                   # 国際化リソース
+│   └── grammars/               # EBNF 静的定義（?raw import で文字列として利用）
+│                               # 注: i18n/ は Phase 1 では未実装（deferred）
 └── tests/                      # テスト（unit, golden）
 ```
 
@@ -82,9 +84,9 @@ ModelLogue/
 
 ## Internationalization
 
-- UI: English and Japanese
-- Use i18next for translation
+- Target: English and Japanese UI via i18next
 - PlantUML keywords: English only (no localization)
+- **Status (Phase 1)**: deferred. UI strings are currently hardcoded in Japanese/English ad hoc. Introduce i18next before adding a third language or when a user-facing language toggle is required.
 
 ## 技術スタック
 

@@ -25,8 +25,17 @@ export interface ChatRequest {
   userMessage: string;
   /** Human-readable marker + coordinate context (SR-022). */
   markerContext: string;
-  /** EBNF grammar that the AI must follow when generating PlantUML (SR-050). */
+  /** EBNF grammar that the AI must follow when generating PlantUML (SR-022). */
   grammarSpec: string;
+  /** Short requirements fragment scoped to this model (SR-030 / SR-080, v7.1). */
+  requirementsText?: string;
+  /**
+   * Language the AI should respond in (SR-030, v7.2). 'ja' or 'en',
+   * derived from the requirements text or the user's first message.
+   * The n8n system prompt is expected to honor this so replies stay
+   * in one language.
+   */
+  responseLanguage?: 'ja' | 'en';
 }
 
 export interface ChatResponse {
@@ -39,26 +48,102 @@ export interface ChatResponse {
   suggestedSource?: string;
 }
 
+// Status codes that signal a transient upstream issue (Gemini 503,
+// gateway timeouts, etc.). One client-side retry catches the typical
+// short capacity blip without making the user re-send.
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const RETRY_DELAY_MS = 1500;
+
+function isTransientError(err: unknown): boolean {
+  // fetch() rejects with TypeError on network failure / CORS / DNS.
+  return err instanceof TypeError;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Send a chat request to the n8n webhook. Returns the AI response.
- * Throws on network errors or non-2xx responses.
+ * One automatic retry on transient upstream errors (502/503/504 or
+ * network failure); after that, throws with a human-readable message.
+ *
+ * Debug harness: when VITE_USE_MOCK_AI is set, route through the local
+ * mock so tests / scenario replay don't burn real API quota. See
+ * Doc/test/debug_harness.md.
  */
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
-  const url = `${N8N_BASE_URL}${CHAT_WEBHOOK_PATH}`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `n8n chat webhook returned ${response.status} ${response.statusText}`
-    );
+  if (
+    typeof import.meta !== 'undefined' &&
+    import.meta.env?.VITE_USE_MOCK_AI === 'true'
+  ) {
+    const { mockChat } = await import('./mockAi');
+    return mockChat(request);
   }
+  const url = `${N8N_BASE_URL}${CHAT_WEBHOOK_PATH}`;
+  const body = JSON.stringify(request);
 
-  const data = (await response.json()) as unknown;
-  return normalizeResponse(data);
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+
+      if (TRANSIENT_STATUSES.has(response.status)) {
+        lastError = new Error(
+          `n8n returned ${response.status} (upstream is busy). The AI service may be temporarily unavailable.`
+        );
+        if (attempt === 0) {
+          await sleep(RETRY_DELAY_MS);
+          continue;
+        }
+        throw lastError;
+      }
+
+      if (!response.ok) {
+        // Try to read a short snippet of the error body for context.
+        let detail = '';
+        try {
+          detail = (await response.text()).slice(0, 200);
+        } catch {
+          /* ignore */
+        }
+        throw new Error(
+          `n8n chat webhook returned ${response.status} ${response.statusText}` +
+            (detail ? ` — ${detail}` : '')
+        );
+      }
+
+      // Read as text first so an empty body / non-JSON response doesn't
+      // surface as an opaque "Unexpected end of JSON input".
+      const raw = await response.text();
+      if (raw.trim() === '') {
+        throw new Error(
+          'n8n returned an empty response. Check the workflow output (the AI service may have failed silently).'
+        );
+      }
+      let data: unknown;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        // n8n is sometimes configured to return the AI text directly
+        // instead of a JSON object — accept that gracefully.
+        data = raw;
+      }
+      return normalizeResponse(data);
+    } catch (err) {
+      if (isTransientError(err) && attempt === 0) {
+        lastError = err as Error;
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError ?? new Error('n8n chat request failed');
 }
 
 /**
