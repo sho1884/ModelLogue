@@ -1,5 +1,5 @@
 {
-  "name": "ModelLogue Chat Relay",
+  "name": "My workflow 2",
   "nodes": [
     {
       "parameters": {
@@ -8,48 +8,57 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "ml-webhook-1",
-      "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [260, 380],
-      "webhookId": "modellogue-chat"
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "90f4a8b1-c5de-4111-b276-954009c3b2ac",
+      "name": "Webhook",
+      "webhookId": "49a0dc05-46ec-495e-947d-666a4d1286c5"
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.body.userMessage }}\n\nCurrent PlantUML source the user is reviewing:\n```plantuml\n{{ $json.body.currentSource }}\n```\n\nPrior conversation (oldest first):\n{{ $json.body.history ? $json.body.history.map(h => h.role + ': ' + h.content).join('\\n') : '(none)' }}",
+        "text": "={{ $json.body.userMessage }}\n\nPlantUML source:\n{{ $json.body.currentSource }}\n\n{{ $json.body.markerContext }}\n\n{{ $json.body.grammarSpec }}",
         "options": {
-          "systemMessage": "You are an AI assistant for software design reviews. You help users improve PlantUML model diagrams through dialogue.\n\nWhen suggesting changes to a model diagram, ALWAYS provide the complete PlantUML source in a ```plantuml code block.\n\nBe concise and specific in your feedback. Focus on:\n- Completeness: missing states, transitions, or conditions\n- Correctness: invalid transitions or unreachable states\n- Clarity: naming conventions and readability\n- Best practices: proper use of PlantUML syntax\n\nModelLogue supports only a subset of PlantUML state diagrams:\n- Initial/final pseudo-states ([*])\n- State aliases (state \"name\" as alias)\n- Transitions with optional event, guard, and action\n- One-level composite states (state X { ... }), with group escape transitions\n- NOT supported: nested composites, orthogonal regions, history pseudo-states, dot-notation entry"
+          "systemMessage": "You are an AI assistant for software design reviews. You help users improve PlantUML model diagrams through dialogue.\n\nWhen suggesting changes to a model diagram, ALWAYS provide the complete PlantUML source in a ```plantuml code block.\n\nBe concise and specific. Focus on completeness, correctness, clarity, and best practices.\n\nModelLogue supports only a subset of PlantUML state diagrams:\n- Initial/final pseudo-states ([*])\n- State aliases (state \"name\" as alias)\n- Transitions with event, guard, and action\n- One-level composite states (state X { ... }) with group escape transitions\n- NOT supported: nested composites, orthogonal regions, history pseudo-states, dot-notation entry\n\nRespond in the language indicated by `responseLanguage` ('ja' = Japanese, 'en' = English). Use that single language for the entire reply, including any explanations around the proposed PlantUML code block. Never mix languages within one response."
         }
       },
-      "id": "ml-agent-1",
-      "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [520, 380]
+      "typeVersion": 3.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "9b889b42-b7c5-4de0-878f-b37ec6903cd6",
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "maxTries": 5
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
-      "id": "ml-llm-1",
-      "name": "Google Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [520, 580],
+      "position": [
+        80,
+        208
+      ],
+      "id": "c4d55ab3-b561-4ba1-892f-252819821f41",
+      "name": "Google Gemini Chat Model",
       "credentials": {
-        "googleGeminiApi": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Google Gemini account"
+        "googlePalmApi": {
+          "id": "vOF1y10ULa10jXgD",
+          "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { text: $json.output } }}",
         "options": {
           "responseHeaders": {
             "entries": [
@@ -69,30 +78,23 @@
           }
         }
       },
-      "id": "ml-respond-1",
-      "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [820, 380]
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "5c9db548-60f9-4e3f-b7aa-441b3f398069",
+      "name": "Respond to Webhook"
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
         [
           {
             "node": "AI Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "AI Agent": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
@@ -109,14 +111,29 @@
           }
         ]
       ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
-  "tags": [],
+  "versionId": "aed376b6-5195-4609-aba0-b721e5fb77dc",
   "meta": {
-    "instanceId": ""
-  }
+    "templateCredsSetupCompleted": true,
+    "instanceId": "872cd6aa742fdb6c0f599ec59d506b98f8473dd90b11ba83e3ff848edf9ab8c7"
+  },
+  "id": "cPsgHgfxrGkUT4vS",
+  "tags": []
 }
