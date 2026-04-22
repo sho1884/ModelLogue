@@ -42,6 +42,12 @@ export function MainLayout() {
   // empty, do NOT call PlantUML Server — that returns a default welcome
   // image which would mislead users about supported syntax. The empty
   // SVG state is what DiagramView renders the empty-state guide from.
+  //
+  // Depends on both `currentSource` AND `model`: for requirement-type
+  // sessions, the review-state flags ($hide / $deleted) live on the
+  // model and affect SR-114's render-time filter. Toggling a flag must
+  // re-trigger the PlantUML Server fetch even when the source text
+  // itself didn't change.
   useEffect(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -56,7 +62,7 @@ export function MainLayout() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [currentSource, fetchCoordinates]);
+  }, [currentSource, model, fetchCoordinates]);
 
   // SR-103 is state-machine-specific (N-switch testing). Requirement
   // sessions never call the nswitch API.
