@@ -2,9 +2,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| Version | 1.0 |
+| Version | 1.1 |
 | Created | 2026-04-16 |
-| Status | planned |
+| Updated | 2026-04-22 |
+| Status | implemented (v7.4 で nswitch 系シナリオ 4 本を追加) |
 
 ## 1. Purpose / 目的
 
@@ -119,7 +120,11 @@ async function run(scenario) {
 }
 ```
 
-## 4. 初期シナリオ (v1.0)
+## 4. シナリオ一覧 (v1.1)
+
+初版（v1.0）は 01〜03 の UX 検証用シナリオのみ。v1.1 で Test cases タブ（SR-102 / SR-103）の動作確認用に 04〜07 を追加。nswitch の各挙動を手動操作なしで再現できるようにして、人間が目視で確かめたり、結果をスクリーンショット／Copy で持ち出しやすくするのが狙い。
+
+### 4.1 UX 検証 (v1.0)
 
 | id | label | 検証するもの |
 |---|---|---|
@@ -127,7 +132,16 @@ async function run(scenario) {
 | `02-add-remove-change` | ノードの追加・削除・変更 | 差分オーバーレイ (緑/赤/橙) が期待位置に乗るか、件数一致 |
 | `03-composite-and-reask` | 階層追加 + auto-reask | 複合状態の描画、EBNF 違反 → 自動再要求フロー |
 
-それぞれの詳細は `src/debug/scenarios/NN-*.ts` を参照。
+### 4.2 Test cases タブ検証 (v1.1)
+
+| id | label | 検証するもの |
+|---|---|---|
+| `04-nswitch-levels` | N-switch レベル切替（0/1/2） | N セレクタで required chains 件数が増えていく、View: Tests / Coverage トグル、Copy / Save で §6.1/§6.2 の CSV が出る |
+| `05-unreachable-within-cap` | Unreachable — 到達不能状態の検出 | disconnected component を含むモデルで `uncovered` バナーが出る／Coverage ビューで amber 行（status=unreachable-within-cap）が並ぶ |
+| `06-composite-layers` | 複合状態のレイヤ分解 | nswitch の §7.1 レイヤ分解で `top-NNN` と `Operating-NNN` の 2 系統が出る。Coverage ビュー列ヘッダも両レイヤの test_id を持つ |
+| `07-mainloop-cycle-closure` | Mainloop（終了なし）— サイクルクロージャ | `[*]_final` なしの mainloop。§7.4 の cycle closure fallback により、テストの `end` 列が通常状態になる |
+
+それぞれの詳細は `src/debug/scenarios/NN-*.ts` を参照。`04`〜`07` は 1 ステップ（モデル 1 枚を load して Apply）で完結する — Apply 後の Test cases タブを人間が自由に触って確かめる設計。
 
 ## 5. Non-goals / 範囲外
 
