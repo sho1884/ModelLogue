@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modellogue-nswitch"
+version = "0.1.0"
+description = "N-switch coverage test case generator for PlantUML state machines"
+readme = "Requirements_Specification.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ModelLogue" }]
+keywords = ["state-machine", "testing", "n-switch", "plantuml"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = []
+
+[project.scripts]
+modellogue-nswitch = "modellogue_nswitch.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+python_classes = ["Test*"]

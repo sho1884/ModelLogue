@@ -3,9 +3,9 @@
 | Item / 項目 | Content / 内容 |
 |------|---------|
 | Document / 文書 | Requirements Specification — N-switch coverage test case generator |
-| Version | 0.4 (draft) |
+| Version | 0.5 |
 | Created | 2026-04-21 |
-| Status / 状態 | Draft — pre-implementation |
+| Status / 状態 | Implemented (v0.1.0) — reference implementation at `tools/nswitch/src/modellogue_nswitch/` |
 | Language / 実装言語 | **Python** (3.10+) |
 | Related ADR | ADR-009 (one-level composite states), ADR-010 (auxiliary services in the same repo), ADR-011 (strict formats and deterministic conversion) |
 | Canonical CSV | §4.2 defines the **project-wide canonical state-transition-table CSV**. ModelLogue's SR-101 export is required to emit this same format so artifacts round-trip between the GUI, this CLI, and version control. |

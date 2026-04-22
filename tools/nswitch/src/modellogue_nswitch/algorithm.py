@@ -1,0 +1,332 @@
+"""Path-algebra matrix and test case construction.
+
+Implements §7.2 (matrix power over a set-of-sequences semiring) and §7.4
+(greedy test case construction with cycle-closure fallback) of
+``Requirements_Specification.md``.
+"""
+from __future__ import annotations
+
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
+
+from .layers import Layer
+from .model import Transition
+
+
+# A chain is a tuple of transitions. Since Transition is a frozen dataclass
+# with slots, it is hashable — chains can live in sets.
+Chain = tuple[Transition, ...]
+
+
+def required_chains(layer: Layer, n: int) -> list[Chain]:
+    """Return Required[layer] per §7.2 for N ∈ {0, 1, 2}.
+
+    Every chain of length exactly ``n + 1`` that can be formed by composing
+    transitions of ``layer``.
+    """
+    if n not in (0, 1, 2):
+        raise ValueError(f"n must be 0, 1, or 2 (got {n})")
+    a = _build_a(layer)
+    power = a
+    for _ in range(n):
+        power = _matmul(power, a)
+    chains: set[Chain] = set()
+    for _i, row in power.items():
+        for _j, cell in row.items():
+            chains.update(cell)
+    return _sort_chains(chains)
+
+
+# ---------- matrix ----------
+
+Matrix = dict[str, dict[str, set[Chain]]]
+
+
+def _build_a(layer: Layer) -> Matrix:
+    m: Matrix = defaultdict(lambda: defaultdict(set))
+    for t in layer.transitions:
+        m[t.source_state_id][t.target_state_id].add((t,))
+    return m
+
+
+def _matmul(a: Matrix, b: Matrix) -> Matrix:
+    out: Matrix = defaultdict(lambda: defaultdict(set))
+    for i, row in a.items():
+        for k, ak in row.items():
+            b_row = b.get(k)
+            if not b_row:
+                continue
+            for j, bkj in b_row.items():
+                # Concatenate-and-union: ak ⊗ bkj
+                for s_a in ak:
+                    for s_b in bkj:
+                        out[i][j].add(s_a + s_b)
+    return out
+
+
+# ---------- test construction ----------
+
+
+@dataclass(slots=True)
+class TestPath:
+    layer_name: str
+    # The full path's transitions (p1 · c · p2).
+    transitions: tuple[Transition, ...]
+    start: str
+    end: str
+    # The required chain this test was built around.
+    anchor: Chain
+    # True when the path terminates by revisiting a state rather than reaching
+    # the layer's final pseudo-state.
+    closed_on_cycle: bool
+
+
+@dataclass(slots=True)
+class Unreachable:
+    layer_name: str
+    chain: Chain
+    reason: str
+
+
+@dataclass(slots=True)
+class LayerResult:
+    layer: Layer
+    tests: list[TestPath] = field(default_factory=list)
+    unreachable: list[Unreachable] = field(default_factory=list)
+
+
+def build_tests(
+    layer: Layer,
+    n: int,
+    *,
+    max_cycle_unroll: int,
+    require_final: bool,
+) -> LayerResult:
+    """Construct a cover of Required[layer] per §7.4.
+
+    Greedy path cover. Not minimum (NP-hard) but deterministic.
+    """
+    result = LayerResult(layer=layer)
+
+    final_reachable = _any_path(
+        layer,
+        layer.initial_id,
+        {layer.final_id},
+        max_cycle_unroll=max_cycle_unroll,
+    ) is not None
+
+    if require_final and not final_reachable:
+        # Signal unsatisfiable by surfacing every chain; CLI turns this into
+        # exit code 2.
+        for c in required_chains(layer, n):
+            result.unreachable.append(
+                Unreachable(
+                    layer_name=layer.name,
+                    chain=c,
+                    reason="--require-final: no initial→final path exists",
+                )
+            )
+        return result
+
+    chains = required_chains(layer, n)
+    covered: set[Chain] = set()
+    for c in chains:
+        if c in covered:
+            continue
+        p1 = _shortest_path(
+            layer,
+            layer.initial_id,
+            {c[0].source_state_id},
+            max_cycle_unroll=max_cycle_unroll,
+            allow_empty=True,
+        )
+        if p1 is None:
+            result.unreachable.append(
+                Unreachable(
+                    layer_name=layer.name,
+                    chain=c,
+                    reason="no path from initial to chain head within cap",
+                )
+            )
+            continue
+
+        tail_start = c[-1].target_state_id
+        # Try final-reaching suffix first.
+        closed_on_cycle = False
+        p2: tuple[Transition, ...] | None = None
+        if final_reachable:
+            p2 = _shortest_path(
+                layer,
+                tail_start,
+                {layer.final_id},
+                max_cycle_unroll=max_cycle_unroll,
+                # When the tail is already at a final, the empty suffix is valid.
+                allow_empty=True,
+            )
+        if p2 is None:
+            # Fallback: cycle closure. Any suffix that revisits a state the
+            # path has seen counts as a loop closure.
+            visited = _visited_states(p1 + c, layer.initial_id)
+            p2 = _shortest_path(
+                layer,
+                tail_start,
+                visited,
+                max_cycle_unroll=max_cycle_unroll,
+                allow_empty=True,
+            )
+            if p2 is None:
+                result.unreachable.append(
+                    Unreachable(
+                        layer_name=layer.name,
+                        chain=c,
+                        reason="no final-reaching or cycle-closing suffix within cap",
+                    )
+                )
+                continue
+            closed_on_cycle = True
+
+        full = p1 + c + p2
+        end_id = _end_state_of(full, layer.initial_id)
+        result.tests.append(
+            TestPath(
+                layer_name=layer.name,
+                transitions=full,
+                start=layer.initial_id,
+                end=end_id,
+                anchor=c,
+                closed_on_cycle=closed_on_cycle,
+            )
+        )
+        # Mark every length-(n+1) subchain of the emitted path as covered,
+        # so future iterations skip chains already exercised.
+        chain_len = len(c)
+        for i in range(len(full) - chain_len + 1):
+            covered.add(tuple(full[i : i + chain_len]))
+
+    return result
+
+
+def _visited_states(transitions: tuple[Transition, ...], start: str) -> set[str]:
+    """All state ids seen along ``transitions`` starting at ``start``."""
+    seen = {start}
+    for t in transitions:
+        seen.add(t.target_state_id)
+    return seen
+
+
+def _end_state_of(transitions: tuple[Transition, ...], start: str) -> str:
+    if not transitions:
+        return start
+    return transitions[-1].target_state_id
+
+
+# ---------- path finding ----------
+
+
+def _any_path(
+    layer: Layer,
+    source: str,
+    targets: set[str],
+    *,
+    max_cycle_unroll: int,
+) -> tuple[Transition, ...] | None:
+    return _shortest_path(
+        layer, source, targets, max_cycle_unroll=max_cycle_unroll, allow_empty=True
+    )
+
+
+def _shortest_path(
+    layer: Layer,
+    source: str,
+    targets: set[str],
+    *,
+    max_cycle_unroll: int,
+    allow_empty: bool = False,
+) -> tuple[Transition, ...] | None:
+    """BFS shortest path in the transition graph, respecting the cycle cap.
+
+    Returns the path as a tuple of transitions, or ``None`` if no path exists
+    within ``max_cycle_unroll`` traversals of any single transition. If
+    ``source in targets`` and ``allow_empty`` is True, returns an empty tuple.
+    """
+    if allow_empty and source in targets:
+        return ()
+
+    # Adjacency list for speed.
+    adj: dict[str, list[Transition]] = defaultdict(list)
+    for t in layer.transitions:
+        adj[t.source_state_id].append(t)
+
+    # BFS: state = (current_state, transition_counts). We can't key the
+    # visited set by current_state alone because different paths need
+    # different cap-budgets. We use (current_state, frozenset of counts)? That
+    # explodes. A practical alternative: BFS with path-specific counts,
+    # pruning by (state, cap-profile) only approximately.
+    #
+    # For the realistic review-scale models and max_cycle_unroll in the 2–5
+    # range, exhaustive BFS up to a reasonable depth works. We bound total
+    # path length by ``|transitions| * max_cycle_unroll`` as a safety net.
+    max_len = max(1, max_cycle_unroll * max(1, len(layer.transitions)))
+
+    queue: deque[tuple[str, tuple[Transition, ...], dict[Transition, int]]]
+    queue = deque()
+    queue.append((source, (), {}))
+
+    # A per-(state, canonicalized-cap) visited set to prune. Canonicalize the
+    # cap dict by excluding zero counts. This is approximate pruning — we
+    # keep the path-length bound as the hard stop.
+    seen: set[tuple[str, frozenset[tuple[Transition, int]]]] = set()
+
+    while queue:
+        node, path, counts = queue.popleft()
+        if len(path) > max_len:
+            continue
+        key = (node, frozenset(counts.items()))
+        if key in seen:
+            continue
+        seen.add(key)
+
+        for t in adj.get(node, ()):
+            if counts.get(t, 0) + 1 > max_cycle_unroll:
+                continue
+            new_path = path + (t,)
+            if t.target_state_id in targets:
+                return new_path
+            new_counts = dict(counts)
+            new_counts[t] = counts.get(t, 0) + 1
+            queue.append((t.target_state_id, new_path, new_counts))
+
+    return None
+
+
+# ---------- ordering ----------
+
+
+def chain_str(chain: Chain, initial_id: str) -> str:
+    """Canonical string for a chain per §7.5.
+
+    ``<src0> --<event0>--> <tgt0> --<event1>--> ...``
+    """
+    if not chain:
+        return ""
+    parts = [chain[0].source_state_id]
+    for t in chain:
+        ev = t.event if t.event else "()"
+        parts.append(f"--{ev}-->")
+        parts.append(t.target_state_id)
+    return " ".join(parts)
+
+
+def transition_str(t: Transition) -> str:
+    ev = t.event if t.event else "()"
+    return f"{t.source_state_id}--{ev}-->{t.target_state_id}"
+
+
+def _sort_chains(chains: set[Chain]) -> list[Chain]:
+    """Sort by descending length then by canonical chain string (§7.4)."""
+    # All chains here share length N+1; the length key is a no-op but kept for
+    # robustness if we ever mix lengths.
+    return sorted(
+        chains,
+        key=lambda c: (-len(c), tuple(transition_str(t) for t in c)),
+    )
