@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { parse } from '../../parsers/stateMachineParser';
+import {
+  getDefaultModelTypeDefinition,
+  getModelTypeDefinition,
+} from '../../modelTypes/registry';
+
+function parseForActiveType(source: string) {
+  const id = useSessionStore.getState().modelTypeId;
+  const def = getModelTypeDefinition(id) ?? getDefaultModelTypeDefinition();
+  return def.parse(source);
+}
 import type { ChatMessage } from '../../types/session';
 import { ProposalView } from './ProposalView';
 
@@ -124,7 +133,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       return;
     }
     if (useSessionStore.getState().currentSource.trim() !== '') return;
-    const { model, errors } = parse(message.suggestedSource);
+    const { model, errors } = parseForActiveType(message.suggestedSource);
     if (!model || errors.length > 0) return;
     handleApply();
     // Run only when this message first mounts.
@@ -185,7 +194,7 @@ function AssistantContent({
       message.suggestedSource &&
       liveSource.trim() === ''
     ) {
-      const r = parse(message.suggestedSource);
+      const r = parseForActiveType(message.suggestedSource);
       return r.model !== null && r.errors.length === 0;
     }
     return false;

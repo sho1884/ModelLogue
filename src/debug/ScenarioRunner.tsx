@@ -252,7 +252,11 @@ export function ScenarioRunner() {
       currentSource_length: currentSource.length,
       svgString_length: svgString?.length ?? 0,
       live_model_states:
-        liveModel?.states.map((s) => `${s.id}(${s.type})`) ?? null,
+        liveModel && 'states' in (liveModel as object)
+          ? (liveModel as { states: { id: string; type: string }[] }).states.map(
+              (s) => `${s.id}(${s.type})`
+            )
+          : null,
       live_extracted_coords: coords ? Object.fromEntries(coords) : null,
       latest_proposal: {
         id: latestAssistant?.id,

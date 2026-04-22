@@ -76,4 +76,13 @@ export interface ModelTypeDefinition {
    * requirements out (SR-114, SR-115).
    */
   renderPlantUml: (source: string, model: unknown | null) => string;
+
+  /**
+   * Optional model-level diff for the before/after proposal view
+   * (SR-033). State-machine returns its ModelDiff shape; requirement
+   * leaves this undefined in v7.5, which makes ProposalView render the
+   * before/after SVGs without colored overlays (Step 6). Consumers
+   * cast the return type based on the known model type id.
+   */
+  diff?: (before: unknown, after: unknown) => unknown;
 }

@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchSvg } from '../../services/plantUmlService';
-import { parse } from '../../parsers/stateMachineParser';
 import {
   extractCoordinates,
   type CoordinateMap,
 } from '../../engines/svgCoordinateExtractor';
-import { diffModels, isDiffEmpty, type ModelDiff } from '../../engines/modelDiff';
+import { isDiffEmpty, type ModelDiff } from '../../engines/modelDiff';
 import type { StateMachineModel } from '../../types/stateMachine';
 import { ProposalModal } from './ProposalModal';
+import {
+  getDefaultModelTypeDefinition,
+  getModelTypeDefinition,
+} from '../../modelTypes/registry';
+import { useSessionStore } from '../../stores/sessionStore';
+
+const EMPTY_DIFF: ModelDiff = {
+  addedStates: [],
+  removedStates: [],
+  changedStates: [],
+  addedTransitions: [],
+  removedTransitions: [],
+  changedTransitions: [],
+};
 
 // SR-033 (v7.2): visual before/after model comparison.
 // Diff overlays are placed on the side where each affected state still
@@ -68,8 +81,20 @@ export function ProposalView({
   const [rawExpanded, setRawExpanded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const beforeModel = useMemo(() => parse(currentSource).model, [currentSource]);
-  const afterParse = useMemo(() => parse(suggestedSource), [suggestedSource]);
+  const modelTypeId = useSessionStore((s) => s.modelTypeId);
+  const def = useMemo(
+    () => getModelTypeDefinition(modelTypeId) ?? getDefaultModelTypeDefinition(),
+    [modelTypeId]
+  );
+
+  const beforeModel = useMemo(() => def.parse(currentSource).model, [
+    currentSource,
+    def,
+  ]);
+  const afterParse = useMemo(() => def.parse(suggestedSource), [
+    suggestedSource,
+    def,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,24 +118,40 @@ export function ProposalView({
     ])
       .then(([proposedSvg, beforeSvg]) => {
         if (cancelled || !afterParse.model) return;
-        const afterCoords = extractCoordinates(proposedSvg, afterParse.model);
-        const safeBefore: StateMachineModel = beforeModel ?? {
-          states: [],
-          transitions: [],
-          events: [],
-        };
-        const beforeCoords =
-          beforeSvg && beforeModel
-            ? extractCoordinates(beforeSvg, beforeModel)
-            : new Map();
-        // SR-033 (v7.2): diff counts and overlay rectangles must agree.
-        // Pseudo-states (initial/final) have no label so the user can't
-        // connect them to a visible frame; composite groups aren't
-        // framed by extractCoordinates. Restricting the visible diff to
-        // normal states keeps "+N added / −M removed / ~K changed" in
-        // sync with what's actually drawn.
-        const rawDiff = diffModels(safeBefore, afterParse.model);
-        const diff = filterDiffToNormalStates(rawDiff);
+        // Coordinate extraction and the colored overlay are both
+        // state-machine-specific today. For other model types we
+        // still show the side-by-side SVGs but skip the diff overlay
+        // (Step 6 — ModelTypeDefinition.diff is undefined for them).
+        const isStateMachine = modelTypeId === 'state-machine';
+        const afterModelSM = isStateMachine
+          ? (afterParse.model as StateMachineModel)
+          : null;
+        const beforeModelSM = isStateMachine
+          ? (beforeModel as StateMachineModel | null)
+          : null;
+
+        let afterCoords: CoordinateMap = new Map();
+        let beforeCoords: CoordinateMap = new Map();
+        let diff: ModelDiff = EMPTY_DIFF;
+
+        if (isStateMachine && afterModelSM) {
+          afterCoords = extractCoordinates(proposedSvg, afterModelSM);
+          const safeBefore: StateMachineModel = beforeModelSM ?? {
+            states: [],
+            transitions: [],
+            events: [],
+          };
+          beforeCoords =
+            beforeSvg && beforeModelSM
+              ? extractCoordinates(beforeSvg, beforeModelSM)
+              : new Map();
+          // SR-033 (v7.2): diff counts and overlay rectangles must agree.
+          const rawDiff = def.diff
+            ? (def.diff(safeBefore, afterModelSM) as ModelDiff)
+            : EMPTY_DIFF;
+          diff = filterDiffToNormalStates(rawDiff);
+        }
+
         setState({
           kind: 'ready',
           currentSvg: beforeSvg,
@@ -118,7 +159,11 @@ export function ProposalView({
           diff,
           beforeCoords,
           afterCoords,
-          afterModel: afterParse.model,
+          afterModel: (afterModelSM as StateMachineModel) ?? {
+            states: [],
+            transitions: [],
+            events: [],
+          },
         });
       })
       .catch((err) => {
@@ -132,7 +177,7 @@ export function ProposalView({
     return () => {
       cancelled = true;
     };
-  }, [suggestedSource, currentSource, beforeModel, afterParse]);
+  }, [suggestedSource, currentSource, beforeModel, afterParse, def, modelTypeId]);
 
   const diffEmpty = state.kind === 'ready' && isDiffEmpty(state.diff);
 

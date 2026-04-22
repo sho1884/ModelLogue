@@ -7,7 +7,20 @@ import { useMarkerStore } from './markerStore';
 import { useRequirementsStore } from './requirementsStore';
 import { buildMarkerContext } from '../services/markerContext';
 import grammarSpec from '../grammars/stateDiagram.ebnf?raw';
-import { parse } from '../parsers/stateMachineParser';
+import {
+  getDefaultModelTypeDefinition,
+  getModelTypeDefinition,
+} from '../modelTypes/registry';
+import type { StateMachineModel } from '../modelTypes/state-machine/model';
+
+function parseForActiveType(source: string): {
+  model: unknown | null;
+  errors: { line: number; message: string }[];
+} {
+  const id = useSessionStore.getState().modelTypeId;
+  const def = getModelTypeDefinition(id) ?? getDefaultModelTypeDefinition();
+  return def.parse(source);
+}
 
 // SR-030 (v7.2): cap the auto-reask loop so a misbehaving AI can't spin
 // the chat forever. 2 retries ≈ 3 total attempts which comfortably
@@ -75,7 +88,17 @@ async function sendAndAutoReask(
   const currentSource = useSessionStore.getState().currentSource;
   const { model, coordinates } = useModelStore.getState();
   const { markers } = useMarkerStore.getState();
-  const markerContext = buildMarkerContext(markers, coordinates, model);
+  // markerContext's position lookup only knows state-machine shape today;
+  // requirement sessions pass null so no position context is built.
+  const stateMachineModel =
+    model && 'states' in (model as object)
+      ? (model as StateMachineModel)
+      : null;
+  const markerContext = buildMarkerContext(
+    markers,
+    coordinates,
+    stateMachineModel
+  );
   const requirementsText = useRequirementsStore.getState().requirementsText;
 
   const history = get()
@@ -115,7 +138,7 @@ async function sendAndAutoReask(
   // block failed to produce a model at all; a model with warnings is
   // fine.
   if (response.suggestedSource && remainingRetries > 0) {
-    const parseResult = parse(response.suggestedSource);
+    const parseResult = parseForActiveType(response.suggestedSource);
     const parseFailed = !parseResult.model || parseResult.errors.length > 0;
     if (parseFailed) {
       const summary = summariseParseErrors(parseResult.errors);

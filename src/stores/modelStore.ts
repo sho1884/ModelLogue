@@ -12,6 +12,12 @@ import { extractCoordinates } from '../engines/svgCoordinateExtractor';
 import { useSessionStore } from './sessionStore';
 import { getModelTypeDefinition } from '../modelTypes/registry';
 import type { RequirementModel } from '../modelTypes/requirement/model';
+import {
+  ensureDeletedLine,
+  ensureHideLine,
+  removeDeletedLine,
+  removeHideLine,
+} from '../modelTypes/requirement/sourceEdit';
 
 // v7.5 step 5: `model` is typed as a union so stores and components
 // can discriminate via sessionStore.modelTypeId. State-machine-specific
@@ -128,13 +134,24 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   toggleRequirementHidden: (id: string) => {
     const model = get().model;
     if (!isRequirementModel(model)) return;
+    const current = model.requirements.find((r) => r.id === id);
+    if (!current || current.deleted) return;
+    const willBeHidden = !current.hidden;
     const next: RequirementModel = {
       ...model,
       requirements: model.requirements.map((r) =>
-        r.id === id && !r.deleted ? { ...r, hidden: !r.hidden } : r
+        r.id === id ? { ...r, hidden: willBeHidden } : r
       ),
     };
     set({ model: next });
+    // Step 6: sync to currentSource so Save / round-trip preserves the flag.
+    const source = useSessionStore.getState().currentSource;
+    const updated = willBeHidden
+      ? ensureHideLine(source, id)
+      : removeHideLine(source, id);
+    if (updated !== source) {
+      useSessionStore.getState().updateSource(updated, 'review-state');
+    }
   },
 
   markRequirementDeleted: (id: string, reason: string) => {
@@ -155,6 +172,11 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       ),
     };
     set({ model: next });
+    const source = useSessionStore.getState().currentSource;
+    const updated = ensureDeletedLine(source, id, trimmed);
+    if (updated !== source) {
+      useSessionStore.getState().updateSource(updated, 'review-state');
+    }
   },
 
   unmarkRequirementDeleted: (id: string) => {
@@ -167,6 +189,11 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       ),
     };
     set({ model: next });
+    const source = useSessionStore.getState().currentSource;
+    const updated = removeDeletedLine(source, id);
+    if (updated !== source) {
+      useSessionStore.getState().updateSource(updated, 'review-state');
+    }
   },
 }));
 
