@@ -767,13 +767,27 @@ artifact_export:
   SR-102:
     function: "Export generated test cases from the Test cases tab"
     parent: [UR-013]
-    component: TestCasesView (Copy / Save actions)
-    status: deferred
-    deferred_reason: |
-      v7.4 delivers SR-103 (display) only; Copy / Save of the generated
-      test-case CSV follows the same pattern SR-101 established and will
-      be added once SR-103 lands and the tab layout is settled.
-    acceptance_criteria: []
+    component: TestCasesView (Copy / Save actions) + test-case serializer
+    status: implemented
+    notes: |
+      Mirrors SR-101's Copy / Save pattern for the test-case artifact.
+      The canonical test-case CSV format is fixed by
+      `tools/nswitch/Requirements_Specification.md` §6.1 so that files
+      produced from the GUI match `modellogue-nswitch` CLI output byte-
+      for-byte (ADR-011). HTML clipboard payload is an equivalent
+      `<table>` so pasting into Excel / Sheets / Word yields a formatted
+      table — same split the matrix export uses (SR-101 v7.3).
+
+      Scope is the test-case CSV only; the coverage-report CSV (§6.2)
+      stays CLI-only for now, since the current tab UI doesn't render
+      coverage data anyway.
+    acceptance_criteria:
+      - "The Test cases tab toolbar carries Copy and Save .csv actions alongside the N selector"
+      - "Save produces the test-case CSV defined in tools/nswitch/Requirements_Specification.md §6.1 (columns: test_id, layer, length, start, sequence, end, covers)"
+      - "Plain-text clipboard payload contains the same CSV so a paste into a text editor or CI config is directly consumable"
+      - "HTML clipboard payload is an equivalent <table> so Excel / Sheets / Word paste shows a formatted table"
+      - "Filename pattern: modellogue-<sessionName-slug>-testcases-n<N>-<YYYY-MM-DD-HHMM>.csv (N records the current N-switch level)"
+      - "Both actions are disabled while no tests have been generated (loading, idle, or error with no cached result)"
 
   SR-103:
     function: "Display N-switch test cases in a dedicated Analysis panel tab, updated reactively from the current model"

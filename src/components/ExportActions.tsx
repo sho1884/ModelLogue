@@ -11,6 +11,11 @@ interface ExportActionsProps {
   saveLabel?: string;
   copyTitle?: string;
   saveTitle?: string;
+  /**
+   * When true, both buttons render greyed out and ignore clicks. Used by
+   * the Test cases tab to hide the actions until a test list exists.
+   */
+  disabled?: boolean;
 }
 
 export function ExportActions({
@@ -20,6 +25,7 @@ export function ExportActions({
   saveLabel = 'Save',
   copyTitle,
   saveTitle,
+  disabled = false,
 }: ExportActionsProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -32,6 +38,12 @@ export function ExportActions({
     }
     window.setTimeout(() => setFeedback(null), 1500);
   };
+
+  const buttonClass =
+    'px-2 py-0.5 text-xs border rounded ' +
+    (disabled
+      ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+      : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50');
 
   return (
     <div className="flex items-center gap-1 shrink-0">
@@ -49,14 +61,16 @@ export function ExportActions({
       <button
         onClick={handleCopy}
         title={copyTitle}
-        className="px-2 py-0.5 text-xs border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50"
+        disabled={disabled}
+        className={buttonClass}
       >
         {copyLabel}
       </button>
       <button
         onClick={onSave}
         title={saveTitle}
-        className="px-2 py-0.5 text-xs border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50"
+        disabled={disabled}
+        className={buttonClass}
       >
         {saveLabel}
       </button>

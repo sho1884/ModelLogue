@@ -70,7 +70,7 @@ flowchart LR
     subgraph AE["Artifact Export / 個別エクスポート (v7.2–v7.3)"]
         SR100["SR-100<br/>Export PlantUML source (Copy / Save .puml)<br/>PlantUMLソースをコピー／保存"]
         SR101["SR-101<br/>Export canonical transition-table CSV (v7.3)<br/>正規状態遷移表CSVを出力"]
-        SR102["SR-102 ⏳ deferred<br/>Export generated test cases<br/>テストケース出力（SR-103 着地後）"]
+        SR102["SR-102<br/>Export generated test cases (Copy / Save)<br/>テストケースをコピー／保存 (v7.4)"]
     end
 
     subgraph TC["Test Case Display / テストケース表示 (v7.4)"]
@@ -214,7 +214,7 @@ flowchart LR
 | **Artifact Export / 個別エクスポート (v7.2–v7.3)** |
 | SR-100 PlantUML ソース Copy / Save .puml |  |  |  |  |  |  | x |  |  |  |  |  |  |
 | SR-101 状態遷移表を正規 CSV で出力 (v7.3) |  |  |  |  |  |  | x |  |  |  |  |  |  |
-| SR-102 ⏳ deferred テストケース Copy / Save |  |  |  |  |  |  | x |  |  |  |  |  | x |
+| SR-102 テストケース Copy / Save (v7.4) |  |  |  |  |  |  | x |  |  |  |  |  | x |
 | **Test Case Display / テストケース表示 (v7.4)** |
 | SR-103 N-switch テストケースをリアクティブに表示 (v7.4) |  |  |  |  |  |  |  |  |  |  |  |  | x |
 
@@ -233,7 +233,7 @@ pie title System Requirements by Category (v7.4) / システム要件カテゴ�
     "UI Layout / UI構成" : 3
     "Requirements & Seeding (v7.1)" : 4
     "Model Diff (v7.1)" : 1
-    "Artifact Export (v7.2–v7.3)" : 3
+    "Artifact Export (v7.2–v7.4)" : 3
     "Test Case Display (v7.4)" : 1
 ```
 

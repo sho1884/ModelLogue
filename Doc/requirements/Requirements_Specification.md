@@ -258,7 +258,7 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 |----|----------------|-------------|
 | SR-100 | Export the current PlantUML source from the Source tab (Copy / Save .puml) / Source タブから .puml をコピー／保存 | UR-007 |
 | SR-101 | Export the state transition table as canonical CSV (plain-text clipboard + Save) while HTML clipboard retains the human-friendly matrix / プレーンテキスト・Save は正規 CSV、HTML クリップボードは人間向けマトリクスのまま | UR-007 |
-| SR-102 ⏳ deferred | Export generated test cases from the Test cases tab (Copy / Save) / Test cases タブからテストケースをコピー／保存 | UR-013 |
+| SR-102 | Export generated test cases from the Test cases tab (Copy / Save) / Test cases タブからテストケースをコピー／保存 | UR-013 |
 
 ### 3.10a Test Case Display / テストケース表示 (v7.4)
 

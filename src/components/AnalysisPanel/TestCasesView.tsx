@@ -3,7 +3,15 @@
 
 import { useTestCasesStore } from '../../stores/testCasesStore';
 import { getBaseUrl } from '../../services/nswitchService';
+import { useSessionStore } from '../../stores/sessionStore';
 import type { NSwitchLevel } from '../../types/testCase';
+import { ExportActions } from '../ExportActions';
+import {
+  testCasesToCsv,
+  testCasesToHtml,
+} from '../../engines/testCasesSerializer';
+import { copyHtmlAndText } from '../../services/clipboard';
+import { downloadTextFile, sessionFilename } from '../../services/download';
 
 const N_OPTIONS: NSwitchLevel[] = [0, 1, 2];
 
@@ -13,8 +21,10 @@ export function TestCasesView() {
   const status = useTestCasesStore((s) => s.status);
   const result = useTestCasesStore((s) => s.result);
   const error = useTestCasesStore((s) => s.error);
+  const sessionName = useSessionStore((s) => s.sessionName);
 
   const isStale = status === 'loading' || status === 'error';
+  const hasTests = !!(result && result.tests.length > 0);
 
   return (
     <div className="flex flex-col h-full">
@@ -39,12 +49,34 @@ export function TestCasesView() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-400 ml-auto">
+        <span className="text-xs text-gray-400">
           {status === 'loading' && 'Generating…'}
           {status === 'success' && result &&
             `${result.tests.length} test${result.tests.length === 1 ? '' : 's'} across ${result.layers.length} layer${result.layers.length === 1 ? '' : 's'}`}
           {status === 'idle' && 'No model yet'}
         </span>
+        <div className="ml-auto">
+          <ExportActions
+            onCopy={() => {
+              if (!result) return Promise.resolve();
+              const csv = testCasesToCsv(result.tests);
+              const html = testCasesToHtml(result.tests);
+              return copyHtmlAndText(html, csv);
+            }}
+            onSave={() => {
+              if (!result) return;
+              downloadTextFile(
+                sessionFilename(sessionName, `testcases-n${n}`, 'csv'),
+                testCasesToCsv(result.tests),
+                'text/csv'
+              );
+            }}
+            copyTitle="Copy test cases. HTML payload for Excel / Sheets / Word; plain-text payload is the CSV defined in tools/nswitch §6.1."
+            saveLabel="Save .csv"
+            saveTitle="Download the test-case CSV (tools/nswitch Requirements_Specification.md §6.1). Filename encodes the current N-switch level."
+            disabled={!hasTests}
+          />
+        </div>
       </div>
 
       {/* Inline hint banners */}
