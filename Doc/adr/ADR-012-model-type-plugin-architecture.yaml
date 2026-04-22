@@ -118,17 +118,32 @@ decision:
 
     ### 実装順（破壊的変更を避けて段階投入）
 
-    1. state machine コードを `src/modelTypes/state-machine/` に
-       挙動不変で移設、既存 import path は re-export で維持
-    2. `ModelTypeDefinition` インターフェースと registry を導入、
-       state-machine 単独で回す（requirement 未着手）
-    3. `SessionStore.modelTypeId` とヘッダのモデル型セレクタを追加、
-       state-machine のみの選択肢で動作確認
-    4. `src/modelTypes/requirement/` を実装
-    5. モデル型セレクタで requirement を選べるようにして end-to-end
-       で動作確認
+    1. **refactor**: state machine コードを
+       `src/modelTypes/state-machine/` に挙動不変で移設。
+       既存 import path は re-export で維持
+    2. **framework + タブ動的化**: `ModelTypeDefinition` インター
+       フェースと registry を導入。**同時に `AnalysisPanel` の
+       タブ構成を `ModelTypeDefinition.analysisTabs` から動的構築
+       するよう変更**（state-machine の S×E / S×S / Test cases は
+       state-machine の analysisTabs として登録）。この時点で
+       state-machine 単独で既存挙動が完全に再現されることを確認
+    3. **session**: `SessionStore.modelTypeId` とヘッダのモデル型
+       セレクタを追加。選択肢は state-machine のみでも、
+       ラウンドトリップ（Save & finish / Open saved review）で
+       modelTypeId が維持されることを検証
+    4. **requirement parser**: `src/modelTypes/requirement/` の
+       parser / model / preamble handler を実装、単体テスト
+    5. **requirement analysis**: Requirement list（SR-113）/
+       Traceability（SR-111）/ Orphans（SR-112）タブを実装、
+       `requirement` type の analysisTabs に登録すれば自動で
+       AnalysisPanel に並ぶ
+    6. **end-to-end**: モデル型セレクタで requirement を選んで seed、
+       AI で生成 → Apply → 解析タブ表示、を確認
 
-    各ステップでテスト緑が保てる粒度に切る。
+    各ステップで `tsc --noEmit` と `vitest` が緑に保てる粒度に
+    切る。ステップ 2 でタブ動的化を完了させておくことで、ステップ
+    5 で要求図タブを足す際に `AnalysisPanel.tsx` への変更が不要に
+    なる — これが ADR-012 の実用面での payoff。
 
 neglected:
   - option: "モデル型ごとに別リポジトリ／別アプリケーションにする"

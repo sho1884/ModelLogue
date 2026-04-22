@@ -1188,17 +1188,28 @@ requirement.definition.externalServices = [];  // v7.5 の初版ではなし
 ### 17.8 実装順（破壊的変更を避けて段階投入）
 
 1. **refactor**: state-machine 関連コードを `src/modelTypes/state-machine/` に移設（挙動不変、shim を残す）。全テスト緑 → コミット
-2. **framework**: `ModelTypeDefinition` と `modelTypeRegistry` 導入、state-machine 単独登録で動作確認 → コミット
-3. **session**: `SessionStore.modelTypeId` 追加、Header にセレクタ（選択肢は state-machine のみ）、保存/復元ラウンドトリップ → コミット
-4. **requirement**: `src/modelTypes/requirement/` の parser / model / preamble handler 実装と単体テスト → コミット
-5. **requirement analysis**: Traceability matrix と Orphans view 実装、AnalysisPanel に差し込み → コミット
-6. **end-to-end**: 要求図をセレクタで選んで seed → AI で生成 → Apply → 解析タブ表示、までブラウザで確認 → コミット
+2. **framework + タブ動的化**: `ModelTypeDefinition` と `modelTypeRegistry` 導入。**同時に `AnalysisPanel` のタブ構築を `ModelTypeDefinition.analysisTabs` から行うよう変更**（state-machine の S×E / S×S / Test cases は state-machine の `analysisTabs` として登録）。state-machine 単独で既存挙動が完全再現することを確認 → コミット
+3. **session**: `SessionStore.modelTypeId` 追加、Header にセレクタ（選択肢は state-machine のみ）、Save & finish / Open saved review でラウンドトリップ → コミット
+4. **requirement parser**: `src/modelTypes/requirement/` に parser（macro DSL + seed form、SR-110）、model、preamble handler（SR-115）を実装、単体テスト → コミット
+5. **requirement analysis**: Requirement list（SR-113）、Traceability（SR-111）、Orphans（SR-112）タブを実装、`requirement` type の `analysisTabs` に登録 — `AnalysisPanel.tsx` は一切触らない（これがステップ 2 のタブ動的化の payoff） → コミット
+6. **end-to-end**: 要求図をセレクタで選んで seed（Requirements タブに半構造形式を貼る）→ 自動でモデル生成・描画・解析タブ表示。必要に応じて AI 対話で refine。ブラウザで動作確認 → コミット
 
-各ステップ単位でテスト・build が緑に保てる粒度に切る。テスト・doc はシナリオに応じて同時に足す（4-07 相当のシナリオを要求図用にも追加する想定）。
+各ステップ単位で `tsc --noEmit` と `vitest` が緑に保てる粒度に切る。テスト・シナリオ（scenarios ディレクトリ）はステップ 6 で要求図用のものを追加する想定。
 
-### 17.9 非目標（v7.5）
+### 17.9 スコープ境界（v7.5）— ADR-013 参照
+
+v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contain / refine / copy）のみを扱う。要求 ↔ 外部アーティファクト（設計・テスト）の関係（satisfy / verify / trace）は別フェーズの別機能として将来設計する（[ADR-013](./adr/ADR-013-requirement-review-scope-boundary.yaml)）。
+
+実装上の帰結：
+
+- DSL パーサ（SR-110 macro 形）は satisfy / verify / trace を構文として**受け入れる** — そうしないと AI や手書きで書かれたこれらの行が画面から消える不整合が起きる
+- 半構造 seed 形の `-->` は derive / contain / refine / copy のみを kind として受け付ける（satisfy / verify / trace は seed 形では書けない、macro 形でのみ）
+- 要求リスト表（SR-113）の列は **derive + contain のみ**（refine / copy は Traceability タブ SR-111 で見える）
+- Orphans（SR-112）は要求 ↔ 要求関係の有無で判定、satisfy / verify / trace は無視
+
+### 17.10 非目標（v7.5）
 
 - AI プロンプトの型別最適化（現状の state-machine 前提プロンプトを要求図に流用し、挙動を見てから詰める）
-- 要求図の外部アーティファクト追跡（`satisfy` / `verify` の相手先を設計要素・テストケース実体まで追跡する機能）
+- 要求 ↔ 外部アーティファクト追跡の UI（ADR-013）
 - クラス図、シーケンス図、ER 図などの第 3 型目（登録追加で可能な状態に**到達すること**が本 v のゴール）
 - 型変換（モデル型 A で書いたものを B に変換）

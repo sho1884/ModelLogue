@@ -1,23 +1,37 @@
-(* ModelLogue PlantUML Requirement Diagram Subset Grammar *)
-(* Version: 1.0                                            *)
-(* Reference: ADR-012 (model-type framework),              *)
-(*            ADR-009 analogue (minimal subset principle)  *)
-(*                                                         *)
-(* PlantUML does NOT natively provide a SysML requirement   *)
-(* diagram. The community workaround is to use class        *)
-(* diagram syntax with stereotypes and a preamble of        *)
-(* !procedure macros ($fReq / $nfReq / $dConstraint /       *)
-(* $contain / $derive / $refine, etc.). ModelLogue adopts   *)
-(* THIS macro-call form as its canonical requirement        *)
-(* diagram DSL: the parser reads the macro call lines as    *)
-(* first-class syntax rather than parsing the post-        *)
-(* expansion class diagram. PlantUML Server renders the     *)
-(* same source natively — no preprocessing on our side.     *)
-(*                                                         *)
-(* The preamble (!procedure definitions, hide directives,   *)
-(* title, etc.) is tolerated but ignored — analogous to     *)
-(* how the state diagram grammar handles decorative         *)
-(* directives.                                              *)
+(* ModelLogue Requirement Diagram Subset Grammar            *)
+(* Version: 1.1                                             *)
+(* Reference: ADR-012 (model-type framework),               *)
+(*            ADR-013 (requirement-review scope boundary),  *)
+(*            ADR-009 analogue (minimal subset principle)   *)
+(*                                                          *)
+(* PlantUML does NOT natively provide a SysML requirement    *)
+(* diagram. The community workaround is to use class         *)
+(* diagram syntax with stereotypes and a preamble of         *)
+(* !procedure macros ($fReq / $nfReq / $dConstraint /        *)
+(* $contain / $derive / $refine, etc.). ModelLogue adopts    *)
+(* the macro-call form as its PlantUML-Server-renderable     *)
+(* form.                                                     *)
+(*                                                          *)
+(* In addition to the macro form, this grammar defines a     *)
+(* semi-structured SEED form accepted in the Requirements    *)
+(* tab at session seeding time (SR-110). The seed form is    *)
+(* friendlier to paste from spreadsheets / specs, but the    *)
+(* canonical serialization that gets sent to PlantUML        *)
+(* Server is always the macro form. Seed-form lines are     *)
+(* deterministically converted to macro calls by the         *)
+(* parser; no AI intervention is required.                   *)
+(*                                                          *)
+(* Both forms coexist in the same file: a seed file can      *)
+(* contain seed-form lines AND macro-form lines mixed, and   *)
+(* the parser normalizes them into a single RequirementModel. *)
+(*                                                          *)
+(* Scope note (ADR-013): satisfy / verify / trace relations  *)
+(* are accepted at the grammar level so they don't disappear *)
+(* between renders, but v7.5 analysis tabs treat them as     *)
+(* "not requirement-to-requirement" and surface them only    *)
+(* in the generic Traceability tab. Requirement-to-          *)
+(* downstream (design / test) traceability is a separate     *)
+(* review phase per ADR-013.                                 *)
 
 (* ===== Top-level structure ===== *)
 
@@ -30,7 +44,9 @@ line             = empty_line
                  | preamble_line
                  | package_block
                  | requirement_call
-                 | relation_call ;
+                 | relation_call
+                 | seed_requirement_line
+                 | seed_relation_line ;
 
 empty_line       = { whitespace } ;
 
@@ -134,6 +150,65 @@ relation_macro_name
                  | "$verify"
                  | "$trace"
                  | "$copy" ;
+
+(* ===== SEED form (friendly input for Requirements tab paste) ===== *)
+(*                                                                   *)
+(* Accepts rows that look like a spreadsheet or a plain list, plus   *)
+(* relation arrows on their own lines. The parser converts them into *)
+(* macro-form output deterministically.                              *)
+(*                                                                   *)
+(* Requirement row:                                                  *)
+(*   id, name [, type [, text]]                                      *)
+(*                                                                   *)
+(* `type` is one of: func, functional, nfunc, nonfunc, non-func,     *)
+(*                   non-functional, constraint, c, req              *)
+(* Default type when omitted is `functional`.                        *)
+(* Values are comma-separated; commas inside a quoted string are     *)
+(* preserved.                                                        *)
+(*                                                                   *)
+(* Relation arrow:                                                   *)
+(*   source_id --> target_id                        (default: derive)*)
+(*   source_id --> target_id : Containment          (contain)        *)
+(*   source_id --> target_id : Refine               (refine)         *)
+(*   source_id --> target_id : Copy                 (copy)           *)
+(*                                                                   *)
+(* Arrow forms with SysML semantics outside requirement-to-          *)
+(* requirement scope (satisfy / verify / trace) are accepted only    *)
+(* via the macro form ($satisfy / $verify / $trace); seed-form       *)
+(* arrows are restricted to the 4 r-to-r relations to keep the input *)
+(* within v7.5's ADR-013 scope.                                      *)
+
+seed_requirement_line
+                 = seed_id , "," , whitespace_opt ,
+                   seed_name ,
+                   [ "," , whitespace_opt , seed_type ] ,
+                   [ "," , whitespace_opt , seed_text ] ;
+
+seed_id          = identifier ;
+seed_name        = { any_char_except_comma_or_quote } | '"' , arg_text , '"' ;
+seed_type        = "func" | "functional"
+                 | "nfunc" | "nonfunc" | "non-func" | "non-functional"
+                 | "constraint" | "c"
+                 | "req" | "requirement" ;
+seed_text        = '"' , arg_text , '"' | { any_char_except_comma } ;
+
+seed_relation_line
+                 = identifier , whitespace_opt ,
+                   "-->" , whitespace_opt ,
+                   identifier ,
+                   [ whitespace_opt , ":" , whitespace_opt , seed_relation_kind ] ;
+
+seed_relation_kind
+                 = "Containment" | "Contain" | "contain"
+                 | "Refine" | "refine"
+                 | "Copy" | "copy"
+                 | "Derive" | "derive"
+                 | "deriveReqt" ;
+
+any_char_except_comma
+                 = (* any character except , or newline *) ;
+any_char_except_comma_or_quote
+                 = (* any character except , " or newline *) ;
 
 (* ===== Lexical tokens ===== *)
 

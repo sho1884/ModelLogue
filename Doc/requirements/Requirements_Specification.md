@@ -339,7 +339,8 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 │  Diagram View                                            │  Chat       │
 │   …                                                      │   …         │
 ├── drag to resize ────────────────────────────────────────┤             │
-│  Analysis Panel  [Requirements|Source|Traceability|Orphans]│  input    │
+│  Analysis Panel                                          │             │
+│  [Requirements|Source|Requirement list|Traceability|Orphans]│  input   │
 └──────────────────────────────────────────────────────────┴────────────┘
 ```
 
@@ -354,7 +355,57 @@ Notes:
 
 状態遷移図に続く 2 つ目のモデル型として、SysML 風の**要求図**をサポートする。PlantUML には要求図が native 実装されていないため、コミュニティで広く使われる `!procedure` マクロ + class 図ステレオタイプ形式を採用し、**そのマクロ呼び出し行自体を ModelLogue の要求図 DSL の一級構文**として扱う（詳細は [`src/grammars/requirementDiagram.ebnf`](../../src/grammars/requirementDiagram.ebnf)）。
 
-#### 3.13.1 サポートする構文
+#### 3.13.1 典型ワークフロー — 表と図の情報流
+
+要求図レビューは実務上「手元にある出来損ないの要求リスト」から始まることが圧倒的に多い。ModelLogue はこの入り方を素直に受け止める：
+
+```
+Requirements タブ ── 出来損ない要求リスト + 関係矢印（半構造）
+        │ もしくは 
+        │ Requirements タブ ── 自然言語の要求仕様
+        ▼
+   SR-110 パーサ ────────────────→ AI (SR-082, 要求型プロンプト)
+        │ 半構造が読み切れた        │ 自然言語 / 曖昧な入力
+        │ 場合は直接               │ は AI 経由で DSL に
+        ▼                         ▼
+              Requirement DSL (canonical, PlantUML Server 描画形)
+                          │
+                          ▼
+                   RequirementModel (list + relations)
+                   │        │        │
+                   ▼        ▼        ▼
+        SVG 図  要求リスト表  トレーサビリティ  孤立要求
+                (SR-113)    (SR-111)        (SR-112)
+                          │
+            AI 対話（修正提案 = DSL ブロック）
+                          │
+                          └─ Apply で DSL 上書き、全タブが更新
+```
+
+**情報の流れの向きは状態遷移図と同じ**：Requirements タブでの入力 → モデル化 → 各種ビュー派生 → AI 対話で refine → 改良された表・関係・表が Save で取り出せる。違いは Requirements タブの**受容形式が広い**（自然言語 / 半構造リスト / 関係矢印の混在可）点と、分析タブのラインナップが要求図用に差し替わる点だけ。
+
+#### 3.13.2 Requirements タブの半構造入力形式（SR-110）
+
+```text
+R1, 周囲を明るくする, functional
+R11, 光を出す, functional
+R111, 電流を光に変える, functional, "2.2V, 0.25A, TL球"
+R11Q1, 光を確実に出す, nonfunctional
+C1, 使用環境, constraint, 雨天でも使用できること
+
+R1 --> R11
+R1 --> R12
+R1 --> R11: Containment
+R11 --> R111
+```
+
+- リスト行: `id, name[, type[, text]]`。type 省略時は `functional`。
+- 関係矢印行: `source --> target[: kind]`。kind 省略時は `derive`。kind は v7.5 では `derive / Containment / Refine / Copy` のみ受け付ける（ADR-013）。
+- `satisfy / verify / trace` は**半構造形では書けない**。必要なら macro 形（`$satisfy(…)` 等）を混ぜる。
+- 空行・コメント行（`'` 開始）は無視。
+- 同一ファイルに半構造と macro 形を混在可能。
+
+#### 3.13.3 サポートする DSL 構文（Canonical / Renderable 形）
 
 | 種別 | マクロ | PlantUML への展開 | 意味 |
 |---|---|---|---|
@@ -362,46 +413,64 @@ Notes:
 | 機能要求 | `$fReq(id, name [, text])` | `class` + `<<functionalRequirement>>` | 機能要求 |
 | 非機能要求 | `$nfReq(id, name [, text])` | `class` + `<<Non-functionalRequirement>>` | 非機能要求（薄緑） |
 | 設計制約 | `$dConstraint(id, name [, text])` | `class` + `<<designConstraint>>` | 設計制約（薄青） |
-| 包含 | `$contain(parent, child)` | `+--` | 階層関係（composition） |
+| 包含 | `$contain(parent, child)` | `+--` | 階層関係 |
 | 派生 | `$derive(supplier, client)` | `<.. : <<deriveReqt>>` | client は supplier から派生 |
 | 詳細化 | `$refine(client, element)` | `<.. : <<refine>>` | element は client を詳細化 |
-| 充足 | `$satisfy(req, design)` | `<.. : <<satisfy>>` | design は req を充足 |
-| 検証 | `$verify(req, test)` | `<.. : <<verify>>` | test は req を検証 |
-| トレース | `$trace(a, b)` | `<.. : <<trace>>` | 汎用追跡関係 |
 | コピー | `$copy(original, copy)` | `<.. : <<copy>>` | copy は original のコピー |
+| 充足※ | `$satisfy(req, design)` | `<.. : <<satisfy>>` | design は req を充足（将来フェーズ） |
+| 検証※ | `$verify(req, test)` | `<.. : <<verify>>` | test は req を検証（将来フェーズ） |
+| トレース※ | `$trace(a, b)` | `<.. : <<trace>>` | 汎用追跡関係（将来フェーズ） |
+
+※ ADR-013: satisfy / verify / trace は構文として受容（ユーザーが書いたものが画面から消えない）が、v7.5 の解析タブ（要求リスト表、孤立要求）では特別扱いしない。Traceability タブでは kind ラベル付きで並ぶ。要求 ↔ 外部アーティファクト（設計・テスト）のレビューは別フェーズの別機能として将来設計する。
 
 **グルーピング**: `package "…" <<Frame>> { … }` で要求を階層的にまとめる。
 
-#### 3.13.2 サポートしない構文
+#### 3.13.4 サポートしない構文
 
 - 素の class 宣言（`class Foo <<requirement>> { … }`）: `$req` 等を経由すること
-- 素の関係記法（`A --> B`, `A <.. B`）: `$derive` 等を経由すること
-- `requirement` や `interface` などの PlantUML キーワード: class 系ステレオタイプを通じて表現する
-- entry/exit point、orthogonal region、その他状態遷移図固有の構文
+- 素の関係記法（`A <.. B : <<deriveReqt>>`）: `$derive` 等を経由すること
+- 半構造形での `satisfy / verify / trace` 矢印: 必要なら macro 形で
+- `requirement` や `interface` などの PlantUML キーワード
+- entry/exit point、orthogonal region 等の他モデル型の構文
 
-#### 3.13.3 preamble の自動注入
+#### 3.13.5 preamble の自動注入（SR-115）
 
-PlantUML Server でそのまま描画するためには `!procedure $fReq …` 等の定義が必要。ModelLogue はこの preamble を **描画時に自動注入**し、編集バッファには本質部分（`$fReq(…)` 呼び出しと関係）だけを見せる（SR-115）。保存 (`Save .puml`) 時は preamble を付けた自己完結形式で書き出し、読み込み時に preamble が含まれていれば尊重しつつ本質部分だけ抽出してバッファに展開する。
+PlantUML Server でそのまま描画するためには `!procedure $fReq …` 等の定義が必要。ModelLogue は編集バッファには本質部分（`$fReq(…)` 呼び出しと関係）だけを見せ、**描画時に preamble を自動注入**する。Save `.puml` 時は preamble を付けた自己完結形式で書き出し、Open 時に preamble が含まれていれば尊重しつつ本質部分だけ抽出してバッファに展開する。
 
-#### 3.13.4 新設 SR
+#### 3.13.6 要求型セッションの解析タブ（SR-071）
+
+| タブ | 内容 | SR |
+|---|---|---|
+| Requirements（共通） | 自然言語 + 半構造の要求仕様。seed 中は編集可、以降 read-only | SR-080 |
+| Source（共通） | Canonical DSL（要求図の場合は macro 形）。read-only、preamble は非表示 | SR-001 |
+| Requirement list | `id, name, type, text, contained_in, derives_from` の表。Copy / Save .csv で書き出し可能（CSV は SR-110 の seed 形と round-trip） | SR-113 |
+| Traceability | 要求 × 要求のマトリクス。derive / contain / refine / copy の kind をセルに表示 | SR-111 |
+| Orphans | 要求 ↔ 要求の incoming / outgoing が欠けている要求を列挙 | SR-112 |
+
+状態遷移図型セッションの `State×Event / State×State / Test cases` と同じ位置（Requirements / Source の右）に並ぶ。タブの構築は `ModelTypeDefinition.analysisTabs` から動的に行うので、`AnalysisPanel.tsx` はモデル型を知らない（ADR-012 / SR-071）。
+
+#### 3.13.7 新設 SR
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
-| SR-110 | Parse requirement-diagram subset into RequirementModel / 要求図サブセットを RequirementModel に解析する **(v7.5 planned)** | UR-014 |
-| SR-111 | Generate traceability matrix (requirement × requirement by relation kind) / トレーサビリティマトリクス（要求 × 要求、関係種別）を生成する **(v7.5 planned)** | UR-014 |
-| SR-112 | Identify orphan requirements (no incoming trace / no outgoing trace) / 孤立要求を抽出する（incoming/outgoing のない要求） **(v7.5 planned)** | UR-014 |
-| SR-115 | Auto-inject `!procedure` preamble when rendering, strip on display, round-trip on save / 描画時に preamble を自動注入、表示時は除去、保存時は往復する **(v7.5 planned)** | UR-014 |
+| SR-110 | Parse requirement-diagram input (macro DSL + semi-structured seed form) / 要求図入力（macro DSL 形と半構造 seed 形）を RequirementModel に解析 **(v7.5 planned)** | UR-014 |
+| SR-111 | Traceability matrix (requirement × requirement by kind) / トレーサビリティマトリクス（要求 × 要求、関係種別） **(v7.5 planned)** | UR-014 |
+| SR-112 | Orphan requirements list (no incoming / no outgoing r-to-r relation) / 孤立要求リスト **(v7.5 planned)** | UR-014 |
+| SR-113 | Requirement list table with Copy / Save .csv / 要求リスト表、Copy / Save .csv **(v7.5 planned)** | UR-014 |
+| SR-115 | Auto-inject `!procedure` preamble when rendering / 描画時に preamble を自動注入、表示時は除去、保存時は往復 **(v7.5 planned)** | UR-014 |
 
-#### 3.13.5 既存 SR への影響
+#### 3.13.8 既存 SR への影響
 
-要求図の追加にあたって影響する既存 SR を以下に整理（詳細は [ADR-012](../adr/ADR-012-model-type-plugin-architecture.yaml)）：
-
-- **SR-002** (PlantUML subset parse): 状態遷移図専用として残し、要求図は SR-110 が担当
-- **SR-020 / SR-021** (State×Event / State×State matrix): 状態遷移図専用として明記
-- **SR-071** (Analysis panel tabs): タブセットが**アクティブなモデル型に従う**設計に変更
-- **SR-082** (AI initial model generation): プロンプトがモデル型ごとに分岐
+- **SR-002** (state-machine parser): 状態遷移図専用として残し、要求図は SR-110 が担当
+- **SR-020 / SR-021** (S×E / S×S matrix): 状態遷移図専用として明記
+- **SR-071** (Analysis panel tabs): タブセットが**アクティブなモデル型の analysisTabs** から動的生成に変更（実装順のステップ 2 で確定、ADR-012）
+- **SR-082** (AI initial model generation): プロンプトがモデル型ごとに分岐。要求図型で Requirements タブが半構造として解釈可能なら SR-110 で parser 直行、曖昧なら AI 経由で DSL 化
 - **SR-090** (Model diff): 型ごとに diff 実装が異なる
-- **SR-103** (Test cases tab): 状態遷移図専用として明記
+- **SR-101 / SR-102 / SR-103**: 状態遷移図専用として明記
+
+#### 3.13.9 スコープ境界（ADR-013）
+
+v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contain / refine / copy）のみが主題。要求 ↔ 外部アーティファクト（設計・テスト）を辿るレビュー — satisfy / verify / trace の実用活用 — は**別フェーズの別機能**として将来設計する。詳細は [ADR-013](../adr/ADR-013-requirement-review-scope-boundary.yaml) 参照。
 
 ---
 

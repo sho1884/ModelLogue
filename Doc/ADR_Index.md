@@ -19,6 +19,7 @@
 | ADR-010 | 重い処理や領域固有の生成処理は外部サービスとして同一リポジトリ内に分離する | 2026-04-08 | accepted | 重い処理や領域固有の生成処理は、ModelLogueと同じリポジトリ内に独立した補助サービスとして配置する。各サービスはCLI＋APIを持ち、ModelLogueからもCI/CDからも同じインターフェイスで呼び出せる。 |
 | ADR-011 | サービス間のフォーマットは厳密に定義し、機械的な変換は決定論的に実装する | 2026-04-08 | accepted | サービス間でやり取りするフォーマットはすべて厳密に定義する。機械的に決定可能な変換は決定論的アルゴリズムで実装し、LLMには委ねない。 |
 | ADR-012 | モデル型プラグインアーキテクチャ（ModelTypeDefinition） | 2026-04-22 | proposed | src/modelTypes/<type>/ 配下にモデル型ごとのパーサ・EBNF・解析タブ仕様・補助サービスクライアントを閉じ込め、ModelTypeDefinition インターフェースの registry で束ねる |
+| ADR-013 | 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う | 2026-04-22 | accepted | v7.5 の要求図サポートは要求 ↔ 要求の関係（derive / contain / refine / copy）に限定し、要求 ↔ 外部（satisfy / verify / trace）は別フェーズの別機能として後日設計する |
 
 ---
 
@@ -890,17 +891,32 @@ State machine への最適化が深いので、抽象の線引きを誤ると
 
 ### 実装順（破壊的変更を避けて段階投入）
 
-1. state machine コードを `src/modelTypes/state-machine/` に
-   挙動不変で移設、既存 import path は re-export で維持
-2. `ModelTypeDefinition` インターフェースと registry を導入、
-   state-machine 単独で回す（requirement 未着手）
-3. `SessionStore.modelTypeId` とヘッダのモデル型セレクタを追加、
-   state-machine のみの選択肢で動作確認
-4. `src/modelTypes/requirement/` を実装
-5. モデル型セレクタで requirement を選べるようにして end-to-end
-   で動作確認
+1. **refactor**: state machine コードを
+   `src/modelTypes/state-machine/` に挙動不変で移設。
+   既存 import path は re-export で維持
+2. **framework + タブ動的化**: `ModelTypeDefinition` インター
+   フェースと registry を導入。**同時に `AnalysisPanel` の
+   タブ構成を `ModelTypeDefinition.analysisTabs` から動的構築
+   するよう変更**（state-machine の S×E / S×S / Test cases は
+   state-machine の analysisTabs として登録）。この時点で
+   state-machine 単独で既存挙動が完全に再現されることを確認
+3. **session**: `SessionStore.modelTypeId` とヘッダのモデル型
+   セレクタを追加。選択肢は state-machine のみでも、
+   ラウンドトリップ（Save & finish / Open saved review）で
+   modelTypeId が維持されることを検証
+4. **requirement parser**: `src/modelTypes/requirement/` の
+   parser / model / preamble handler を実装、単体テスト
+5. **requirement analysis**: Requirement list（SR-113）/
+   Traceability（SR-111）/ Orphans（SR-112）タブを実装、
+   `requirement` type の analysisTabs に登録すれば自動で
+   AnalysisPanel に並ぶ
+6. **end-to-end**: モデル型セレクタで requirement を選んで seed、
+   AI で生成 → Apply → 解析タブ表示、を確認
 
-各ステップでテスト緑が保てる粒度に切る。
+各ステップで `tsc --noEmit` と `vitest` が緑に保てる粒度に
+切る。ステップ 2 でタブ動的化を完了させておくことで、ステップ
+5 で要求図タブを足す際に `AnalysisPanel.tsx` への変更が不要に
+なる — これが ADR-012 の実用面での payoff。
 
 ### 不採用案 / Neglected alternatives
 
@@ -946,3 +962,122 @@ Save & finish など）が型に依存せず共通であり、別アプリに分
 - ADR-011 strict-formats-and-deterministic-conversion (決定論の方針)
 - src/grammars/requirementDiagram.ebnf (本 ADR と対になる要求図サブセット定義)
 - Doc/architecture.md §17 予定: モデル型フレームワークの実装詳細
+
+
+---
+
+## ADR-013: 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う
+
+- **Date**: 2026-04-22
+- **Status**: accepted
+- **Last updated**: 2026-04-22
+
+### 背景 / Problem
+
+要求図サポート（v7.5、UR-014、ADR-012）の設計を進める中で、
+SysML 要求図が定義する関係種別を整理すると、大きく 2 群に
+分かれることが明らかになった：
+
+1. 要求 ↔ 要求の関係
+   - $contain: 階層・包含（パッケージまたは大要求の内訳）
+   - $derive:  派生（上位要求から下位要求への根拠付き分解）
+   - $refine:  詳細化（同じ意図のより具体化された別表現）
+   - $copy:    コピー関係
+
+2. 要求 ↔ 外部アーティファクト（設計・テスト）の関係
+   - $satisfy: 設計要素が要求を充足する
+   - $verify:  テストケースが要求を検証する
+   - $trace:   汎用トレーサビリティ
+
+要求図レビューの目的（要求リストと要求どうしの関係の質を
+上げる）は 1 群で完結する。2 群を同じレビュー UX に含めよう
+とすると、以下が追加で必要になる：
+
+- 設計要素・テストケースを ModelLogue 内で参照できるようにする
+  外部アーティファクト registry（現状なし）
+- 要求 × 外部アーティファクトのクロスマトリクス UI
+- 複数フェーズ（要求確定 → 設計 → テスト）をまたぐセッション
+  設計
+
+これは「表に列を増やす」話ではなく、レビューの目的と UI 構造が
+質的に別物になる領域である。
+
+### 決定要因 / Drivers
+
+- 要求図レビューの目的（要求の質向上）とダウンストリーム トレーサビリティの目的（実装・検証の網羅性確認）は本質的に別
+- v7.5 のスコープ肥大を避ける（既にモデル型プラグイン構造 ADR-012 という大きな構造変更を含む）
+- 外部アーティファクトの表現方法は ModelLogue のセッション モデル全体の再検討を要するので、軽く足せない
+
+### 決定 / Decision
+
+**Summary**: v7.5 の要求図サポートは要求 ↔ 要求の関係（derive / contain / refine / copy）に限定し、要求 ↔ 外部（satisfy / verify / trace）は別フェーズの別機能として後日設計する
+
+v7.5 の要求図レビューは「要求リストと要求どうしの関係の質を
+上げる」ことに目的を絞る。具体的には：
+
+- 要求リスト表（SR-113）の列は derive（`derives_from`）と
+  contain（`contained_in`）の 2 種のみを持つ
+- Traceability タブ（SR-111）では refine / copy も含めた
+  要求間関係を kind ラベル付きで表示する
+- Orphans タブ（SR-112）は要求間関係の incoming / outgoing の
+  有無で孤立を判定する
+
+parser（SR-110）と DSL（`src/grammars/requirementDiagram.ebnf`）
+は satisfy / verify / trace を構文として受け入れる。理由は
+2 つ：
+- PlantUML Server にそのまま描画されるので、ユーザーが書いた
+  ものが画面から消えるという不整合を避ける
+- 将来のダウンストリームトレーサビリティ機能追加時に後方
+  互換性を取りやすい
+
+ただし、v7.5 の解析タブは satisfy / verify / trace を**特別
+扱いしない**。Traceability タブに「kind = satisfy」として
+並ぶ程度で、専用 UI は提供しない。
+
+将来のダウンストリームトレーサビリティ機能（仮称：
+Traceability Review）は、実需が出てきた時点で以下のどれかの形で
+設計する：
+- 別モデル型として登録（ModelTypeDefinition 再利用）
+- 同じ要求図モデル型に「レビューフェーズ」の概念を加える
+- 独立したアプリケーション・サービスとして切り出す
+
+### 不採用案 / Neglected alternatives
+
+- **v7.5 で satisfy / verify / trace も要求リスト表の列にする** — 外部アーティファクト（設計要素・テストケース）の識別子を
+どう持つかが決まっていない。パスやファイル名の文字列で持つ
+のか、別の registry で解決するのか、ModelLogue が設計文書や
+テストフレームワークとどう連携するか、という別の設計が
+必要。列だけ足しても「未接続の文字列を溜める箱」にしか
+ならず、レビューの質向上に寄与しない。
+
+- **要求図全体を要求 ↔ 外部も含めて v7.5 で一気に扱う** — v7.5 はモデル型プラグイン構造（ADR-012）という大きな構造
+変更を既に含む。外部アーティファクト管理まで乗せると
+リリース粒度が大きくなりすぎて、問題発生時の切り分けが
+困難になる。小さく実装・小さく検証の方針と矛盾する。
+
+- **satisfy / verify / trace を完全にサポートしない** — ユーザーから「将来、テストまでのトレーサビリティを取りたい」
+との明示的な意図が示されている。完全撤廃は要求と矛盾する。
+
+
+### 帰結 / Consequences
+
+**Positive**
+- v7.5 のスコープが要求 ↔ 要求に絞られて小さく、検証しやすい
+- 要求図レビューの目的が明確になる（要求の質を上げる）
+- DSL パーサが satisfy / verify / trace を受容するので、将来機能追加時の後方互換を取りやすい
+- 外部アーティファクト registry という大きな設計を、実需が明確になってから行える
+
+**Negative**
+- ユーザーが DSL に書いた satisfy / verify / trace は v7.5 では目立った UI を持たない（Traceability タブに一行として並ぶだけ）
+- ダウンストリームトレーサビリティ機能の設計負荷が将来に繰り越される
+
+**Risks**
+- ユーザーが Requirements タブや AI 対話で satisfy / verify / trace を書いてしまい、レビューで活用できないことに後から気づく可能性 — SR-110 の入力形式仕様とタブ上の案内で明示的に「v7.5 のレビュー対象は要求 ↔ 要求のみ」と伝える
+- 将来の設計時に「別モデル型」「レビューフェーズ」「別アプリ」のどれを選ぶかは、外部アーティファクトの性質を見てから再判断する必要がある
+
+### 関連 / References
+
+- ADR-008 scope-boundary-with-surrounding-workflow (同種のスコープ境界決定)
+- ADR-012 model-type-plugin-architecture (要求図追加の全体方針)
+- UR-014 Review requirement diagram
+- src/grammars/requirementDiagram.ebnf (satisfy / verify / trace は構文としては受容)
