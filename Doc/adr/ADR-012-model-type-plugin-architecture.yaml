@@ -1,0 +1,180 @@
+id: ADR-012
+title: "モデル型プラグインアーキテクチャ（ModelTypeDefinition）"
+date: "2026-04-22"
+status: proposed
+superseded_by: null
+
+participants:
+  author: ""
+  approver: ""
+  last_updated: "2026-04-22"
+
+context:
+  problem: |
+    ModelLogue は当初「状態遷移図のレビュー支援」に特化して設計
+    されており、パーサ、ストア、解析タブ、AI プロンプト、nswitch
+    補助サービスまで、すべてが StateMachineModel を中心に作られて
+    いる。
+
+    レビュー対象として状態遷移図に匹敵する重要性のある第 2 のモデル
+    として「要求図」を追加したい。要求図は PlantUML に native 実装
+    がなく、`!procedure` マクロで class 図ベースにエミュレートする
+    コミュニティ慣習を ModelLogue の DSL として採用する方針
+    （Requirements_Specification.md §3.2 を新設予定）。
+
+    この第 2 型を場当たり的に追加すると、以下の問題が表面化する：
+
+    - `modelStore` が `model: StateMachineModel` を前提にしている
+    - 解析タブ（State×Event, State×State, Test cases）は状態遷移図
+      固有で、要求図には意味をなさない
+    - EBNF・パーサ・差分計算・シリアライザの組が型ごとに必要
+    - Requirements タブを除く UI レイアウトはほぼ型依存
+    - 3 型目（クラス図、シーケンス図、等）が来た時点で、2 型目の
+      場当たり対応を全て書き直すことになる
+
+    State machine への最適化が深いので、抽象の線引きを誤ると
+    かえって複雑性が増すリスクがある。
+
+  drivers:
+    - 拡張性：将来、第 3 第 4 のモデル型が増える想定で、追加コスト
+      を「新しいディレクトリを 1 つ作る」程度に抑えたい
+    - 既存挙動の保全：state machine の現在の振る舞いはリリース済み
+      なので、refactor で挙動が変わってはならない
+    - ドキュメントとの整合：CLAUDE.md が「状態遷移図のレビュー」
+      と明記しており、これも汎用化に合わせて書き換える必要がある
+    - nswitch 等の補助サービス：型ごとに固有のサービスを想定する
+      必要があり、単純な analysis tab の置き換えでは収まらない
+
+decision:
+  summary: "src/modelTypes/<type>/ 配下にモデル型ごとのパーサ・EBNF・解析タブ仕様・補助サービスクライアントを閉じ込め、ModelTypeDefinition インターフェースの registry で束ねる"
+
+  detail: |
+    以下の構造を採用することにした。
+
+    ### ディレクトリ配置
+
+        src/modelTypes/
+          state-machine/
+            parser.ts            -- PlantUML → StateMachineModel
+            model.ts             -- StateMachineModel 型
+            matrixGenerator.ts   -- 解析表の生成
+            transitionTableSerializer.ts
+            diff.ts              -- モデル差分
+            grammar.ts           -- EBNF を ?raw import で束ねる
+            definition.ts        -- ModelTypeDefinition の実体
+            index.ts             -- export
+          requirement/
+            parser.ts            -- PlantUML (要求 DSL) → RequirementModel
+            model.ts
+            traceabilityMatrix.ts
+            orphans.ts
+            diff.ts
+            grammar.ts
+            definition.ts
+            index.ts
+
+    ### ModelTypeDefinition インターフェース（概略）
+
+        interface ModelTypeDefinition<M> {
+          id: string;                      // 'state-machine' | 'requirement'
+          label: string;                   // UI 表示名
+          description: string;             // 選択時のヒント
+          grammar: string;                 // EBNF 本文（?raw import）
+          parse: (source: string) => ParseResult<M>;
+          analysisTabs: AnalysisTabSpec<M>[];   // Source/Requirements 以外の型固有タブ
+          diff?: (before: M, after: M) => ModelDiff;
+          defaultSeedSource?: string;      // 新規セッションの雛形
+          externalServices?: ExternalServiceSpec[];  // 例: nswitch
+        }
+
+        const REGISTRY = [stateMachineDefinition, requirementDefinition];
+
+    ### セッションとストア
+
+    - `SessionStore.modelTypeId: string` を新設。seed 時に固定、
+      セッション中は変更不可
+    - `modelStore` は `model: unknown` に一般化し、型解決は
+      ModelTypeDefinition 経由で行う。ただし型安全性は
+      `useTypedModel<M>()` のような型パラメータ付きヘルパで担保
+    - 既存の `stateEventMatrix` / `stateStateMatrix` などの派生物
+      は state-machine 固有なので、型ごとのサブストアに移動
+      （例：`stateMachineAnalysisStore`）
+
+    ### UI
+
+    - `AnalysisPanel` のタブ定義は ModelTypeDefinition.analysisTabs
+      から組み立てる。Source / Requirements タブは共通
+    - ヘッダに **モデル型セレクタ**（seed 時に一度だけ選択可）を追加
+    - モデル型が異なるセッションを跨いで Open saved review した
+      ときは、保存された型に自動追従
+
+    ### 補助サービス（nswitch 類）
+
+    - ModelTypeDefinition.externalServices でヘルスチェック URL と
+      client モジュールを登録
+    - state-machine の nswitch-api はこの枠組みで登録し直す
+    - 要求図の初版では externalServices は空配列（必要になった時点
+      で「トレーサビリティギャップ分析」等を検討）
+
+    ### 実装順（破壊的変更を避けて段階投入）
+
+    1. state machine コードを `src/modelTypes/state-machine/` に
+       挙動不変で移設、既存 import path は re-export で維持
+    2. `ModelTypeDefinition` インターフェースと registry を導入、
+       state-machine 単独で回す（requirement 未着手）
+    3. `SessionStore.modelTypeId` とヘッダのモデル型セレクタを追加、
+       state-machine のみの選択肢で動作確認
+    4. `src/modelTypes/requirement/` を実装
+    5. モデル型セレクタで requirement を選べるようにして end-to-end
+       で動作確認
+
+    各ステップでテスト緑が保てる粒度に切る。
+
+neglected:
+  - option: "モデル型ごとに別リポジトリ／別アプリケーションにする"
+    because: |
+      レビュー UX（ソース編集、AI 対話、マーカー、セッション管理、
+      Save & finish など）が型に依存せず共通であり、別アプリに分離
+      すると共通部分を 2 重に維持する負荷の方が大きい。
+
+  - option: "共通コアだけ残し、型固有部分は AI プロンプトで吸収する"
+    because: |
+      パーサと差分計算は決定論的であるべき（ADR-011）。AI 頼みに
+      すると再現性が落ち、CI での検証にも向かない。
+
+  - option: "現在の構造を維持したまま要求図の path だけ if 文で分岐させる"
+    because: |
+      分岐点が複数ストア・複数コンポーネントに散らばるので、3 型目
+      以降が加わったときの修正範囲が爆発する。ADR-009 で採った
+      「先に設計、後で段階的投入」の方針と矛盾する。
+
+  - option: "各モデル型で別々の SPA build を出す（ビルド時分岐）"
+    because: |
+      型切り替えのために SPA を再読み込みさせる UX は n8n やマーカー
+      の state を失うので不利。1 つの SPA に registry を持たせる方が
+      軽い。
+
+consequences:
+  positive:
+    - "新しいモデル型の追加コストが `src/modelTypes/<type>/` 配下の追加に集約される"
+    - "state-machine 固有コードが「その他の型に漏れない」ことが構造で担保される"
+    - "AI プロンプトや補助サービスの切り替えも同じ registry 経由で扱える"
+    - "テスト・build・CI は現状の粒度で問題なく回る（単独パッケージ数増えるだけ）"
+
+  negative:
+    - "refactor のため、state-machine 関連コードの import path が一括で変わる"
+    - "`modelStore` の型が弱くなり、型安全性をヘルパ関数で補う必要がある"
+    - "`CLAUDE.md` の「状態遷移図のレビュー」という記述を汎用化する書き換えが必要"
+    - "1 つの SPA で複数型を扱うため、バンドルサイズがモデル型数に応じて線形に増える（将来的に遅延ロードで対応可能）"
+
+  risks:
+    - "抽象の設計を 2 型だけで切るため、3 型目で穴が見つかって interface を拡張することになる可能性"
+    - "seed 時に型を間違えた場合の救済 UX が未設計（別セッションを作り直すのが現状最善）"
+    - "nswitch 類の補助サービス URL が型ごとに増える運用負荷（docker-compose の管理が複雑化）"
+
+references:
+  - "ADR-009 composite-states-minimal-subset (最小サブセット方針の先例)"
+  - "ADR-010 external-services-for-heavy-or-domain-specific-work (nswitch 枠組み)"
+  - "ADR-011 strict-formats-and-deterministic-conversion (決定論の方針)"
+  - "src/grammars/requirementDiagram.ebnf (本 ADR と対になる要求図サブセット定義)"
+  - "Doc/architecture.md §17 予定: モデル型フレームワークの実装詳細"

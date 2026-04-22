@@ -1,0 +1,189 @@
+(* ModelLogue PlantUML Requirement Diagram Subset Grammar *)
+(* Version: 1.0                                            *)
+(* Reference: ADR-012 (model-type framework),              *)
+(*            ADR-009 analogue (minimal subset principle)  *)
+(*                                                         *)
+(* PlantUML does NOT natively provide a SysML requirement   *)
+(* diagram. The community workaround is to use class        *)
+(* diagram syntax with stereotypes and a preamble of        *)
+(* !procedure macros ($fReq / $nfReq / $dConstraint /       *)
+(* $contain / $derive / $refine, etc.). ModelLogue adopts   *)
+(* THIS macro-call form as its canonical requirement        *)
+(* diagram DSL: the parser reads the macro call lines as    *)
+(* first-class syntax rather than parsing the post-        *)
+(* expansion class diagram. PlantUML Server renders the     *)
+(* same source natively — no preprocessing on our side.     *)
+(*                                                         *)
+(* The preamble (!procedure definitions, hide directives,   *)
+(* title, etc.) is tolerated but ignored — analogous to     *)
+(* how the state diagram grammar handles decorative         *)
+(* directives.                                              *)
+
+(* ===== Top-level structure ===== *)
+
+diagram          = "@startuml" , newline ,
+                   { line , newline } ,
+                   "@enduml" ;
+
+line             = empty_line
+                 | comment
+                 | preamble_line
+                 | package_block
+                 | requirement_call
+                 | relation_call ;
+
+empty_line       = { whitespace } ;
+
+comment          = "'" , { any_char } ;
+
+(* ===== Preamble lines (tolerated, no semantic effect) ===== *)
+(*                                                             *)
+(* The user-side !procedure definitions render the macros at   *)
+(* PlantUML Server time. We do not re-implement that expansion *)
+(* — we parse the calls directly. Every other decorative line  *)
+(* below is also skipped for analysis.                         *)
+
+preamble_line    = procedure_block
+                 | hide_directive
+                 | show_directive
+                 | skinparam_directive
+                 | title_directive
+                 | pragma_directive
+                 | theme_directive
+                 | note_block
+                 | legend_block ;
+
+procedure_block  = "!procedure" , { any_char | newline } , "!endprocedure" ;
+
+hide_directive   = "hide" , whitespace , { any_char } ;
+show_directive   = "show" , whitespace , { any_char } ;
+skinparam_directive
+                 = "skinparam" , whitespace , { any_char } ;
+title_directive  = "title" , whitespace , { any_char } ;
+pragma_directive = ( "!pragma" | "!theme" | "!include" | "!define" ) ,
+                   whitespace , { any_char } ;
+theme_directive  = "!theme" , whitespace , { any_char } ;
+note_block       = "note" , { any_char | newline } , "end" , whitespace , "note" ;
+legend_block     = "legend" , { any_char | newline } , "end" , whitespace , "legend" ;
+
+(* ===== Package (requirement grouping) ===== *)
+
+package_block    = package_head , newline ,
+                   { package_body_line , newline } ,
+                   "}" ;
+
+package_head     = "package" , whitespace ,
+                   '"' , package_label , '"' ,
+                   [ whitespace , "<<" , stereotype_text , ">>" ] ,
+                   whitespace , "{" ;
+
+package_body_line
+                 = empty_line
+                 | comment
+                 | requirement_call ;
+
+(* Packages MAY be nested but nested containment is normalized *)
+(* into the `parent` field of each requirement for the internal *)
+(* model. Relations are always at top level, outside packages. *)
+
+(* ===== Requirement declarations ===== *)
+(*                                                             *)
+(* Four flavors, mapping to the SysML stereotypes the user's   *)
+(* existing macros produce:                                    *)
+(*                                                             *)
+(*   $req(id, name)              -> <<requirement>>            *)
+(*   $req(id, name, text)        -> <<requirement>>            *)
+(*   $fReq(id, name)             -> <<functionalRequirement>>  *)
+(*   $fReq(id, name, text)                                     *)
+(*   $nfReq(id, name)            -> <<Non-functionalRequirement>> *)
+(*   $nfReq(id, name, text)                                    *)
+(*   $dConstraint(id, name)      -> <<designConstraint>>       *)
+(*   $dConstraint(id, name, text)                              *)
+(*                                                             *)
+(* All four share the same call shape; `text` is optional. *)
+
+requirement_call = req_macro_name , "(" , arg , "," , arg , [ "," , arg ] , ")" ;
+
+req_macro_name   = "$req"
+                 | "$fReq"
+                 | "$nfReq"
+                 | "$dConstraint" ;
+
+(* ===== Relationship declarations ===== *)
+(*                                                             *)
+(* All relations take exactly two id arguments. The argument   *)
+(* order is fixed per macro to match the user-side !procedure   *)
+(* definitions, so PlantUML Server renders the arrow the       *)
+(* expected direction.                                         *)
+(*                                                             *)
+(*   $contain(parent, child)            parent +-- child       *)
+(*   $derive(supplier, client)          supplier <.. client : <<deriveReqt>> *)
+(*   $refine(client, namedElement)      client <.. namedElement : <<refine>>  *)
+(*   $satisfy(req, design)              req <.. design : <<satisfy>>          *)
+(*   $verify(req, test)                 req <.. test : <<verify>>             *)
+(*   $trace(a, b)                       a <.. b : <<trace>>                   *)
+(*   $copy(original, copy)              original <.. copy : <<copy>>          *)
+
+relation_call    = relation_macro_name , "(" , arg , "," , arg , ")" ;
+
+relation_macro_name
+                 = "$contain"
+                 | "$derive"
+                 | "$refine"
+                 | "$satisfy"
+                 | "$verify"
+                 | "$trace"
+                 | "$copy" ;
+
+(* ===== Lexical tokens ===== *)
+
+arg              = whitespace_opt , '"' , arg_text , '"' , whitespace_opt ;
+arg_text         = { escaped_char | any_char_except_double_quote } ;
+escaped_char     = "\" , any_char ;
+
+(* Identifier used as the `as` alias AND as the key in relations. *)
+(* Must be the bare identifier form PlantUML accepts (no spaces). *)
+
+identifier       = letter , { letter | digit | "_" } ;
+
+package_label    = { any_char_except_double_quote } ;
+stereotype_text  = { any_char_except_gt } ;
+
+letter           = "A" | "B" | ... | "Z" | "a" | "b" | ... | "z" | unicode_char ;
+digit            = "0" | "1" | ... | "9" ;
+unicode_char     = (* Hiragana, Katakana, Kanji, etc. *) ;
+whitespace       = " " | "\t" ;
+whitespace_opt   = { whitespace } ;
+newline          = "\n" | "\r\n" ;
+any_char         = (* any character except newline *) ;
+any_char_except_double_quote
+                 = (* any character except " *) ;
+any_char_except_gt
+                 = (* any character except > *) ;
+
+(* ===== Explicitly NOT supported ===== *)
+(*                                                             *)
+(* Constructs that are rejected with a syntax error:           *)
+(*                                                             *)
+(*   - Raw class-diagram relations (  A --> B,  A <.. B , etc.) *)
+(*       Use $derive / $refine / $satisfy / $verify / $trace.  *)
+(*       Rationale: relations must go through a known macro so   *)
+(*       the `kind` is unambiguous for analysis.               *)
+(*                                                             *)
+(*   - Inline class declarations (  class X <<requirement>> { … }) *)
+(*       Use $req / $fReq / $nfReq / $dConstraint.             *)
+(*                                                             *)
+(*   - Interface, enum, abstract — any non-requirement class   *)
+(*     diagram element.                                        *)
+(*                                                             *)
+(*   - Nested $contain forming a package-nesting hierarchy     *)
+(*     is allowed (it is data, not grammar), but the internal *)
+(*     model permits at most one level of package nesting.    *)
+(*                                                             *)
+(* Expansion surface (handled later):                          *)
+(*                                                             *)
+(*   - $useCase / $testCase / $designElement — stereotype tags  *)
+(*     for external artifacts (satisfy/verify targets). The    *)
+(*     current grammar allows any id string as a relation      *)
+(*     endpoint, and leaves the external-artifact modeling to  *)
+(*     a follow-up version.                                    *)

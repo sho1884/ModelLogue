@@ -3,7 +3,7 @@
 **バージョン**: 7.2 (planned / 承認済・未実装)
 **作成日**: 2026-04-08
 **最終更新**: 2026-04-15
-**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善済（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。v7.3 は SR-101 正規 CSV 化（実装済、[`tools/nswitch/`](../tools/nswitch/) と CSV ラウンドトリップ）。v7.4 は SR-103 テストケースタブと nswitch の HTTP API 化（planned）。
+**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善済（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。v7.3 は SR-101 正規 CSV 化（実装済、[`tools/nswitch/`](../tools/nswitch/) と CSV ラウンドトリップ）。v7.4 は SR-103 テストケースタブと nswitch の HTTP API 化（実装済）。v7.5 はモデル型プラグイン構造の導入と要求図サポート（planned、[ADR-012](./adr/ADR-012-model-type-plugin-architecture.yaml)）。
 
 ---
 
@@ -1060,3 +1060,145 @@ SR-103 の画面表示と同じタブの中に、CLI の `--coverage` フラグ�
 
 CSV 生成は SPA 側に閉じる（API レスポンスが既に JSON で手元にある）。CLI の `stdout` と GUI の Copy/Save 出力は、TS 側の serializer と Python 側の `tests_to_csv` / `coverage_to_csv` が同じ §6.1 / §6.2 を実装するペアで byte-identical になるよう保つ（ADR-011）。
 
+
+
+---
+
+## 17. v7.5 変更（planned）— モデル型プラグイン構造と要求図対応
+
+v7.5 では、「状態遷移図のレビュー」に特化していた構造を**複数モデル型を扱える形**に一般化し、その最初の適用例として要求図（SysML Requirements Diagram 相当）を追加する。設計方針の骨子は [ADR-012](./adr/ADR-012-model-type-plugin-architecture.yaml) に記録済み。本節は実装詳細の共有が目的。
+
+### 17.1 ディレクトリ構造
+
+```
+src/
+├── modelTypes/
+│   ├── state-machine/          -- 既存の state-machine 関連コードを集約
+│   │   ├── parser.ts           ← src/parsers/stateMachineParser.ts から移設
+│   │   ├── model.ts            ← src/types/stateMachine.ts から移設
+│   │   ├── matrixGenerator.ts  ← src/engines/matrixGenerator.ts から移設
+│   │   ├── transitionTableSerializer.ts  ← 同上
+│   │   ├── diff.ts             ← src/engines/modelDiff.ts から移設
+│   │   ├── grammar.ts          -- stateDiagram.ebnf を ?raw import でラップ
+│   │   ├── analysisTabs.tsx    -- S×E / S×S / Test cases タブの spec
+│   │   ├── definition.ts       -- ModelTypeDefinition の実体
+│   │   └── index.ts
+│   └── requirement/            -- 新設
+│       ├── parser.ts
+│       ├── model.ts
+│       ├── preamble.ts         -- !procedure preamble の注入・除去
+│       ├── traceabilityMatrix.ts
+│       ├── orphans.ts
+│       ├── diff.ts
+│       ├── grammar.ts          -- requirementDiagram.ebnf の wrap
+│       ├── analysisTabs.tsx    -- Traceability / Orphans タブの spec
+│       ├── definition.ts
+│       └── index.ts
+├── modelTypeRegistry.ts        -- REGISTRY 配列と lookup 関数
+└── ...既存の上位コンポーネント・ストア...
+```
+
+既存 import を一括で書き換えるリスクを避けるため、**移設完了後に元の `src/parsers/` / `src/engines/` / `src/types/` は re-export のみの shim ファイルに残す**。shim は v7.6 で削除予定。
+
+### 17.2 ModelTypeDefinition インターフェース
+
+```typescript
+export interface ModelTypeDefinition<M> {
+  id: string;                        // 'state-machine' | 'requirement'
+  label: string;                     // Model type selector に出すユーザー向け名
+  description: string;               // 選択時のヒント
+
+  grammar: string;                   // EBNF 本文（?raw import）
+  defaultSeedSource: string;         // 新規セッションの空テンプレ
+
+  parse: (source: string) => ParseResult<M>;
+  diff?: (before: M, after: M) => ModelDiff;
+
+  analysisTabs: AnalysisTabSpec<M>[];   // Requirements / Source 以外の型固有タブ
+  preambleHandler?: PreambleHandler;    // 要求図のような auto-inject/strip
+  externalServices?: ExternalServiceSpec[];  // 例：nswitch
+  aiPromptContext?: (model: M | null) => string;  // AI に渡す型固有の注意書き
+}
+
+export interface AnalysisTabSpec<M> {
+  id: string;                        // 'state-event' | 'traceability' | …
+  label: string;
+  render: (props: { model: M | null }) => React.ReactNode;
+}
+```
+
+型パラメータ `M` は各モデル型の内部モデル型（`StateMachineModel` または `RequirementModel`）。`modelStore` では `M = unknown` として扱い、消費側で `useTypedModel<StateMachineModel>('state-machine')` のようなヘルパで型を特定する。
+
+### 17.3 セッションストアの変更
+
+- `SessionStore.modelTypeId: 'state-machine' | 'requirement'` を追加、seed 時に固定
+- 既存のセッション JSON（`ReviewSession`）に `modelTypeId` フィールドを追加、未設定（旧ファイル）は `'state-machine'` にフォールバック
+- `Open saved review…` で旧ファイルを開いた場合は `state-machine` として受け入れる（互換性維持）
+
+### 17.4 AnalysisPanel のタブ構築
+
+現状ハードコードの `const tabs = [requirements, source, state-event, state-state, test-cases]` を、以下のように動的化する：
+
+```typescript
+const def = useActiveModelType();
+const tabs = [
+  { id: 'requirements', label: 'Requirements', render: <RequirementsTab /> },
+  { id: 'source',       label: 'Source',       render: <SourceEditor /> },
+  ...def.analysisTabs,   // 型固有タブ
+];
+```
+
+### 17.5 ヘッダのモデル型セレクタ（SR-073）
+
+SEED フェーズ中は選択可（`<select>`）、REVIEW フェーズ以降は読み取り専用ラベル。切り替え時は `sessionStore.reset()` に相当する処理で source / requirements / chat を初期化する（混在状態を作らない）。
+
+### 17.6 preamble ハンドリング（SR-115、要求図のみ）
+
+```typescript
+export interface PreambleHandler {
+  /** Render 時に editBuffer の先頭に付けるテキスト */
+  injectedPreamble: string;
+  /** Open saved review / Paste 時に source 冒頭から除去する判定 */
+  matchesPreamble: (source: string) => boolean;
+  /** 除去処理。matchesPreamble が true のときだけ使う */
+  stripPreamble: (source: string) => string;
+}
+```
+
+- 編集バッファには preamble を見せない
+- PlantUML Server に送るときだけ自動注入
+- Save .puml は preamble 入りの自己完結形式で書き出す
+- 既存ファイルを開いたときに preamble を検出できれば剥がす、剥がせなければそのまま扱う（不明な preamble を誤って壊さない）
+
+### 17.7 補助サービス（nswitch 類）の型ごと登録
+
+nswitch は state-machine 専用。ModelTypeDefinition.externalServices で登録することで、ヘルスチェックやタブ描画が型切り替え時に自動的に付いたり外れたりする：
+
+```typescript
+state-machine.definition.externalServices = [
+  {
+    id: 'nswitch-api',
+    baseUrl: import.meta.env.VITE_NSWITCH_BASE_URL ?? 'http://localhost:8090',
+    healthCheck: checkNswitchHealth,
+  },
+];
+requirement.definition.externalServices = [];  // v7.5 の初版ではなし
+```
+
+### 17.8 実装順（破壊的変更を避けて段階投入）
+
+1. **refactor**: state-machine 関連コードを `src/modelTypes/state-machine/` に移設（挙動不変、shim を残す）。全テスト緑 → コミット
+2. **framework**: `ModelTypeDefinition` と `modelTypeRegistry` 導入、state-machine 単独登録で動作確認 → コミット
+3. **session**: `SessionStore.modelTypeId` 追加、Header にセレクタ（選択肢は state-machine のみ）、保存/復元ラウンドトリップ → コミット
+4. **requirement**: `src/modelTypes/requirement/` の parser / model / preamble handler 実装と単体テスト → コミット
+5. **requirement analysis**: Traceability matrix と Orphans view 実装、AnalysisPanel に差し込み → コミット
+6. **end-to-end**: 要求図をセレクタで選んで seed → AI で生成 → Apply → 解析タブ表示、までブラウザで確認 → コミット
+
+各ステップ単位でテスト・build が緑に保てる粒度に切る。テスト・doc はシナリオに応じて同時に足す（4-07 相当のシナリオを要求図用にも追加する想定）。
+
+### 17.9 非目標（v7.5）
+
+- AI プロンプトの型別最適化（現状の state-machine 前提プロンプトを要求図に流用し、挙動を見てから詰める）
+- 要求図の外部アーティファクト追跡（`satisfy` / `verify` の相手先を設計要素・テストケース実体まで追跡する機能）
+- クラス図、シーケンス図、ER 図などの第 3 型目（登録追加で可能な状態に**到達すること**が本 v のゴール）
+- 型変換（モデル型 A で書いたものを B に変換）

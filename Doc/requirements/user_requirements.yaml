@@ -197,6 +197,23 @@ requirements:
       composed as an n8n workflow (ADR-008).
     priority: medium
 
+  UR-014:
+    task: "Review a requirement diagram"
+    background: >
+      A requirement diagram expresses the intent of a system as a set
+      of requirements (functional / non-functional / constraints) and
+      the traceability relations between them (derive / refine /
+      satisfy / verify / contain / trace / copy). Reviewing it is a
+      parallel task to UR-001 (state machine review) — same Dialogue
+      as Asset principle, same marker / chat / session workflow — but
+      the diagram semantics, analysis views (traceability matrix,
+      orphan list), and AI-prompt expectations differ enough that
+      ModelLogue treats it as a distinct model type (ADR-012).
+      PlantUML has no native requirement diagram; the community uses
+      `!procedure` macros over class diagram syntax to approximate
+      SysML, and ModelLogue adopts this as its requirement DSL.
+    priority: high
+
   UR-013:
     task: "Review N-switch coverage test cases derived from the current model"
     background: >

@@ -5,7 +5,12 @@
 **ModelLogue** は、ソフトウェア開発におけるモデルレビューを支援するプラットフォームです。
 モデル図を「一時的な思考のキャンバス（Volatile Canvas）」と位置づけ、人間とAIの「対話ログ」を設計の本質的な資産として扱います。
 
-現在のスコープは**状態遷移図のレビュー**に集中しています。NeoCEGと同じ「テキスト→正規モデル→図＋表」パターンで、PlantUMLサブセット→StateMachineModel→PlantUML SVG（マーカーオーバーレイ付き）＋状態遷移マトリクスのパイプラインを構築します。
+v7.5 時点で **2 種類のモデル型**をサポートする方針に広げました（[ADR-012](Doc/adr/ADR-012-model-type-plugin-architecture.yaml)）：
+
+- **状態遷移図**（v7.0〜実装済）— PlantUMLサブセット → StateMachineModel → PlantUML SVG（マーカーオーバーレイ付き）＋状態遷移マトリクス＋N-switch テストケース
+- **要求図**（v7.5〜planned）— SysML 風の要求図 DSL（`!procedure` マクロ呼び出しを一級構文として扱う） → RequirementModel → PlantUML SVG（マーカーオーバーレイ付き）＋トレーサビリティマトリクス＋孤立要求リスト
+
+いずれも NeoCEG と同じ「テキスト→正規モデル→図＋表」パターンを踏襲します。モデル型はセッションごとに seed 時に固定され、以降は同じレビュー UX（ソース表示、AI 対話、マーカー、提案 Apply/Undo、Save & finish）で扱えます。3 型目以降（クラス図・シーケンス図など）も `src/modelTypes/<type>/` 配下の追加で導入可能な構造です。
 
 ## 作業方針
 
@@ -42,14 +47,18 @@ ModelLogue/
 ├── Prototype/                  # プロトタイプコード（本番とは隔離）
 ├── docker-compose.yml          # PlantUML Server + n8n
 ├── src/                        # 本番ソースコード
-│   ├── components/             # React コンポーネント
-│   ├── parsers/                # PlantUMLサブセットパーサー
-│   ├── engines/                # 純粋アルゴリズム（マトリクス生成、SVG座標抽出）
-│   ├── services/               # 外部サービス連携（PlantUML, n8n, markerContext）
+│   ├── components/             # React コンポーネント（モデル型非依存）
+│   ├── modelTypes/             # モデル型プラグイン（ADR-012, v7.5〜）
+│   │   ├── state-machine/      #   状態遷移図: parser, model, matrix, diff, grammar
+│   │   └── requirement/        #   要求図:     parser, model, traceability, orphans, preamble
+│   ├── engines/                # モデル型非依存の純粋アルゴリズム（SVG座標抽出など）
+│   ├── services/               # 外部サービス連携（PlantUML, n8n, nswitch, markerContext）
 │   ├── stores/                 # Zustand ストア
-│   ├── types/                  # TypeScript 型定義
+│   ├── types/                  # TypeScript 型定義（共通型）
 │   └── grammars/               # EBNF 静的定義（?raw import で文字列として利用）
 │                               # 注: i18n/ は Phase 1 では未実装（deferred）
+├── tools/                      # 補助サービス（ADR-010）
+│   └── nswitch/                # N-switch カバレッジテスト生成器（CLI + HTTP API）
 └── tests/                      # テスト（unit, golden）
 ```
 
@@ -122,24 +131,26 @@ ModelLogue/
 
 ### PlantUMLサブセットの範囲
 
-ModelLogueはPlantUML完全互換ではなく、レビュー目的に絞った最小サブセットをサポートする。
+ModelLogueはPlantUML完全互換ではなく、レビュー目的に絞った**モデル型ごとの最小サブセット**をサポートする。各サブセットの EBNF は `src/grammars/<type>Diagram.ebnf` に定義。
 
-**サポートする構文**:
+**状態遷移図サブセット**（[`src/grammars/stateDiagram.ebnf`](src/grammars/stateDiagram.ebnf)、ADR-009）
+
 - 状態と遷移、初期/終了擬似状態、状態の別名
 - イベント、ガード、アクション付き遷移
 - **1階層の複合状態**（`state X { ... }`）と、その中の内部初期遷移
 - 複合状態を source とするグループ脱出遷移
 - 複合状態を target とする進入遷移（内部の初期状態へ）
+- 不採用: 入れ子の入れ子、直交領域、ヒストリ擬似状態、ドット記法、entry/exit point、スタイル／色／ノート
 
-**サポートしない構文**（構文エラーで拒否、ADR-009 参照）:
-- 入れ子の入れ子（複合状態の中に複合状態）
-- 直交領域（並行状態、`--` 区切り）
-- ヒストリ擬似状態（`[H]`、`[H*]`）
-- ドット記法による直接進入（`X.Y`）
-- entry/exit point擬似状態
-- スタイル、色、ノート
+**要求図サブセット**（[`src/grammars/requirementDiagram.ebnf`](src/grammars/requirementDiagram.ebnf)、v7.5）
 
-詳細は [Doc/requirements/Requirements_Specification.md](Doc/requirements/Requirements_Specification.md) §3.1 を参照。
+- PlantUML が要求図を native に持たないため、`!procedure` マクロ呼び出し形式を DSL の一級構文として扱う
+- 要求: `$req / $fReq / $nfReq / $dConstraint(id, name [, text])`
+- 関係: `$contain / $derive / $refine / $satisfy / $verify / $trace / $copy(a, b)`
+- グルーピング: `package "..." <<Frame>> { ... }`
+- 不採用: 素の `class` 宣言や関係矢印、`requirement` キーワード直接利用、要求以外の class 図構造
+
+詳細は [Doc/requirements/Requirements_Specification.md](Doc/requirements/Requirements_Specification.md) §3.1（状態遷移図）・§3.13（要求図）を参照。
 
 ## コーディング規約
 

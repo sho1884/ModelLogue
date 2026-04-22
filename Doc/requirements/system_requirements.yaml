@@ -3,10 +3,30 @@
 # Subject is always the artifact (component/system), omitted by convention.
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-version: "7.4"
+version: "7.5"
 last_updated: "2026-04-22"
 
-# Version 7.4 highlights (planned, not yet implemented):
+# Version 7.5 highlights (planned, not yet implemented):
+#   - UR-014 (new): "Review a requirement diagram" — a second model
+#     type next to the existing state-machine review.
+#   - ADR-012: ModelTypeDefinition plug-in architecture. State-machine
+#     specifics move under src/modelTypes/state-machine/ and a new
+#     src/modelTypes/requirement/ is added. Session carries a
+#     modelTypeId set at seed time.
+#   - SR-073 (new): model-type selector at session seed.
+#   - SR-110 (new): parse requirement-diagram subset defined in
+#     src/grammars/requirementDiagram.ebnf.
+#   - SR-111 (new): traceability matrix (requirement × requirement by
+#     relation kind).
+#   - SR-112 (new): orphan requirements list (no incoming / no
+#     outgoing trace).
+#   - SR-115 (new): auto-inject !procedure preamble when rendering,
+#     strip on display, round-trip on save.
+#   - Several existing SRs are scoped "(state-machine)" so the type
+#     boundary is explicit: SR-002, SR-020, SR-021, SR-103.
+#   - SR-071 redefined: tab set depends on active model type.
+#
+# Version 7.4 highlights (implemented):
 #   - SR-103 (new): display N-switch coverage test cases in a dedicated
 #     Analysis-panel tab, driven by the tools/nswitch/ HTTP API (§9.2 of
 #     tools/nswitch/Requirements_Specification.md). Reactive on parse.
@@ -614,6 +634,29 @@ ui_layout:
       - "When the AI proposes a source change, renders the ProposalView (SR-033) inside the assistant message: before/after model SVGs side-by-side with diff overlay, collapsible raw source, and an Apply button"
       - "Falls back gracefully when the proposal cannot be rendered (parse error, PlantUML Server unreachable) per SR-033 rules"
 
+  SR-073:
+    function: "Select the model type at session seed (one-way, fixed for the session lifetime)"
+    parent: [UR-009, UR-014]
+    component: Header (ModelTypeSelector) + SessionStore.modelTypeId + ModelTypeDefinition registry
+    status: planned
+    notes: |
+      ModelLogue hosts multiple model types via the plug-in architecture
+      in ADR-012. Each session is about ONE model type; switching mid-
+      session would invalidate the source, the parser, and the analysis
+      tabs all at once. So the type is chosen once at seed time and
+      locked for the session lifetime, analogous to how SR-001 locks
+      the source after first successful parse.
+
+      When `Open saved review…` loads a saved session, the model type
+      comes from the saved bundle — no selector shown. New sessions
+      default to `state-machine` for continuity with existing users.
+    acceptance_criteria:
+      - "At session seed (SEED phase, before first successful parse), a Model type selector appears in the header with the registered options from src/modelTypes/"
+      - "The initial options are 'State machine' and 'Requirement' (v7.5 scope)"
+      - "Changing the selector clears the current source, requirements text, and any in-progress chat — no mixed-type state"
+      - "Once the REVIEW phase is entered, the selector becomes a read-only label showing the locked type"
+      - "SessionStore.modelTypeId is part of the exported session JSON (SR-041) and is restored on Open saved review (SR-083)"
+
 # =============================================================================
 # Requirements Text & Model Seeding (new in v7.1)
 # =============================================================================
@@ -820,6 +863,88 @@ artifact_export:
       - "When the current source has parse errors, the tab shows a parse-error hint with line numbers from the service response; the previous good result stays visible, greyed"
 
 # =============================================================================
+# Requirement Diagram Support (new in v7.5)
+# =============================================================================
+# The second supported model type. Parallels the state-machine functions
+# in the earlier sections, registered as a ModelTypeDefinition under
+# src/modelTypes/requirement/ per ADR-012. Subset grammar lives in
+# src/grammars/requirementDiagram.ebnf.
+
+requirement_diagram:
+  SR-110:
+    function: "Parse requirement-diagram subset into RequirementModel"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/parser.ts
+    status: planned
+    notes: |
+      Recognizes the macro-call lines ($req / $fReq / $nfReq /
+      $dConstraint / $contain / $derive / $refine / $satisfy /
+      $verify / $trace / $copy) and `package "…" <<Frame>> { … }`
+      as first-class syntax. The !procedure definition preamble,
+      `hide …`, `title …`, and similar decorative directives are
+      tolerated and ignored (same pattern the state-machine parser
+      uses).
+    acceptance_criteria:
+      - "Accepts every construct listed in src/grammars/requirementDiagram.ebnf"
+      - "Rejects bare PlantUML class declarations and bare relation arrows (must go through macros)"
+      - "Rejects any construct outside the EBNF with a clear line-numbered error"
+      - "Produces RequirementModel { requirements, relations } with parent / type / text captured per the data model section"
+      - "Parse completes within the NFR-001 Parse < 100 ms budget for review-scale diagrams (~50 requirements)"
+
+  SR-111:
+    function: "Generate traceability matrix (requirement × requirement, cells marking relation kind)"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/traceabilityMatrix.ts
+    status: planned
+    notes: |
+      Displayed in a dedicated Traceability tab (part of the
+      requirement-type tab set per SR-071). Rows and columns are
+      the requirement ids; cell contains the relation kind ("derive",
+      "satisfy", "verify", …) if a relation exists from row to
+      column, empty otherwise.
+    acceptance_criteria:
+      - "Rows and columns are the requirement ids in declaration order"
+      - "Cell shows the relation kind abbreviation (D=derive, R=refine, S=satisfy, V=verify, C=contain, T=trace, Cp=copy) when a relation exists"
+      - "Composite containers are shown with indentation (mirroring the state-machine S×S matrix style)"
+      - "Copy / Save .csv actions export the matrix in a format mirroring SR-101 canonical CSV"
+
+  SR-112:
+    function: "Identify orphan requirements (no incoming trace, no outgoing trace, or both)"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/orphans.ts + OrphansView tab
+    status: planned
+    notes: |
+      Common review finding: a requirement that is not derived from
+      anything (dangling child) or has nothing derived from it (leaf
+      with no satisfaction / verification). Both signal that the
+      design intent is incomplete.
+    acceptance_criteria:
+      - "Lists requirements with no incoming derive/refine/contain (likely top-level or orphan)"
+      - "Lists requirements with no outgoing satisfy/verify (likely unimplemented / untested)"
+      - "Each entry links to the requirement id and shows its type and name"
+      - "When a package contains a requirement but no relation enters/leaves, the package itself is flagged too"
+
+  SR-115:
+    function: "Auto-inject !procedure preamble when rendering, strip on display, round-trip on save"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/preamble.ts
+    status: planned
+    notes: |
+      PlantUML Server needs the !procedure definitions to render the
+      diagram. We keep the edit buffer free of the preamble so users
+      see only the semantic content. Rendering prepends the preamble
+      transparently. Save .puml writes a self-contained file with
+      preamble included. Open a .puml file detects the preamble and
+      strips it before populating the edit buffer. The preamble text
+      is fixed — no per-user customization — so strip / restore is
+      a pure textual operation.
+    acceptance_criteria:
+      - "The edit buffer (SourceEditor) shows only the user-written content (no !procedure definitions)"
+      - "Render-time concatenation produces the same PlantUML source the user would write manually with the preamble"
+      - "Save .puml produces a self-contained file that PlantUML Server can render without further preprocessing"
+      - "Open saved review / paste-source flow detects the fixed preamble and strips it before showing in the editor; if the preamble text differs, leave the file as-is (do not guess)"
+
+# =============================================================================
 # Data Model
 # =============================================================================
 
@@ -865,6 +990,46 @@ data_model:
       - name: action
         type: "string | null"
 
+  RequirementModel:
+    description: "Canonical representation of a requirement diagram parsed from the PlantUML source (SR-110, v7.5). Mirrors StateMachineModel's role for the second supported model type (ADR-012)."
+    fields:
+      - name: requirements
+        type: "Requirement[]"
+        description: "All requirements, functional, non-functional, and design-constraint"
+      - name: relations
+        type: "RequirementRelation[]"
+        description: "Relations between requirements (derive, refine, satisfy, verify, contain, trace, copy)"
+
+  Requirement:
+    fields:
+      - name: id
+        type: string
+        description: "Unique identifier (the first argument of $req / $fReq / $nfReq / $dConstraint)"
+      - name: name
+        type: string
+        description: "Short display name (the second argument). Used as the class header when rendered."
+      - name: text
+        type: "string | null"
+        description: "Long-form requirement text (optional third argument). May contain newlines escaped as \\n."
+      - name: type
+        type: "'requirement' | 'functionalRequirement' | 'nonFunctionalRequirement' | 'designConstraint'"
+        description: "Derived from which macro was used. Drives the rendered stereotype and color."
+      - name: parentId
+        type: "string | null"
+        description: "Package or containing-requirement id, or null for top-level. Populated by `package { … }` grouping or `$contain(parent, child)` relations."
+
+  RequirementRelation:
+    fields:
+      - name: sourceId
+        type: string
+        description: "First id argument to the relation macro"
+      - name: targetId
+        type: string
+        description: "Second id argument to the relation macro"
+      - name: kind
+        type: "'contain' | 'derive' | 'refine' | 'satisfy' | 'verify' | 'trace' | 'copy'"
+        description: "Which macro produced this relation. Determines the semantic of source/target (see src/grammars/requirementDiagram.ebnf)"
+
   ReviewSession:
     fields:
       - name: id
@@ -875,6 +1040,9 @@ data_model:
         type: "string (ISO 8601)"
       - name: updatedAt
         type: "string (ISO 8601)"
+      - name: modelTypeId
+        type: "'state-machine' | 'requirement'"
+        description: "The model type this session is reviewing, fixed at seed time (SR-073, v7.5). Determines which parser, analysis tabs, and AI prompt apply."
       - name: plantUmlSource
         type: string
       - name: requirementsText

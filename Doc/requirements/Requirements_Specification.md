@@ -70,16 +70,21 @@ This document defines requirements for ModelLogue, a model review platform for s
 | UR-011 | Convert between state machine source and state transition table / 状態マシンソースと状態遷移表を相互変換する | Medium / 中 |
 | UR-012 | Refer to the target requirements text alongside the model / モデルと並べて要求仕様文を参照する | Medium / 中 |
 | UR-013 | Review N-switch coverage test cases derived from the current model / 現在のモデルから導かれる N-switch カバレッジ用テストケースをレビューする | Medium / 中 |
+| UR-014 | Review a requirement diagram / 要求図をレビューする **(v7.5 planned)** | High / 高 |
 
 > **Note 1**: UR-009とUR-010の前後（初版生成手段、終了後フィードバック先）はn8nワークフローで現場ごとに構成する。ModelLogue本体は入出力の境界に専念する。詳細は [ADR-008](../adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) を参照。
 >
 > **Note 2**: UR-011の変換器は、ModelLogue本体ではなく、同一リポジトリ内の補助サービスとして実装する。CI/CDパイプラインからも直接呼び出せる。詳細は [ADR-010](../adr/ADR-010-external-services-for-heavy-or-domain-specific-work.yaml) と [ADR-011](../adr/ADR-011-strict-formats-and-deterministic-conversion.yaml) を参照。
+>
+> **Note 3**: UR-001 と UR-014 は同じ「ソフトウェアモデルをレビューする」というタスク形を持つ。モデル型（状態遷移図／要求図）ごとに編集・表示・解析の細部が異なるため、ModelLogue は **モデル型プラグイン構造** で両方を一つのアプリで扱う（[ADR-012](../adr/ADR-012-model-type-plugin-architecture.yaml)）。3 型目以降（例：クラス図、シーケンス図）も同じ構造で追加できる。
 
 ---
 
 ## 3. System Requirements / システム要件
 
 > Source / 出典: [system_requirements.yaml](./system_requirements.yaml)
+
+> **モデル型のスコープ（v7.5〜）**: §3.1–§3.12 の SR の多くは当初、状態遷移図を暗黙の前提にしている。v7.5 で要求図が加わるのにあわせて、これらは「モデル型ごとの実装に差し替え可能」な形（[ADR-012](../adr/ADR-012-model-type-plugin-architecture.yaml)）に整理する。状態遷移図固有の SR は **(state-machine)** と明記、要求図固有の SR は §3.13 にまとめ、モデル型非依存の共通 SR はそのままとする。
 
 ### 3.1 Source Editing / ソース編集
 
@@ -302,26 +307,40 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
-| SR-070 | Render the diagram as primary view, with an empty-state guide when no model exists / プライマリビュー＋モデル未投入時のエンプティステート **(v7.2)** | UR-001 |
-| SR-071 | Render resizable analysis panel with tabs (Requirements / Source / S×E / S×S / Test cases) / タブ付き解析パネル（要求仕様・ソース・S×E・S×S・テストケース）**(v7.4 tab set)** | UR-002, UR-003, UR-012, UR-013 |
+| SR-070 | Render the diagram as primary view, with an empty-state guide when no model exists / プライマリビュー＋モデル未投入時のエンプティステート **(v7.2)** | UR-001, UR-014 |
+| SR-071 | Render resizable analysis panel with tabs defined by the active model type (common: Requirements / Source; per-type: S×E / S×S / Test cases for state machine, Traceability / Orphans for requirement diagram) / アクティブなモデル型が定義する解析パネル・タブセットを表示（共通は要求仕様・ソース、型固有は状態遷移図なら S×E / S×S / テストケース、要求図ならトレーサビリティ／孤立要求）**(v7.5 tab set — ADR-012)** | UR-002, UR-003, UR-012, UR-013, UR-014 |
 | SR-072 | Render chat panel with ProposalView (no longer hosts Undo — relocated per SR-035) / チャットパネル + 提案ビュー（Undo は移設） **(v7.2)** | UR-005, UR-006 |
+| SR-073 | Select model type at session seed (one-way, fixed for the session lifetime) / セッションの seed 時にモデル型を選択（セッション期間中は不変） **(v7.5 planned)** | UR-009, UR-014 |
 
-**Screen Layout / 画面構成 (v7.4)**:
+**Screen Layout / 画面構成 (v7.5)**:
+
+セッションで選択中の**モデル型**（状態遷移図 / 要求図）によって解析パネルのタブセットが変わる。SEED フェーズではヘッダの右に **Model type** セレクタが出て、REVIEW 以降は固定表示（読み取り専用）。
+
+状態遷移図セッション:
 
 ```
 ┌── Header ──────────────────────────────────────────────────────────────┐
-│  ModelLogue   <session>          [Save & finish…] [Open saved          │
-│                                   review…] [Download grammar]          │
+│  ModelLogue  <session>  [Model: State machine ▾]  [Save & finish…]    │
+│                                                 [Open saved review…]  │
 ├──────────────────────────────────────────────────────────┬────────────┤
 │  Diagram View                                            │  Chat       │
-│  [marker tools] [↶ Undo] [↷ Redo]                       │  messages   │
-│  PlantUML SVG + marker overlay                           │  + Proposal │
-│   (or empty-state guide when no model yet)               │    View     │
+│   …                                                      │   …         │
 ├── drag to resize ────────────────────────────────────────┤             │
 │  Analysis Panel  [Requirements|Source|S×E|S×S|Test cases]│  input      │
-├──────────────────────────────────────────────────────────┴────────────┤
-│  Status Bar                                                            │
-└────────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────┴────────────┘
+```
+
+要求図セッション:
+
+```
+┌── Header ──────────────────────────────────────────────────────────────┐
+│  ModelLogue  <session>  [Model: Requirement ▾]    [Save & finish…]    │
+├──────────────────────────────────────────────────────────┬────────────┤
+│  Diagram View                                            │  Chat       │
+│   …                                                      │   …         │
+├── drag to resize ────────────────────────────────────────┤             │
+│  Analysis Panel  [Requirements|Source|Traceability|Orphans]│  input    │
+└──────────────────────────────────────────────────────────┴────────────┘
 ```
 
 Notes:
@@ -330,6 +349,59 @@ Notes:
 - Source tab shows **Copy** / **Save .puml** actions (SR-100); each matrix tab shows **Copy** / **Save .csv** (SR-101 — v7.3 は正規 CSV 形式で保存)
 - Test cases tab shows N selector (0/1/2) and a reactive test list fed by the nswitch HTTP API (SR-103, v7.4)
 - ProposalView: 提案があるメッセージ内で、**現モデル SVG（左） / 提案モデル SVG（右）** を並置。提案側には SR-090 の差分に基づく緑/赤/橙オーバーレイを重ねる。下には提案ソースの折りたたみ表示と Apply ボタン。⛶ Open larger comparison でフルスクリーンモーダルへ。
+
+### 3.13 Requirement Diagram Support / 要求図対応 (v7.5)
+
+状態遷移図に続く 2 つ目のモデル型として、SysML 風の**要求図**をサポートする。PlantUML には要求図が native 実装されていないため、コミュニティで広く使われる `!procedure` マクロ + class 図ステレオタイプ形式を採用し、**そのマクロ呼び出し行自体を ModelLogue の要求図 DSL の一級構文**として扱う（詳細は [`src/grammars/requirementDiagram.ebnf`](../../src/grammars/requirementDiagram.ebnf)）。
+
+#### 3.13.1 サポートする構文
+
+| 種別 | マクロ | PlantUML への展開 | 意味 |
+|---|---|---|---|
+| 要求 | `$req(id, name [, text])` | `class` + `<<requirement>>` | 汎用要求 |
+| 機能要求 | `$fReq(id, name [, text])` | `class` + `<<functionalRequirement>>` | 機能要求 |
+| 非機能要求 | `$nfReq(id, name [, text])` | `class` + `<<Non-functionalRequirement>>` | 非機能要求（薄緑） |
+| 設計制約 | `$dConstraint(id, name [, text])` | `class` + `<<designConstraint>>` | 設計制約（薄青） |
+| 包含 | `$contain(parent, child)` | `+--` | 階層関係（composition） |
+| 派生 | `$derive(supplier, client)` | `<.. : <<deriveReqt>>` | client は supplier から派生 |
+| 詳細化 | `$refine(client, element)` | `<.. : <<refine>>` | element は client を詳細化 |
+| 充足 | `$satisfy(req, design)` | `<.. : <<satisfy>>` | design は req を充足 |
+| 検証 | `$verify(req, test)` | `<.. : <<verify>>` | test は req を検証 |
+| トレース | `$trace(a, b)` | `<.. : <<trace>>` | 汎用追跡関係 |
+| コピー | `$copy(original, copy)` | `<.. : <<copy>>` | copy は original のコピー |
+
+**グルーピング**: `package "…" <<Frame>> { … }` で要求を階層的にまとめる。
+
+#### 3.13.2 サポートしない構文
+
+- 素の class 宣言（`class Foo <<requirement>> { … }`）: `$req` 等を経由すること
+- 素の関係記法（`A --> B`, `A <.. B`）: `$derive` 等を経由すること
+- `requirement` や `interface` などの PlantUML キーワード: class 系ステレオタイプを通じて表現する
+- entry/exit point、orthogonal region、その他状態遷移図固有の構文
+
+#### 3.13.3 preamble の自動注入
+
+PlantUML Server でそのまま描画するためには `!procedure $fReq …` 等の定義が必要。ModelLogue はこの preamble を **描画時に自動注入**し、編集バッファには本質部分（`$fReq(…)` 呼び出しと関係）だけを見せる（SR-115）。保存 (`Save .puml`) 時は preamble を付けた自己完結形式で書き出し、読み込み時に preamble が含まれていれば尊重しつつ本質部分だけ抽出してバッファに展開する。
+
+#### 3.13.4 新設 SR
+
+| ID | Function / 機能 | Parent / 親 |
+|----|----------|--------|
+| SR-110 | Parse requirement-diagram subset into RequirementModel / 要求図サブセットを RequirementModel に解析する **(v7.5 planned)** | UR-014 |
+| SR-111 | Generate traceability matrix (requirement × requirement by relation kind) / トレーサビリティマトリクス（要求 × 要求、関係種別）を生成する **(v7.5 planned)** | UR-014 |
+| SR-112 | Identify orphan requirements (no incoming trace / no outgoing trace) / 孤立要求を抽出する（incoming/outgoing のない要求） **(v7.5 planned)** | UR-014 |
+| SR-115 | Auto-inject `!procedure` preamble when rendering, strip on display, round-trip on save / 描画時に preamble を自動注入、表示時は除去、保存時は往復する **(v7.5 planned)** | UR-014 |
+
+#### 3.13.5 既存 SR への影響
+
+要求図の追加にあたって影響する既存 SR を以下に整理（詳細は [ADR-012](../adr/ADR-012-model-type-plugin-architecture.yaml)）：
+
+- **SR-002** (PlantUML subset parse): 状態遷移図専用として残し、要求図は SR-110 が担当
+- **SR-020 / SR-021** (State×Event / State×State matrix): 状態遷移図専用として明記
+- **SR-071** (Analysis panel tabs): タブセットが**アクティブなモデル型に従う**設計に変更
+- **SR-082** (AI initial model generation): プロンプトがモデル型ごとに分岐
+- **SR-090** (Model diff): 型ごとに diff 実装が異なる
+- **SR-103** (Test cases tab): 状態遷移図専用として明記
 
 ---
 
