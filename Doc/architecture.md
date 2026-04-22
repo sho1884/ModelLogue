@@ -1207,7 +1207,32 @@ v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contai
 - 要求リスト表（SR-113）の列は **derive + contain のみ**（refine / copy は Traceability タブ SR-111 で見える）
 - Orphans（SR-112）は要求 ↔ 要求関係の有無で判定、satisfy / verify / trace は無視
 
-### 17.10 非目標（v7.5）
+### 17.10 レビュー状態メタデータと描画フィルタ（ADR-014）
+
+`Requirement` に追加される `hidden` / `deleted` / `note` と、DSL 側の `$hide` / `$deleted(id, reason)` / `$note` マクロは、**セッションの canonical source にエビデンスとして残り続ける**。図（PlantUML SVG）では SR-114 の renderer filter が hidden・deleted 要求とそれに触れる関係を送信前に除外する。
+
+```
+canonical DSL (セッション保持・Save .puml 対象)
+    │  hidden / deleted / note を含む
+    │
+    ├── Source タブ: canonical をそのまま表示（エビデンス）
+    │
+    ├── Requirement list タブ (SR-113)
+    │    - 削除済みは打ち消し線＋薄灰で表示
+    │    - visibility チェックで hidden トグル
+    │
+    ├── Traceability (SR-111) / Orphans (SR-112)
+    │    - hidden / deleted を除外して計算
+    │
+    └── SR-114 renderer filter
+         │  hidden / deleted + 触れる関係を除外
+         ▼
+      PlantUML Server 送信用ソース ──→ SVG
+```
+
+renderer は純粋関数（`RequirementModel → string`）で、副作用なし。エディタバッファは触らない。`tsc --noEmit` と単体テストで「入力が同じなら出力が byte 同一」を保証する（ADR-011）。
+
+### 17.11 非目標（v7.5）
 
 - AI プロンプトの型別最適化（現状の state-machine 前提プロンプトを要求図に流用し、挙動を見てから詰める）
 - 要求 ↔ 外部アーティファクト追跡の UI（ADR-013）

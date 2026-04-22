@@ -83,7 +83,8 @@ flowchart LR
         SR110["SR-110<br/>Parse requirement-diagram input (v7.5)<br/>macro DSL + 半構造 seed 形を解析"]
         SR111["SR-111<br/>Traceability matrix (v7.5)<br/>トレーサビリティマトリクスを生成"]
         SR112["SR-112<br/>Orphan requirements (v7.5)<br/>孤立要求を抽出する"]
-        SR113["SR-113<br/>Requirement list table (v7.5)<br/>要求リスト表 + Copy/Save .csv"]
+        SR113["SR-113<br/>Requirement list table (v7.5)<br/>要求リスト表 + Copy/Save .csv + soft-delete UI"]
+        SR114["SR-114<br/>Renderer filter (v7.5 ADR-014)<br/>hidden/deleted を描画から除外"]
         SR115["SR-115<br/>Auto-inject preamble (v7.5)<br/>!procedure preamble を描画時に自動注入"]
     end
 
@@ -179,6 +180,7 @@ flowchart LR
     UR014 --> SR111
     UR014 --> SR112
     UR014 --> SR113
+    UR014 --> SR114
     UR014 --> SR115
     UR014 --> SR070
     UR014 --> SR071
@@ -242,7 +244,8 @@ flowchart LR
 | SR-110 要求図入力（macro + 半構造）を解析 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-111 トレーサビリティマトリクスを生成 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-112 孤立要求を抽出 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-113 要求リスト表 + Copy/Save .csv (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-113 要求リスト表 + soft-delete UI + Copy/Save .csv (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-114 Renderer filter: hidden/deleted を描画から除外 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-115 !procedure preamble 自動注入／除去／round-trip (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
@@ -262,7 +265,7 @@ pie title System Requirements by Category (v7.5) / システム要件カテゴ�
     "Model Diff (v7.1)" : 1
     "Artifact Export (v7.2–v7.4)" : 3
     "Test Case Display (v7.4)" : 1
-    "Requirement Diagram (v7.5)" : 5
+    "Requirement Diagram (v7.5)" : 6
 ```
 
 > SR-003（Serialize model）は removed、SR-050（EBNF tab）も v7.1 で removed のため件数から除外。SR-050 の役割は SR-081（ダウンロード）に置き換えた。

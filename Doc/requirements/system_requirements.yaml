@@ -17,6 +17,10 @@ last_updated: "2026-04-22"
 #     requirement-to-requirement relations only (derive, contain,
 #     refine, copy). satisfy / verify / trace to external design or
 #     test artifacts are a separate future review phase.
+#   - ADR-014: review-time deletion is soft-delete + mandatory reason
+#     so that deleted requirements stay as evidence. Adds `hidden`,
+#     `deleted`, and `note` fields to Requirement. Three new meta
+#     macros: $hide, $deleted, $note.
 #   - SR-073 (new): model-type selector at session seed.
 #   - SR-071 REDEFINED: Analysis-panel tab set is built dynamically
 #     from ModelTypeDefinition.analysisTabs (common: Requirements /
@@ -31,8 +35,13 @@ last_updated: "2026-04-22"
 #     outgoing requirement-to-requirement relation).
 #   - SR-113 (new): requirement list table with Copy / Save .csv
 #     following the SR-101 pattern. Columns: id, name, type, text,
-#     contained_in, derives_from. (refine / copy are shown in the
-#     Traceability matrix, not in this primary list.)
+#     contained_in, derives_from, hidden, deleted, note.
+#     Visibility checkbox, inline note editing, soft-delete dialog
+#     per ADR-014.
+#   - SR-114 (new): render-pipeline filter that excludes hidden /
+#     deleted requirements and their relations before sending to
+#     PlantUML Server. The canonical source keeps them (evidence);
+#     only the rendered SVG is filtered.
 #   - SR-115 (new): auto-inject !procedure preamble when rendering,
 #     strip on display, round-trip on save.
 #   - Several existing SRs are scoped "(state-machine)" so the type
@@ -905,17 +914,22 @@ requirement_diagram:
     status: planned
     notes: |
       Accepts two coexisting input forms defined in
-      `src/grammars/requirementDiagram.ebnf` v1.1:
+      `src/grammars/requirementDiagram.ebnf` v1.2:
 
       1. Macro DSL form (the PlantUML-renderable canonical form):
-         $req / $fReq / $nfReq / $dConstraint for requirements;
-         $contain / $derive / $refine / $satisfy / $verify /
-         $trace / $copy for relations; `package "…" <<Frame>> { … }`
-         for grouping. This is what the AI returns in chat proposals
-         and what PlantUML Server renders.
+         - Requirements: $req / $fReq / $nfReq / $dConstraint
+         - Relations:    $contain / $derive / $refine / $satisfy /
+                         $verify / $trace / $copy
+         - Grouping:     `package "…" <<Frame>> { … }`
+         - Review-state meta (ADR-014): $hide / $deleted / $note
+           (no PlantUML output; drive filtering and the list tab)
+         This is what the AI returns in chat proposals and what
+         PlantUML Server renders.
 
       2. Seed form (friendly paste into the Requirements tab):
-         - `id, name[, type[, text]]` requirement rows
+         - `id, name[, type[, text[, hidden[, deleted[, note]]]]]`
+           requirement rows (columns 5-7 match SR-113's CSV for
+           round-trip with Save .csv)
          - `source_id --> target_id[: kind]` relation arrows
            (default kind = derive; kinds limited to derive / contain /
            refine / copy to stay within ADR-013 scope)
@@ -929,11 +943,18 @@ requirement_diagram:
       input doesn't match either form (e.g. pure natural language),
       SR-082 (AI generation) handles it via a requirement-type
       prompt.
+
+      Validation (ADR-014): when a requirement has `deleted=Y` in
+      the seed form OR `$deleted(id, reason)` in the DSL form, a
+      non-empty `reason` / `note` is required. An empty reason is a
+      parse error with a line-numbered message.
     acceptance_criteria:
-      - "Accepts every construct listed in src/grammars/requirementDiagram.ebnf v1.1"
-      - "Produces RequirementModel { requirements, relations } with id / name / type / text / parentId / relation.kind per the data model section"
+      - "Accepts every construct listed in src/grammars/requirementDiagram.ebnf v1.2"
+      - "Produces RequirementModel { requirements, relations } with id / name / type / text / parentId / hidden / deleted / note / relation.kind per the data model section"
       - "Default type when the seed form omits the type column is `functional`"
       - "Default relation kind when a seed-form arrow has no `: kind` suffix is `derive`"
+      - "Recognizes $hide(id) / $deleted(id, reason) / $note(id, text) meta macros and applies them to the named requirement; unknown id is a parse error"
+      - "Rejects `deleted=Y` rows / `$deleted(id, reason)` calls with an empty reason (ADR-014)"
       - "Rejects unknown seed-form relation kinds (e.g. `satisfy`) with a clear message pointing at the macro form — seed form stays within ADR-013's requirement-to-requirement scope"
       - "Rejects raw PlantUML class declarations and bare non-macro relation arrows (must go through macros or seed form)"
       - "Reports a clear line-numbered error for any construct outside the EBNF"
@@ -979,7 +1000,7 @@ requirement_diagram:
       - "When a package contains a requirement but no relation enters or leaves, the package itself is flagged too"
 
   SR-113:
-    function: "Display requirement list as a table with Copy / Save .csv — derive and contain only, per ADR-013"
+    function: "Display requirement list as a table with checkboxes, inline notes, and Copy / Save .csv — derive and contain only, per ADR-013, with soft-delete + reason per ADR-014"
     parent: [UR-014]
     component: RequirementListView tab + src/modelTypes/requirement/listSerializer.ts
     status: planned
@@ -991,29 +1012,69 @@ requirement_diagram:
       the Requirements tab of a new session.
 
       Scope per ADR-013: the list columns cover derive + contain
-      only. refine / copy exist in the model and appear in the
-      Traceability tab (SR-111), but do not get dedicated columns
-      here — the list table's purpose is to answer "what are my
-      requirements and where do they sit in the derivation /
-      containment hierarchy?". satisfy / verify / trace are a
-      separate review phase (ADR-013).
+      only for requirement-to-requirement structure. refine / copy
+      exist in the model and appear in the Traceability tab
+      (SR-111) but do not get dedicated columns here. satisfy /
+      verify / trace are a separate review phase (ADR-013).
+
+      Review-state per ADR-014: every row also shows its `hidden` /
+      `deleted` / `note` state. Deleted rows remain visible in the
+      list (strikethrough + grey) as evidence of the review
+      decision. Hidden rows are shown normally but with an
+      unchecked visibility checkbox. The note cell serves both as a
+      deletion reason (required when deleted) and as a free-form
+      working annotation otherwise.
 
       CSV format:
 
-        id, name, type, text, contained_in, derives_from
+        id, name, type, text, contained_in, derives_from,
+        hidden, deleted, note
 
       `contained_in` and `derives_from` are semicolon-separated for
-      multi-value cells (a requirement may derive from multiple
-      upper-level requirements). RFC 4180 quoting for embedded
-      commas / quotes / newlines. LF line endings.
+      multi-value cells. `hidden` and `deleted` are `Y` or empty.
+      `note` is free-form; must be non-empty when `deleted=Y`.
+      RFC 4180 quoting for embedded commas / quotes / newlines.
+      LF line endings.
     acceptance_criteria:
       - "A Requirement list tab exists in the Analysis panel for requirement-type sessions (order per SR-071)"
-      - "Columns: id, name, type, text, contained_in, derives_from"
+      - "Columns in display order: visibility checkbox (reflects !hidden), id, name, type, text, contained_in, derives_from, note, delete-action icon"
       - "`contained_in` is empty for top-level requirements; otherwise the container (package or parent requirement) id; multi-valued with ; separator when a requirement is contained in several places"
       - "`derives_from` is empty if the requirement has no derive-source; otherwise semicolon-separated source ids"
+      - "Toggling the visibility checkbox flips the requirement's `hidden` flag; change takes effect immediately (diagram re-renders, CSV export reflects new state)"
+      - "The note cell is inline-editable; changes update the requirement's `note` field"
+      - "The delete-action icon opens a small reason-input dialog; confirming sets `deleted=true` and stores the reason in `note` (ADR-014)"
+      - "Deleted rows remain in the list shown strikethrough + grey; an `Undelete` control in the row's context menu clears `deleted` (note is retained)"
       - "Copy produces HTML (<table>) for Excel / Sheets / Word paste AND plain-text CSV; Save produces the CSV"
+      - "The CSV includes every requirement regardless of hidden / deleted state — the artifact is the full evidence record"
       - "Filename pattern: modellogue-<sessionName-slug>-requirements-<YYYY-MM-DD-HHMM>.csv"
       - "A file saved here is a valid seed-form input to SR-110 — round-trip is byte-stable for a given RequirementModel (ADR-011)"
+
+  SR-114:
+    function: "Render-pipeline filter: exclude hidden and deleted requirements (and their relations) from the PlantUML source sent to PlantUML Server"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/renderer.ts
+    status: planned
+    notes: |
+      The PlantUML source persisted in the session (canonical DSL
+      form) contains the full model including $hide / $deleted
+      entries, because they are evidence (ADR-014). But when the
+      source is rendered to SVG by PlantUML Server, the renderer
+      transforms it: requirements marked `hidden` or `deleted` are
+      removed along with every relation that touches them.
+
+      This filtering is a pure function of the model (RequirementModel
+      → filtered PlantUML string) — the original source in the editor
+      buffer is never modified.
+
+      Scope: applies to requirement-diagram sessions only. State-
+      machine sessions do not use this filter (no hide/delete flag
+      on state machines in v7.5).
+    acceptance_criteria:
+      - "Requirements with hidden=true OR deleted=true are not emitted in the PlantUML source sent to PlantUML Server"
+      - "Relations whose source or target is hidden / deleted are also not emitted (dangling references never reach the server)"
+      - "The editor source (Source tab) is unchanged — what the user sees in the source buffer always matches what would serialize to .puml"
+      - "Toggling a hidden / deleted flag triggers a re-render of the SVG with the new filter applied (reactive)"
+      - "Filter output is byte-deterministic for a given (model, hidden-set, deleted-set) so the SVG round-trip is stable (ADR-011)"
 
   SR-115:
     function: "Auto-inject !procedure preamble when rendering, strip on display, round-trip on save"
@@ -1108,6 +1169,15 @@ data_model:
       - name: parentId
         type: "string | null"
         description: "Package or containing-requirement id, or null for top-level. Populated by `package { … }` grouping or `$contain(parent, child)` relations."
+      - name: hidden
+        type: boolean
+        description: "Review-state flag (ADR-014). true = omit from the diagram but keep in the list and analyses. Populated by $hide(id) in the DSL or the `hidden` CSV column. Default false."
+      - name: deleted
+        type: boolean
+        description: "Review-state flag (ADR-014). true = reviewer decided this requirement is out. Shown strikethrough in the list tab as evidence, omitted from the diagram, excluded from orphan analysis. Populated by $deleted(id, reason) in the DSL or the `deleted` CSV column. Default false."
+      - name: note
+        type: string
+        description: "Free-form review annotation attached to this requirement (ADR-014). When `deleted=true`, MUST be non-empty (carries the deletion reason). Otherwise optional — used for working notes like 'needs clarification'. Populated by $note(id, text), the reason argument of $deleted(id, reason), or the `note` CSV column. Default empty string."
 
   RequirementRelation:
     fields:

@@ -399,7 +399,7 @@ R1 --> R11: Containment
 R11 --> R111
 ```
 
-- リスト行: `id, name[, type[, text]]`。type 省略時は `functional`。
+- リスト行: `id, name[, type[, text[, hidden[, deleted[, note]]]]]`。type 省略時は `functional`。列 5-7 は SR-113 の Save .csv 出力形と同じで、往復可能。
 - 関係矢印行: `source --> target[: kind]`。kind 省略時は `derive`。kind は v7.5 では `derive / Containment / Refine / Copy` のみ受け付ける（ADR-013）。
 - `satisfy / verify / trace` は**半構造形では書けない**。必要なら macro 形（`$satisfy(…)` 等）を混ぜる。
 - 空行・コメント行（`'` 開始）は無視。
@@ -425,6 +425,14 @@ R11 --> R111
 
 **グルーピング**: `package "…" <<Frame>> { … }` で要求を階層的にまとめる。
 
+**レビュー状態メタ（ADR-014）**: 下記 3 マクロは描画上は何も出力せず、要求の review state を表す。DSL / CSV / JSON 全てで round-trip する：
+
+| マクロ | 意味 |
+|---|---|
+| `$hide(id)` | 該当要求を**図から除外**、リストには表示（「今は関心がない」） |
+| `$deleted(id, reason)` | 該当要求を**レビュー判断で削除**。図から除外、リストでは打ち消し線で残存（エビデンス）。reason は必須 |
+| `$note(id, text)` | 該当要求に自由メモを付ける（「曖昧、要確認」等） |
+
 #### 3.13.4 サポートしない構文
 
 - 素の class 宣言（`class Foo <<requirement>> { … }`）: `$req` 等を経由すること
@@ -442,10 +450,12 @@ PlantUML Server でそのまま描画するためには `!procedure $fReq …` �
 | タブ | 内容 | SR |
 |---|---|---|
 | Requirements（共通） | 自然言語 + 半構造の要求仕様。seed 中は編集可、以降 read-only | SR-080 |
-| Source（共通） | Canonical DSL（要求図の場合は macro 形）。read-only、preamble は非表示 | SR-001 |
-| Requirement list | `id, name, type, text, contained_in, derives_from` の表。Copy / Save .csv で書き出し可能（CSV は SR-110 の seed 形と round-trip） | SR-113 |
-| Traceability | 要求 × 要求のマトリクス。derive / contain / refine / copy の kind をセルに表示 | SR-111 |
-| Orphans | 要求 ↔ 要求の incoming / outgoing が欠けている要求を列挙 | SR-112 |
+| Source（共通） | Canonical DSL（要求図の場合は macro 形）。read-only、preamble は非表示。canonical 形には `$hide` / `$deleted` / `$note` のメタ行もエビデンスとして含まれる | SR-001 |
+| Requirement list | `id, name, type, text, contained_in, derives_from, note` の表 + 先頭の visibility チェックボックス + 末尾の delete アイコン。削除済み行は打ち消し線＋薄灰で常時表示（ADR-014）。Copy / Save .csv で `hidden / deleted` 列付きで書き出し（CSV は SR-110 の seed 形と round-trip） | SR-113 |
+| Traceability | 要求 × 要求のマトリクス。derive / contain / refine / copy の kind をセルに表示。hidden / deleted 要求は含めない | SR-111 |
+| Orphans | 要求 ↔ 要求の incoming / outgoing が欠けている要求を列挙。deleted 要求は除外、hidden 要求も除外（ADR-014） | SR-112 |
+
+**描画パイプライン（SR-114）**: 図に渡される PlantUML ソースはセッションが保持する canonical DSL から **hidden と deleted を除外したもの**。canonical 側はエビデンスとして保持、図の見た目は review state を反映、という分離。
 
 状態遷移図型セッションの `State×Event / State×State / Test cases` と同じ位置（Requirements / Source の右）に並ぶ。タブの構築は `ModelTypeDefinition.analysisTabs` から動的に行うので、`AnalysisPanel.tsx` はモデル型を知らない（ADR-012 / SR-071）。
 
@@ -456,7 +466,8 @@ PlantUML Server でそのまま描画するためには `!procedure $fReq …` �
 | SR-110 | Parse requirement-diagram input (macro DSL + semi-structured seed form) / 要求図入力（macro DSL 形と半構造 seed 形）を RequirementModel に解析 **(v7.5 planned)** | UR-014 |
 | SR-111 | Traceability matrix (requirement × requirement by kind) / トレーサビリティマトリクス（要求 × 要求、関係種別） **(v7.5 planned)** | UR-014 |
 | SR-112 | Orphan requirements list (no incoming / no outgoing r-to-r relation) / 孤立要求リスト **(v7.5 planned)** | UR-014 |
-| SR-113 | Requirement list table with Copy / Save .csv / 要求リスト表、Copy / Save .csv **(v7.5 planned)** | UR-014 |
+| SR-113 | Requirement list table with visibility checkbox, inline notes, delete-with-reason action, and Copy / Save .csv / 要求リスト表、表示切替・備考編集・理由付き削除・Copy / Save .csv **(v7.5 planned, ADR-014)** | UR-014 |
+| SR-114 | Renderer filter — exclude hidden and deleted requirements (and touching relations) before PlantUML Server / hidden・deleted な要求とそれに触れる関係を描画から除外 **(v7.5 planned, ADR-014)** | UR-014 |
 | SR-115 | Auto-inject `!procedure` preamble when rendering / 描画時に preamble を自動注入、表示時は除去、保存時は往復 **(v7.5 planned)** | UR-014 |
 
 #### 3.13.8 既存 SR への影響
@@ -471,6 +482,18 @@ PlantUML Server でそのまま描画するためには `!procedure $fReq …` �
 #### 3.13.9 スコープ境界（ADR-013）
 
 v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contain / refine / copy）のみが主題。要求 ↔ 外部アーティファクト（設計・テスト）を辿るレビュー — satisfy / verify / trace の実用活用 — は**別フェーズの別機能**として将来設計する。詳細は [ADR-013](../adr/ADR-013-requirement-review-scope-boundary.yaml) 参照。
+
+#### 3.13.10 レビュー過程の削除はエビデンスとして残す（ADR-014）
+
+レビューの結論として「この要求は削除する」となったものは、**hard-delete せず deleted フラグ + reason を併記して保持**する。Dialogue as Asset 原則の延長で「**何を削除し、なぜそうしたか**」がレビュー artifact 自身に残るようにする。具体的実装：
+
+- **データモデル**: `Requirement` に `hidden` / `deleted` / `note` の 3 フィールド
+- **DSL**: `$hide(id)` / `$deleted(id, reason)` / `$note(id, text)` の 3 メタマクロ（PlantUML 描画上は何も出さない）
+- **CSV**: `hidden` / `deleted` / `note` 列。`deleted=Y` のときは `note` 非空必須
+- **Renderer**: `hidden`・`deleted` とそれに触れる関係を PlantUML 送信前に除外（SR-114）
+- **List タブ**: 削除済み行は打ち消し線＋薄灰で常時表示（見える = エビデンス）、Undelete 可能
+
+詳細は [ADR-014](../adr/ADR-014-soft-delete-with-reason.yaml) 参照。この原則は将来的に他モデル型（状態遷移図の state / transition 削除等）へ波及しうる。
 
 ---
 

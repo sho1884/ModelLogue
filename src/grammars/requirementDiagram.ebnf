@@ -1,7 +1,8 @@
 (* ModelLogue Requirement Diagram Subset Grammar            *)
-(* Version: 1.1                                             *)
+(* Version: 1.2                                             *)
 (* Reference: ADR-012 (model-type framework),               *)
 (*            ADR-013 (requirement-review scope boundary),  *)
+(*            ADR-014 (soft-delete + reason preservation),  *)
 (*            ADR-009 analogue (minimal subset principle)   *)
 (*                                                          *)
 (* PlantUML does NOT natively provide a SysML requirement    *)
@@ -45,6 +46,7 @@ line             = empty_line
                  | package_block
                  | requirement_call
                  | relation_call
+                 | meta_call
                  | seed_requirement_line
                  | seed_relation_line ;
 
@@ -151,6 +153,42 @@ relation_macro_name
                  | "$trace"
                  | "$copy" ;
 
+(* ===== Review-state meta macros (ADR-014) ===== *)
+(*                                                               *)
+(* These macros attach review-state metadata to a requirement.   *)
+(* They produce NOTHING in the PlantUML output — the renderer    *)
+(* reads them to decide what to send to PlantUML Server and how  *)
+(* to display the list tab row. They round-trip through DSL and  *)
+(* CSV, preserving review decisions as evidence.                 *)
+(*                                                               *)
+(*   $hide(id)                                                   *)
+(*       Requirement is hidden from the diagram and not drawn,   *)
+(*       but remains in the list and all analyses. Use for       *)
+(*       "I am not focused on this right now".                   *)
+(*                                                               *)
+(*   $deleted(id, reason)                                        *)
+(*       Requirement is marked deleted with a non-empty reason.  *)
+(*       Not drawn; shown strikethrough in the list tab as       *)
+(*       evidence. Excluded from orphan analysis.                *)
+(*                                                               *)
+(*   $note(id, text)                                             *)
+(*       Free-form annotation attached to a requirement. Shown   *)
+(*       in the list tab note column; not drawn.                 *)
+(*       When $deleted(id, …) is present, its reason argument    *)
+(*       populates the note column; an additional $note(id, …)   *)
+(*       can append further context.                             *)
+(*                                                               *)
+(* Target id MUST refer to a requirement declared elsewhere in   *)
+(* the same file (by $req / $fReq / $nfReq / $dConstraint or by  *)
+(* a seed-form requirement row). A meta call referring to an     *)
+(* undeclared id is a parse error.                               *)
+
+meta_call        = meta_macro_name , "(" , arg , [ "," , arg ] , ")" ;
+
+meta_macro_name  = "$hide"
+                 | "$deleted"
+                 | "$note" ;
+
 (* ===== SEED form (friendly input for Requirements tab paste) ===== *)
 (*                                                                   *)
 (* Accepts rows that look like a spreadsheet or a plain list, plus   *)
@@ -182,7 +220,16 @@ seed_requirement_line
                  = seed_id , "," , whitespace_opt ,
                    seed_name ,
                    [ "," , whitespace_opt , seed_type ] ,
-                   [ "," , whitespace_opt , seed_text ] ;
+                   [ "," , whitespace_opt , seed_text ] ,
+                   [ "," , whitespace_opt , seed_hidden ] ,
+                   [ "," , whitespace_opt , seed_deleted ] ,
+                   [ "," , whitespace_opt , seed_note ] ;
+
+(* Columns 5-7 match the CSV produced by SR-113 so a saved      *)
+(* .csv round-trips as a valid seed input. Any of them may be    *)
+(* omitted; missing columns default to empty (hidden=false,      *)
+(* deleted=false, note=""). When deleted=Y, note MUST be non-    *)
+(* empty (enforced by the parser, not the grammar).              *)
 
 seed_id          = identifier ;
 seed_name        = { any_char_except_comma_or_quote } | '"' , arg_text , '"' ;
@@ -191,6 +238,9 @@ seed_type        = "func" | "functional"
                  | "constraint" | "c"
                  | "req" | "requirement" ;
 seed_text        = '"' , arg_text , '"' | { any_char_except_comma } ;
+seed_hidden      = "" | "Y" | "y" ;
+seed_deleted     = "" | "Y" | "y" ;
+seed_note        = '"' , arg_text , '"' | { any_char_except_comma } ;
 
 seed_relation_line
                  = identifier , whitespace_opt ,
