@@ -726,7 +726,7 @@ artifact_export:
     function: "Export each state-transition matrix from its tab"
     parent: [UR-007]
     component: MatrixView (Copy / Save actions) + transition-table serializer
-    status: planned
+    status: implemented
     notes: |
       v7.2 implemented a human-friendly matrix CSV (hybrid indented
       layout, labels only). That format is insufficient as input to

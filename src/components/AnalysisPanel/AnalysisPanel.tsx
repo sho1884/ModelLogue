@@ -26,6 +26,7 @@ export function AnalysisPanel() {
 
   const stateEventMatrix = useModelStore((s) => s.stateEventMatrix);
   const stateStateMatrix = useModelStore((s) => s.stateStateMatrix);
+  const model = useModelStore((s) => s.model);
 
   return (
     <div
@@ -78,15 +79,15 @@ export function AnalysisPanel() {
           {activeTab === 'state-event' && (
             <MatrixView
               matrix={stateEventMatrix}
+              model={model}
               title="State \ Event"
-              exportSuffix="state-event"
             />
           )}
           {activeTab === 'state-state' && (
             <MatrixView
               matrix={stateStateMatrix}
+              model={model}
               title="From \ To"
-              exportSuffix="state-state"
             />
           )}
         </div>

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  matrixToCsv,
-  matrixToHtml,
-} from '../../src/engines/matrixSerializer';
+import { matrixToHtml } from '../../src/engines/matrixSerializer';
 import type { MatrixData } from '../../src/types/matrix';
 
 const sample: MatrixData = {
@@ -37,13 +34,4 @@ describe('matrixSerializer (SR-101)', () => {
     expect(html).toContain('<td>A &quot;next&quot;</td>');
   });
 
-  it('CSV: RFC 4180 quoting for commas and quotes', () => {
-    const csv = matrixToCsv(sample, 'State / Event');
-    const lines = csv.split('\r\n');
-    expect(lines[0]).toBe('State / Event,start,"go,now"');
-    expect(lines[1]).toBe('Composite,,X');
-    expect(lines[2]).toBe('  A,A,');
-    // Embedded quote becomes "" and the whole field is quoted
-    expect(lines[3]).toBe('  B,,"A ""next"""');
-  });
 });

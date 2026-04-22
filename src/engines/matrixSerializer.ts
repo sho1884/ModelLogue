@@ -1,48 +1,15 @@
-// SR-101 (v7.2): serialize a state-transition matrix for export.
+// SR-101: serialize an on-screen state-transition matrix as HTML for
+// clipboard copy. The HTML <table> is the text/html clipboard payload
+// so spreadsheets / Word import it directly as a formatted table (Excel
+// prefers HTML when both HTML and plain text are present).
 //
-// Two formats:
-//   - CSV: comma-separated, RFC 4180 quoting. Used for the .csv file
-//     download AND as the text/plain payload on clipboard copy — CSV
-//     is the canonical interchange format for the downstream uses
-//     (repository commit, AI prompt input, test-generation pipeline).
-//   - HTML: a real <table>. Used as the text/html payload on clipboard
-//     copy so spreadsheets / Word import it directly as a formatted
-//     table (Excel prefers HTML when both are present).
-//
-// Layout mirrors the on-screen hybrid pattern: composite rows are
-// followed by their indented child rows. The top-left cell carries
-// the table title.
+// The plain-text clipboard payload and the .csv file download both use
+// the canonical state-transition-table CSV produced by
+// `transitionTableSerializer.modelToCanonicalCsv` — that format is
+// defined in tools/nswitch/Requirements_Specification.md §4.2 and is
+// the interchange format shared with the modellogue-nswitch CLI.
 
 import type { MatrixData } from '../types/matrix';
-
-const INDENT = '  '; // two spaces per level
-
-function indentLabel(label: string, level: number): string {
-  return INDENT.repeat(level) + label;
-}
-
-function buildRows(matrix: MatrixData, title: string): string[][] {
-  const header: string[] = [title, ...matrix.columnHeaders];
-  const body: string[][] = matrix.rows.map((row, ri) => [
-    indentLabel(row.label, row.level),
-    ...matrix.cells[ri].map((c) => c ?? ''),
-  ]);
-  return [header, ...body];
-}
-
-function csvCell(s: string): string {
-  // RFC 4180: quote if the field contains comma, quote, CR, or LF.
-  // Inside quotes, embedded quotes are doubled.
-  if (/[",\r\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-
-export function matrixToCsv(matrix: MatrixData, title: string): string {
-  const rows = buildRows(matrix, title);
-  return rows.map((cols) => cols.map(csvCell).join(',')).join('\r\n');
-}
 
 function htmlEscape(s: string): string {
   return s

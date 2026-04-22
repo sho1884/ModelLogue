@@ -1,24 +1,30 @@
 import type { MatrixData } from '../../types/matrix';
+import type { StateMachineModel } from '../../types/stateMachine';
 import { ExportActions } from '../ExportActions';
-import {
-  matrixToCsv,
-  matrixToHtml,
-} from '../../engines/matrixSerializer';
+import { matrixToHtml } from '../../engines/matrixSerializer';
+import { modelToCanonicalCsv } from '../../engines/transitionTableSerializer';
 import { copyHtmlAndText } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
 import { useSessionStore } from '../../stores/sessionStore';
 
 interface MatrixViewProps {
   matrix: MatrixData | null;
+  /**
+   * The parsed state machine model. Used for canonical CSV export (SR-101
+   * v7.3). The on-screen matrix view is driven by `matrix`; file download
+   * and plain-text clipboard payload are driven by the model so both tabs
+   * emit the same tool-interchange artifact.
+   */
+  model: StateMachineModel | null;
   title: string;
-  /** Filename suffix for exports (e.g. "state-event" → modellogue-<name>-state-event-...csv) */
-  exportSuffix: string;
 }
+
+const EXPORT_SUFFIX = 'transitions';
 
 // Pixels of left padding per indentation level (hybrid pattern).
 const INDENT_PX = 18;
 
-export function MatrixView({ matrix, title, exportSuffix }: MatrixViewProps) {
+export function MatrixView({ matrix, model, title }: MatrixViewProps) {
   const sessionName = useSessionStore((s) => s.sessionName);
 
   if (!matrix || matrix.rows.length === 0) {
@@ -29,24 +35,25 @@ export function MatrixView({ matrix, title, exportSuffix }: MatrixViewProps) {
     );
   }
 
+  const canonicalCsv = model ? modelToCanonicalCsv(model) : '';
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-2 py-1 bg-gray-50 border-b border-gray-200 flex items-center justify-end shrink-0">
         <ExportActions
-          onCopy={() => {
-            const csv = matrixToCsv(matrix, title);
-            return copyHtmlAndText(matrixToHtml(matrix, title), csv);
-          }}
+          onCopy={() =>
+            copyHtmlAndText(matrixToHtml(matrix, title), canonicalCsv)
+          }
           onSave={() =>
             downloadTextFile(
-              sessionFilename(sessionName, exportSuffix, 'csv'),
-              matrixToCsv(matrix, title),
+              sessionFilename(sessionName, EXPORT_SUFFIX, 'csv'),
+              canonicalCsv,
               'text/csv'
             )
           }
-          copyTitle="Copy as a table (HTML for Excel / Sheets / Word; CSV as plain text for repos, AI prompts, test-generation tools)"
+          copyTitle="Copy as a table. HTML payload is the matrix for Excel / Sheets / Word; plain-text payload is the canonical state-transition-table CSV for repos, AI prompts, and test-generation tools."
           saveLabel="Save .csv"
-          saveTitle="Download as a CSV file (RFC 4180)"
+          saveTitle="Download the canonical state-transition-table CSV (RFC 4180, shared format with modellogue-nswitch)"
         />
       </div>
       <div className="overflow-auto flex-1 p-2">
