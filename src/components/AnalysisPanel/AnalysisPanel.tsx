@@ -1,17 +1,25 @@
-import { useUiStore, type AnalysisTab } from '../../stores/uiStore';
-import { useModelStore } from '../../stores/modelStore';
+import { useUiStore } from '../../stores/uiStore';
 import { SourceEditor } from './SourceEditor';
-import { MatrixView } from './MatrixView';
 import { RequirementsTab } from './RequirementsTab';
-import { TestCasesView } from './TestCasesView';
 import { ResizeHandle } from '../ResizeHandle';
+import { getDefaultModelTypeDefinition } from '../../modelTypes/registry';
+import type { AnalysisTabSpec } from '../../modelTypes/types';
 
-const tabs: { id: AnalysisTab; label: string }[] = [
-  { id: 'requirements', label: 'Requirements' },
-  { id: 'source', label: 'Source' },
-  { id: 'state-event', label: 'State×Event' },
-  { id: 'state-state', label: 'State×State' },
-  { id: 'test-cases', label: 'Test cases' },
+// Common tabs are defined here — they apply to every model type.
+// Type-specific tabs (S×E / S×S / Test cases for state machine, and
+// later Requirement list / Traceability / Orphans for requirement)
+// come from the active ModelTypeDefinition.analysisTabs (ADR-012).
+const commonTabs: AnalysisTabSpec[] = [
+  {
+    id: 'requirements',
+    label: 'Requirements',
+    render: () => <RequirementsTab />,
+  },
+  {
+    id: 'source',
+    label: 'Source',
+    render: () => <SourceEditor />,
+  },
 ];
 
 // Resize bounds for the analysis panel height.
@@ -26,9 +34,12 @@ export function AnalysisPanel() {
   const height = useUiStore((s) => s.analysisPanelHeight);
   const setHeight = useUiStore((s) => s.setAnalysisPanelHeight);
 
-  const stateEventMatrix = useModelStore((s) => s.stateEventMatrix);
-  const stateStateMatrix = useModelStore((s) => s.stateStateMatrix);
-  const model = useModelStore((s) => s.model);
+  // v7.5 step 2: hardcoded to the default type. Step 3 replaces this
+  // with `SessionStore.modelTypeId`.
+  const modelType = getDefaultModelTypeDefinition();
+  const tabs: AnalysisTabSpec[] = [...commonTabs, ...modelType.analysisTabs];
+
+  const activeSpec = tabs.find((t) => t.id === activeTab);
 
   return (
     <div
@@ -73,26 +84,10 @@ export function AnalysisPanel() {
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — fully driven by the active spec's render(). */}
       {!collapsed && (
         <div className="flex-1 overflow-hidden">
-          {activeTab === 'requirements' && <RequirementsTab />}
-          {activeTab === 'source' && <SourceEditor />}
-          {activeTab === 'state-event' && (
-            <MatrixView
-              matrix={stateEventMatrix}
-              model={model}
-              title="State \ Event"
-            />
-          )}
-          {activeTab === 'state-state' && (
-            <MatrixView
-              matrix={stateStateMatrix}
-              model={model}
-              title="From \ To"
-            />
-          )}
-          {activeTab === 'test-cases' && <TestCasesView />}
+          {activeSpec?.render() ?? null}
         </div>
       )}
     </div>

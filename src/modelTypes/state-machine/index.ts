@@ -12,3 +12,4 @@ export * from './parser';
 export * from './matrixGenerator';
 export * from './transitionTableSerializer';
 export * from './diff';
+export { stateMachineDefinition } from './definition';

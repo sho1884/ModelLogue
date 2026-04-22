@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 
-export type AnalysisTab =
-  | 'requirements'
-  | 'source'
-  | 'state-event'
-  | 'state-state'
-  | 'test-cases';
+// Active analysis-panel tab id. v7.5 onwards this is a free string
+// because the tab set is built dynamically from the active
+// ModelTypeDefinition.analysisTabs (SR-071, ADR-012). Known ids today:
+//   'requirements' | 'source' (common)
+//   'state-event' | 'state-state' | 'test-cases' (state-machine)
+//   'requirement-list' | 'traceability' | 'orphans' (requirement, v7.5 step 5+)
+export type AnalysisTab = string;
 
 interface UiStore {
   analysisPanelHeight: number;
