@@ -30,6 +30,19 @@ export interface AnalysisTabSpec {
 }
 
 /**
+ * Generic parse-result shape. Each ModelTypeDefinition carries its own
+ * instantiation with the type's concrete Model.
+ */
+export interface GenericParseError {
+  line: number;
+  message: string;
+}
+export interface GenericParseResult {
+  model: unknown | null;
+  errors: GenericParseError[];
+}
+
+/**
  * The public surface each model type plugin exposes to the SPA shell.
  */
 export interface ModelTypeDefinition {
@@ -47,4 +60,20 @@ export interface ModelTypeDefinition {
    * (Requirements | Source) in the Analysis panel.
    */
   analysisTabs: AnalysisTabSpec[];
+
+  /**
+   * Parse the canonical PlantUML / DSL source into this type's model.
+   * Implementations return `model` as `unknown` because the registry is
+   * type-erased; callers that know which type they're dealing with can
+   * cast safely.
+   */
+  parse: (source: string) => GenericParseResult;
+
+  /**
+   * Transform the (source, parsed model) pair into the PlantUML that
+   * goes to PlantUML Server. For state-machine this is identity; for
+   * requirement it injects the preamble and filters hidden / deleted
+   * requirements out (SR-114, SR-115).
+   */
+  renderPlantUml: (source: string, model: unknown | null) => string;
 }

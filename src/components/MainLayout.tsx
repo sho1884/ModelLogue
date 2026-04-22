@@ -18,6 +18,7 @@ const MAX_CHAT_WIDTH_RATIO = 0.6; // up to 60% of the viewport width
 
 export function MainLayout() {
   const currentSource = useSessionStore((s) => s.currentSource);
+  const modelTypeId = useSessionStore((s) => s.modelTypeId);
   const parseSource = useModelStore((s) => s.parseSource);
   const fetchCoordinates = useModelStore((s) => s.fetchCoordinates);
   const parseErrors = useModelStore((s) => s.parseErrors);
@@ -57,18 +58,25 @@ export function MainLayout() {
     };
   }, [currentSource, fetchCoordinates]);
 
-  // SR-103: request N-switch test cases after a clean parse, debounced
-  // (same 500ms as SVG fetch). When the source is empty or the parser
-  // reported errors, reset the tab to idle without calling the API.
+  // SR-103 is state-machine-specific (N-switch testing). Requirement
+  // sessions never call the nswitch API.
   useEffect(() => {
     if (testCasesDebounceRef.current) {
       clearTimeout(testCasesDebounceRef.current);
     }
+    if (modelTypeId !== 'state-machine') {
+      resetTestCases();
+      return;
+    }
+    const states =
+      model && 'states' in (model as object)
+        ? (model as { states: unknown[] }).states
+        : null;
     if (
       currentSource.trim() === '' ||
       parseErrors.length > 0 ||
-      !model ||
-      model.states.length === 0
+      !states ||
+      states.length === 0
     ) {
       resetTestCases();
       return;
@@ -83,6 +91,7 @@ export function MainLayout() {
     };
   }, [
     currentSource,
+    modelTypeId,
     parseErrors,
     model,
     nSwitchLevel,

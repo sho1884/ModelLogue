@@ -1,14 +1,11 @@
-// State-machine ModelTypeDefinition — the plug-in registration entry
-// for the original (and so far only) supported model type.
-//
-// Only the v7.5 step-2 fields are populated for now (id, label,
-// description, analysisTabs). Later steps add parse / diff / grammar /
-// preamble / external-services registration — those pieces already
-// exist in this directory and can be surfaced here without breaking
-// the current shape.
+// State-machine ModelTypeDefinition. Extended in step 5 with `parse`
+// (existing state-machine parser wrapped to the generic shape) and
+// `renderPlantUml` (identity — PlantUML source IS canonical for this
+// type).
 
-import type { ModelTypeDefinition } from '../types';
+import type { GenericParseResult, ModelTypeDefinition } from '../types';
 import { stateMachineAnalysisTabs } from './analysisTabs';
+import { parse as parseStateMachine } from './parser';
 
 export const stateMachineDefinition: ModelTypeDefinition = {
   id: 'state-machine',
@@ -16,4 +13,14 @@ export const stateMachineDefinition: ModelTypeDefinition = {
   description:
     'UML-style state transition diagram (PlantUML subset, ADR-009). Nswitch-coverage test cases and canonical transition-table CSV.',
   analysisTabs: stateMachineAnalysisTabs,
+
+  parse(source: string): GenericParseResult {
+    const r = parseStateMachine(source);
+    return { model: r.model, errors: r.errors };
+  },
+
+  // PlantUML source IS canonical for state machines; no transform needed.
+  renderPlantUml(source: string): string {
+    return source;
+  },
 };

@@ -11,10 +11,11 @@
 
 import type { ModelTypeDefinition } from './types';
 import { stateMachineDefinition } from './state-machine/definition';
+import { requirementDefinition } from './requirement/definition';
 
 export const MODEL_TYPE_REGISTRY: ReadonlyArray<ModelTypeDefinition> = [
   stateMachineDefinition,
-  // requirement: added in v7.5 step 4.
+  requirementDefinition,
 ];
 
 /**

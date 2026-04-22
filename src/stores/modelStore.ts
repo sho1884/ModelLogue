@@ -3,7 +3,6 @@ import type { StateMachineModel } from '../types/stateMachine';
 import type { MatrixData } from '../types/matrix';
 import type { ParseError } from '../types/parser';
 import type { CoordinateMap } from '../engines/svgCoordinateExtractor';
-import { parse } from '../parsers/stateMachineParser';
 import {
   generateStateEventMatrix,
   generateStateStateMatrix,
@@ -11,9 +10,18 @@ import {
 import { fetchSvg } from '../services/plantUmlService';
 import { extractCoordinates } from '../engines/svgCoordinateExtractor';
 import { useSessionStore } from './sessionStore';
+import { getModelTypeDefinition } from '../modelTypes/registry';
+import type { RequirementModel } from '../modelTypes/requirement/model';
+
+// v7.5 step 5: `model` is typed as a union so stores and components
+// can discriminate via sessionStore.modelTypeId. State-machine-specific
+// derived state (the two matrices) stays null for non-state-machine
+// sessions. Coordinates / SVG remain generic (any PlantUML source →
+// coordinates extraction is safe for any diagram the Server can render).
+export type ActiveModel = StateMachineModel | RequirementModel | null;
 
 interface ModelStore {
-  model: StateMachineModel | null;
+  model: ActiveModel;
   parseErrors: ParseError[];
   stateEventMatrix: MatrixData | null;
   stateStateMatrix: MatrixData | null;
@@ -23,6 +31,20 @@ interface ModelStore {
 
   parseSource: (source: string) => void;
   fetchCoordinates: (source: string) => Promise<void>;
+
+  // ADR-014 review-state mutators (requirement model only). Applied
+  // after parse, before Save. No-op when the active model is not a
+  // RequirementModel.
+  toggleRequirementHidden: (id: string) => void;
+  markRequirementDeleted: (id: string, reason: string) => void;
+  unmarkRequirementDeleted: (id: string) => void;
+}
+
+function isRequirementModel(m: ActiveModel): m is RequirementModel {
+  return !!(m && 'requirements' in (m as object));
+}
+function isStateMachineModel(m: ActiveModel): m is StateMachineModel {
+  return !!(m && 'states' in (m as object));
 }
 
 export const useModelStore = create<ModelStore>((set, get) => ({
@@ -35,36 +57,66 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   svgFetchError: null,
 
   parseSource: (source: string) => {
-    const result = parse(source);
+    const modelTypeId = useSessionStore.getState().modelTypeId;
+    const def = getModelTypeDefinition(modelTypeId);
+    if (!def) {
+      set({ parseErrors: [] });
+      return;
+    }
+    const result = def.parse(source);
 
-    if (result.model) {
-      set({
-        model: result.model,
-        parseErrors: result.errors,
-        stateEventMatrix: generateStateEventMatrix(result.model),
-        stateStateMatrix: generateStateStateMatrix(result.model),
-      });
-      // SR-001 (v7.2): the moment a non-trivial parseable model exists,
-      // the session moves out of SEED phase. One-way transition.
-      // We require >=1 real state — the parser also returns an empty
-      // model object for empty / whitespace-only input, and that
-      // emptiness must NOT be treated as "model established" or the
-      // editor would lock at session start.
-      if (result.model.states.length > 0) {
+    // Generate type-specific derived state.
+    let stateEventMatrix: MatrixData | null = null;
+    let stateStateMatrix: MatrixData | null = null;
+    if (modelTypeId === 'state-machine' && isStateMachineModelOrNull(result.model)) {
+      const sm = result.model;
+      if (sm) {
+        stateEventMatrix = generateStateEventMatrix(sm);
+        stateStateMatrix = generateStateStateMatrix(sm);
+      }
+    }
+
+    set({
+      model: (result.model ?? null) as ActiveModel,
+      parseErrors: result.errors,
+      stateEventMatrix,
+      stateStateMatrix,
+    });
+
+    // SR-001 (v7.2): a non-trivial parseable model flips SEED → REVIEW.
+    // Test varies by type — state machines need a state, requirement
+    // diagrams need a requirement.
+    if (result.model && !result.errors.length) {
+      const m = result.model as unknown;
+      const hasContent =
+        isStateMachineModelLike(m)
+          ? m.states.length > 0
+          : isRequirementModelLike(m)
+            ? m.requirements.length > 0
+            : false;
+      if (hasContent) {
         useSessionStore.getState().markModelEstablished();
       }
-    } else {
-      set({ parseErrors: result.errors });
     }
   },
 
   fetchCoordinates: async (source: string) => {
     const model = get().model;
     if (!model) return;
+    const modelTypeId = useSessionStore.getState().modelTypeId;
+    const def = getModelTypeDefinition(modelTypeId);
+    const renderable = def ? def.renderPlantUml(source, model) : source;
 
     try {
-      const svgString = await fetchSvg(source);
-      const coords = extractCoordinates(svgString, model);
+      const svgString = await fetchSvg(renderable);
+      // Coordinate extraction is state-machine-only for now; the
+      // requirement-diagram output uses class-diagram SVG which the
+      // existing extractor isn't tuned for. Non-state-machine sessions
+      // get SVG display without marker-to-model coordinate mapping.
+      const coords =
+        modelTypeId === 'state-machine' && isStateMachineModel(model)
+          ? extractCoordinates(svgString, model)
+          : null;
       set({ coordinates: coords, svgString, svgFetchError: null });
     } catch (e) {
       set({
@@ -72,4 +124,60 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       });
     }
   },
+
+  toggleRequirementHidden: (id: string) => {
+    const model = get().model;
+    if (!isRequirementModel(model)) return;
+    const next: RequirementModel = {
+      ...model,
+      requirements: model.requirements.map((r) =>
+        r.id === id && !r.deleted ? { ...r, hidden: !r.hidden } : r
+      ),
+    };
+    set({ model: next });
+  },
+
+  markRequirementDeleted: (id: string, reason: string) => {
+    const trimmed = reason.trim();
+    if (!trimmed) return;
+    const model = get().model;
+    if (!isRequirementModel(model)) return;
+    const next: RequirementModel = {
+      ...model,
+      requirements: model.requirements.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              deleted: true,
+              note: r.note ? `${r.note}\n${trimmed}` : trimmed,
+            }
+          : r
+      ),
+    };
+    set({ model: next });
+  },
+
+  unmarkRequirementDeleted: (id: string) => {
+    const model = get().model;
+    if (!isRequirementModel(model)) return;
+    const next: RequirementModel = {
+      ...model,
+      requirements: model.requirements.map((r) =>
+        r.id === id ? { ...r, deleted: false } : r
+      ),
+    };
+    set({ model: next });
+  },
 }));
+
+// --- small runtime discriminators, kept local to avoid leaking types ---
+
+function isStateMachineModelOrNull(m: unknown): m is StateMachineModel | null {
+  return m === null || (typeof m === 'object' && !!m && 'states' in m);
+}
+function isStateMachineModelLike(m: unknown): m is { states: unknown[] } {
+  return !!m && typeof m === 'object' && 'states' in m;
+}
+function isRequirementModelLike(m: unknown): m is { requirements: unknown[] } {
+  return !!m && typeof m === 'object' && 'requirements' in m;
+}
