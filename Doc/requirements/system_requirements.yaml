@@ -765,28 +765,30 @@ artifact_export:
       - "Both actions are disabled while the matrix is empty (no model)"
 
   SR-102:
-    function: "Export generated test cases from the Test cases tab"
+    function: "Export generated test cases and coverage report from the Test cases tab"
     parent: [UR-013]
-    component: TestCasesView (Copy / Save actions) + test-case serializer
+    component: TestCasesView (Copy / Save actions + view toggle) + test-case and coverage serializers
     status: implemented
     notes: |
-      Mirrors SR-101's Copy / Save pattern for the test-case artifact.
-      The canonical test-case CSV format is fixed by
-      `tools/nswitch/Requirements_Specification.md` §6.1 so that files
-      produced from the GUI match `modellogue-nswitch` CLI output byte-
-      for-byte (ADR-011). HTML clipboard payload is an equivalent
-      `<table>` so pasting into Excel / Sheets / Word yields a formatted
-      table — same split the matrix export uses (SR-101 v7.3).
+      Mirrors SR-101's Copy / Save pattern for two artifacts: the test-case
+      list (§6.1) and the coverage report (§6.2) defined in
+      `tools/nswitch/Requirements_Specification.md`. A `View: Tests | Coverage`
+      toggle in the tab toolbar switches both the on-screen table and the
+      Copy / Save target, analogous to the CLI's `--coverage` flag.
 
-      Scope is the test-case CSV only; the coverage-report CSV (§6.2)
-      stays CLI-only for now, since the current tab UI doesn't render
-      coverage data anyway.
+      The canonical CSV formats are fixed so that files produced from the
+      GUI match `modellogue-nswitch` CLI output byte-for-byte (ADR-011).
+      HTML clipboard payload is an equivalent `<table>` so pasting into
+      Excel / Sheets / Word yields a formatted table — same split the
+      matrix export uses (SR-101 v7.3).
     acceptance_criteria:
-      - "The Test cases tab toolbar carries Copy and Save .csv actions alongside the N selector"
-      - "Save produces the test-case CSV defined in tools/nswitch/Requirements_Specification.md §6.1 (columns: test_id, layer, length, start, sequence, end, covers)"
+      - "The Test cases tab toolbar carries a View toggle with options 'Tests' and 'Coverage'"
+      - "The toggle switches both the on-screen table and the Copy / Save target"
+      - "Tests view: Save produces the test-case CSV of tools/nswitch/Requirements_Specification.md §6.1 (columns: test_id, layer, length, start, sequence, end, covers)"
+      - "Coverage view: Save produces the coverage CSV of tools/nswitch/Requirements_Specification.md §6.2 (columns: kind, layer, element, then one column per test_id, status, reason)"
       - "Plain-text clipboard payload contains the same CSV so a paste into a text editor or CI config is directly consumable"
       - "HTML clipboard payload is an equivalent <table> so Excel / Sheets / Word paste shows a formatted table"
-      - "Filename pattern: modellogue-<sessionName-slug>-testcases-n<N>-<YYYY-MM-DD-HHMM>.csv (N records the current N-switch level)"
+      - "Filename patterns: modellogue-<sessionName-slug>-testcases-n<N>-<YYYY-MM-DD-HHMM>.csv and modellogue-<sessionName-slug>-coverage-n<N>-<YYYY-MM-DD-HHMM>.csv"
       - "Both actions are disabled while no tests have been generated (loading, idle, or error with no cached result)"
 
   SR-103:

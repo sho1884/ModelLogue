@@ -1017,19 +1017,46 @@ services:
 
 - N=3 以上の対応（nswitch 側が対応していないので UI 側も N=0/1/2 のみ）
 - 提案モデル（Proposal）のテストケース比較 — Before/After 差分は v8.x で検討
-- カバレッジレポート（§6.2 の `--coverage` 出力）の Copy/Save — 当面は CLI のみ。GUI のテーブルがカバレッジを表示していないので、ボタンだけ付けるのは動線が不自然
 
-### 16.9 SR-102 追補（v7.4 後追い）
+### 16.9 SR-102（テストケース + カバレッジ Copy / Save）
 
-SR-103 が画面で動き始めた直後に SR-102（テストケースの Copy / Save）を足す。SR-101 の Copy/Save パターンと同形：
+SR-103 の画面表示と同じタブの中に、CLI の `--coverage` フラグと同形の **View: Tests | Coverage** トグルを置き、そのトグルが：
 
-- `src/engines/testCasesSerializer.ts` 新設
-  - `testCasesToCsv(tests: TestCase[]): string` — [`tools/nswitch/Requirements_Specification.md`](../tools/nswitch/Requirements_Specification.md) §6.1 に準拠、RFC 4180
-  - `testCasesToHtml(tests: TestCase[]): string` — 同内容を `<table>` で。Excel/Sheets/Word 貼り付け用
-- `TestCasesView` のツールバー右端に `<ExportActions />` を追加
-- plain-text クリップボード = CSV、HTML クリップボード = `<table>`、Save = CSV（ファイル）
-- ファイル名: `modellogue-<session>-testcases-n<N>-<timestamp>.csv`（N=0/1/2 を識別できるように）
-- テスト未生成（`status !== 'success'` かつ `result` が null）のあいだはボタンを disable
+- 画面に出すテーブル
+- Copy / Save ボタンが出力する CSV の種類
+- ダウンロードファイル名のサフィックス
 
-CSV 生成は SPA 側に閉じる（既に API レスポンスが JSON で手元にある）。API 側に CSV emitter を別途公開する必要はない — CLI の `stdout` と GUI の Copy/Save 出力は、TS 側の serializer と Python 側の `tests_to_csv` が同じ §6.1 を実装するペアで byte-identical になるよう保つ（ADR-011）。
+を同時に切り替える。
+
+#### 新規シリアライザ `src/engines/testCasesSerializer.ts`
+
+- `testCasesToCsv(tests) / testCasesToHtml(tests)` — [`tools/nswitch/Requirements_Specification.md`](../tools/nswitch/Requirements_Specification.md) §6.1
+- `coverageToCsv(coverage, tests) / coverageToHtml(coverage, tests)` — 同 §6.2
+
+`tests` 引数は、列順に一貫性を持たせるため（coverage の hits 列が test_id ごとに並ぶ）両方の CSV で共有する。
+
+#### ストア
+
+`testCasesStore` に `view: 'tests' | 'coverage'` と `setView(v)` を追加。デフォルトは `'tests'`。
+
+#### UI
+
+`TestCasesView` のツールバー：
+
+```
+[N=0] [N=1] [N=2]   [Tests | Coverage]    <status>        <Copy> <Save .csv>
+```
+
+テーブル本体はビューに応じて差し替え：
+
+- Tests: 既存のテスト一覧
+- Coverage: `kind, layer, element, <test_id_1..n>, status, reason` の横長マトリクス。`#`（採用）は青背景、`x`（追加カバー）は薄灰、空は空白
+
+ファイル名:
+- Tests: `modellogue-<session>-testcases-n<N>-<timestamp>.csv`
+- Coverage: `modellogue-<session>-coverage-n<N>-<timestamp>.csv`
+
+#### 出力の byte 同等性
+
+CSV 生成は SPA 側に閉じる（API レスポンスが既に JSON で手元にある）。CLI の `stdout` と GUI の Copy/Save 出力は、TS 側の serializer と Python 側の `tests_to_csv` / `coverage_to_csv` が同じ §6.1 / §6.2 を実装するペアで byte-identical になるよう保つ（ADR-011）。
 

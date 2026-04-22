@@ -10,13 +10,16 @@ import type { NSwitchLevel, NswitchGenerationResult } from '../types/testCase';
 import { NswitchError, generate as generateApi } from '../services/nswitchService';
 
 export type TestCasesStatus = 'idle' | 'loading' | 'success' | 'error';
+export type TestCasesView = 'tests' | 'coverage';
 
 interface TestCasesStore {
   n: NSwitchLevel;
+  view: TestCasesView;
   status: TestCasesStatus;
   result: NswitchGenerationResult | null;
   error: NswitchError | null;
   setN: (n: NSwitchLevel) => void;
+  setView: (v: TestCasesView) => void;
   requestGeneration: (source: string) => Promise<void>;
   reset: () => void;
 }
@@ -25,6 +28,7 @@ let inflight: AbortController | null = null;
 
 export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
   n: 1,
+  view: 'tests',
   status: 'idle',
   result: null,
   error: null,
@@ -35,6 +39,8 @@ export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
     // fire the request from the store itself — keeps the store pure and
     // the fetch-orchestration logic in one place.
   },
+
+  setView: (view) => set({ view }),
 
   reset: () => {
     if (inflight) inflight.abort();

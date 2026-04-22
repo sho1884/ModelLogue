@@ -1,12 +1,15 @@
-// SR-102: serialize the nswitch test-case list for Copy / Save.
+// SR-102: serialize the nswitch test-case list and coverage report for
+// Copy / Save.
 //
-// The CSV shape matches tools/nswitch/Requirements_Specification.md §6.1
-// so a file saved here is byte-identical to the CLI's default stdout
-// (which `modellogue-nswitch` also derives from §6.1). That equivalence
+// CSV shapes match tools/nswitch/Requirements_Specification.md
+//   - §6.1 for the test case list
+//   - §6.2 for the coverage report
+// so files saved here are byte-identical to the CLI's stdout (which
+// modellogue-nswitch derives from the same sections). That equivalence
 // is the ADR-011 promise: the same model + N always yields the same
 // artifact regardless of which surface produced it.
 
-import type { TestCase } from '../types/testCase';
+import type { CoverageRow, TestCase } from '../types/testCase';
 
 const CSV_HEADER = [
   'test_id',
@@ -83,6 +86,82 @@ export function testCasesToHtml(tests: TestCase[]): string {
       )
       .join('') +
     `</tbody>`;
+  return (
+    `<table border="1" cellspacing="0" cellpadding="4">` +
+    header +
+    body +
+    `</table>`
+  );
+}
+
+// ---- coverage report (§6.2) ----
+
+function coverageHeader(tests: TestCase[]): string[] {
+  return [
+    'kind',
+    'layer',
+    'element',
+    ...tests.map((t) => t.test_id),
+    'status',
+    'reason',
+  ];
+}
+
+export function coverageToCsv(
+  coverage: CoverageRow[],
+  tests: TestCase[]
+): string {
+  const header = coverageHeader(tests);
+  const lines: string[] = [header.map(csvCell).join(',')];
+  for (const row of coverage) {
+    const cells = [
+      row.kind,
+      row.layer,
+      row.element,
+      ...tests.map((t) => row.hits[t.test_id] ?? ''),
+      row.status,
+      row.reason,
+    ];
+    lines.push(cells.map(csvCell).join(','));
+  }
+  return lines.join('\n');
+}
+
+export function coverageToHtml(
+  coverage: CoverageRow[],
+  tests: TestCase[]
+): string {
+  const header =
+    `<thead><tr>` +
+    coverageHeader(tests)
+      .map((h) => `<th>${htmlEscape(h)}</th>`)
+      .join('') +
+    `</tr></thead>`;
+
+  const body =
+    `<tbody>` +
+    coverage
+      .map(
+        (row) =>
+          `<tr>` +
+          `<td>${htmlEscape(row.kind)}</td>` +
+          `<td>${htmlEscape(row.layer)}</td>` +
+          `<th scope="row" style="font-weight:normal;text-align:left;">${htmlEscape(row.element)}</th>` +
+          tests
+            .map(
+              (t) =>
+                `<td style="text-align:center;">` +
+                `${htmlEscape(row.hits[t.test_id] ?? '')}` +
+                `</td>`
+            )
+            .join('') +
+          `<td>${htmlEscape(row.status)}</td>` +
+          `<td>${htmlEscape(row.reason)}</td>` +
+          `</tr>`
+      )
+      .join('') +
+    `</tbody>`;
+
   return (
     `<table border="1" cellspacing="0" cellpadding="4">` +
     header +
