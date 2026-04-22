@@ -251,19 +251,20 @@ ModelLogueの状態遷移表は、業界調査（ISO/IEC/IEEE 29119-4、MATLAB S
 
 SR-033（提案の視覚化）はこの SR-090 が返す差分データを使って、提案側 SVG に add(緑)/remove(赤)/change(橙) のオーバーレイを描く。
 
-### 3.10 Artifact Export / 個別エクスポート (v7.2)
+### 3.10 Artifact Export / 個別エクスポート (v7.2–v7.3)
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------------|-------------|
 | SR-100 | Export the current PlantUML source from the Source tab (Copy / Save .puml) / Source タブから .puml をコピー／保存 | UR-007 |
-| SR-101 | Export each state-transition matrix from its tab (Copy as TSV / Save as CSV) / マトリクスを TSV コピー／CSV 保存 | UR-007 |
+| SR-101 | Export the state transition table as canonical CSV (plain-text clipboard + Save) while HTML clipboard retains the human-friendly matrix / プレーンテキスト・Save は正規 CSV、HTML クリップボードは人間向けマトリクスのまま | UR-007 |
 | SR-102 ⏳ deferred | Export generated test cases (placeholder, awaits the auxiliary test-generation service) / テストケースの出力（補助サービス追加待ち） | UR-003 |
 
 **設計意図**:
 
 - **Save & finish JSON (SR-041)** は「レビュー証跡を一括で渡す/保管する」用途。中身はチェックリストでダイアログに明示
-- **個別エクスポート (SR-100/101)** は「成果物を**他のツールで使う**」用途（PlantUML をドキュメントへ、表を Excel へ、テストを CI へ）
+- **個別エクスポート (SR-100/101)** は「成果物を**他のツールで使う**」用途（PlantUML をドキュメントへ、表を Excel/他ツールへ、テストを CI へ）
 - 役割が混ざらないように、エクスポート系は **2 系統明確に分離**する
+- SR-101 の CSV は [`tools/nswitch/Requirements_Specification.md`](../../tools/nswitch/Requirements_Specification.md) §4.2 の**正規 state-transition-table CSV** を採用し、GUI ↔ CLI ↔ VCS でラウンドトリップ可能とする（v7.3 で反映予定）。画面上のマトリクス表示（SR-020）はプレゼンテーションとして独立し、今の見た目を維持する。
 
 ### 3.11 Deferred & Removed SRs / 未実装・削除SR一覧
 
@@ -313,7 +314,7 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 Notes:
 - Undo / Redo live on the diagram toolbar (SR-035) — they affect the model, not the chat
 - Empty-state guide replaces the diagram pane until a parseable model exists (SR-070)
-- Source tab shows **Copy** / **Save .puml** actions (SR-100); each matrix tab shows **Copy** / **Save .csv** (SR-101)
+- Source tab shows **Copy** / **Save .puml** actions (SR-100); each matrix tab shows **Copy** / **Save .csv** (SR-101 — v7.3 は正規 CSV 形式で保存)
 - ProposalView: 提案があるメッセージ内で、**現モデル SVG（左） / 提案モデル SVG（右）** を並置。提案側には SR-090 の差分に基づく緑/赤/橙オーバーレイを重ねる。下には提案ソースの折りたたみ表示と Apply ボタン。⛶ Open larger comparison でフルスクリーンモーダルへ。
 
 ---

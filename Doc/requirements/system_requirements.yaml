@@ -3,10 +3,22 @@
 # Subject is always the artifact (component/system), omitted by convention.
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-version: "7.2"
-last_updated: "2026-04-15"
+version: "7.3"
+last_updated: "2026-04-22"
 
-# Version 7.2 highlights (planned, not yet implemented):
+# Version 7.3 highlights (planned, not yet implemented):
+#   - SR-101: replace the v7.2 human-friendly matrix CSV with the
+#     canonical state-transition-table CSV defined in
+#     tools/nswitch/Requirements_Specification.md §4.2. The same CSV
+#     round-trips between the GUI, the modellogue-nswitch CLI, and
+#     version control. HTML clipboard payload keeps the v7.2 matrix
+#     (for Excel/Word paste); plain-text clipboard and Save switch to
+#     the canonical CSV. On-screen display (SR-020) is unchanged.
+#   - New serializer: src/engines/transitionTableSerializer.ts.
+#   - Companion: tools/nswitch/ CLI (auxiliary service, ADR-010) that
+#     consumes the same canonical CSV format.
+#
+# Version 7.2 highlights (implemented):
 #   - SR-001 lock condition fixed: lock fires on first SUCCESSFUL parse,
 #     not on first non-empty content. Pasting invalid PlantUML no longer
 #     traps the user.
@@ -713,16 +725,32 @@ artifact_export:
   SR-101:
     function: "Export each state-transition matrix from its tab"
     parent: [UR-007]
-    component: MatrixView (Copy as TSV / Save as CSV actions)
-    status: implemented
+    component: MatrixView (Copy / Save actions) + transition-table serializer
+    status: planned
+    notes: |
+      v7.2 implemented a human-friendly matrix CSV (hybrid indented
+      layout, labels only). That format is insufficient as input to
+      the N-switch test generator (tools/nswitch) — it loses initial
+      / final markers, action text, id-vs-label disambiguation, and
+      composite parent relations.
+
+      v7.3 (planned): CSV save produces the **canonical
+      state-transition-table CSV** defined in
+      `tools/nswitch/Requirements_Specification.md` §4.2 instead.
+      The same format round-trips between the GUI, the CLI tool, and
+      version control. On-screen display (SR-020) keeps its hybrid
+      matrix look — that's a presentation choice independent of the
+      export format.
+
+      HTML clipboard payload continues to emit the human-friendly
+      matrix (Copy → paste into Excel still shows a matrix); plain-
+      text clipboard and Save both emit the canonical CSV.
     acceptance_criteria:
       - "Both the State×Event tab and the State×State tab carry the same Copy / Save action set"
-      - "Copy writes BOTH text/html (a real <table>) AND text/plain (CSV, RFC 4180) to the clipboard via ClipboardItem"
-      - "Excel / Sheets / Numbers / Word import the HTML payload directly as a formatted table; plain-text consumers (repo commits, AI prompts, the future test-generation tool) get canonical CSV"
-      - "Composite-state row labels are emphasised (bold) in the HTML table; child rows are indented with leading non-breaking spaces so the hybrid layout survives in the destination tool"
-      - "Save downloads the matrix as a CSV file with quoted fields per RFC 4180 (commas, quotes, newlines inside cells are escaped)"
-      - "TSV/CSV layout mirrors the on-screen hybrid pattern: composite-state rows are followed by their indented child rows; column headers are events (S×E) or target states (S×S)"
-      - "Filename pattern: modellogue-<sessionName-slug>-state-event-<YYYY-MM-DD-HHMM>.csv (resp. -state-state-)"
+      - "Save produces the canonical state-transition-table CSV defined in tools/nswitch/Requirements_Specification.md §4.2 (columns: state, label, parent, type, initial, then one column per event)"
+      - "Plain-text clipboard payload contains the canonical CSV (so a paste into a text editor or AI prompt is directly consumable by the test generator)"
+      - "HTML clipboard payload remains the hybrid-indented matrix <table> so spreadsheets / Word still see a visually familiar matrix on paste"
+      - "Filename pattern: modellogue-<sessionName-slug>-transitions-<YYYY-MM-DD-HHMM>.csv"
       - "Both actions are disabled while the matrix is empty (no model)"
 
   SR-102:

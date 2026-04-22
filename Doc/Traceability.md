@@ -66,9 +66,9 @@ flowchart LR
         SR090["SR-090<br/>Compute model-level diff<br/>モデルレベル差分を計算"]
     end
 
-    subgraph AE["Artifact Export / 個別エクスポート (v7.2)"]
+    subgraph AE["Artifact Export / 個別エクスポート (v7.2–v7.3)"]
         SR100["SR-100<br/>Export PlantUML source (Copy / Save .puml)<br/>PlantUMLソースをコピー／保存"]
-        SR101["SR-101<br/>Export matrices (Copy TSV / Save CSV)<br/>マトリクスをTSVコピー／CSV保存"]
+        SR101["SR-101<br/>Export canonical transition-table CSV (v7.3)<br/>正規状態遷移表CSVを出力"]
         SR102["SR-102 ⏳ deferred<br/>Export generated test cases<br/>テストケース出力（補助サービス待ち）"]
     end
 
@@ -202,9 +202,9 @@ flowchart LR
 | SR-083 外部シードバンドル `{requirementsText, plantUmlSource}` を受け取る |  |  |  |  |  |  |  |  | x |  |  |  |
 | **Model Diff / モデル差分 (v7.1)** |
 | SR-090 モデルレベル差分を計算（SR-033 が利用）|  |  |  |  |  | x |  |  |  |  |  |  |
-| **Artifact Export / 個別エクスポート (v7.2)** |
+| **Artifact Export / 個別エクスポート (v7.2–v7.3)** |
 | SR-100 PlantUML ソース Copy / Save .puml |  |  |  |  |  |  | x |  |  |  |  |  |
-| SR-101 マトリクス Copy TSV / Save CSV |  |  |  |  |  |  | x |  |  |  |  |  |
+| SR-101 状態遷移表を正規 CSV で出力 (v7.3) |  |  |  |  |  |  | x |  |  |  |  |  |
 | SR-102 ⏳ deferred テストケース Copy / Save |  |  | x |  |  |  | x |  |  |  |  |  |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
@@ -212,7 +212,7 @@ flowchart LR
 ## 3. Category Breakdown / カテゴリ別内訳
 
 ```mermaid
-pie title System Requirements by Category (v7.2) / システム要件カテゴリ別
+pie title System Requirements by Category (v7.3) / システム要件カテゴリ別
     "Source Editing / ソース編集" : 2
     "Diagram Display / 図の表示" : 8
     "State Transition Table / 状態遷移表" : 3
@@ -222,7 +222,7 @@ pie title System Requirements by Category (v7.2) / システム要件カテゴ�
     "UI Layout / UI構成" : 3
     "Requirements & Seeding (v7.1)" : 4
     "Model Diff (v7.1)" : 1
-    "Artifact Export (v7.2)" : 3
+    "Artifact Export (v7.2–v7.3)" : 3
 ```
 
 > SR-003（Serialize model）は removed、SR-050（EBNF tab）も v7.1 で removed のため件数から除外。SR-050 の役割は SR-081（ダウンロード）に置き換えた。

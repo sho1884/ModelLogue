@@ -3,7 +3,7 @@
 **バージョン**: 7.2 (planned / 承認済・未実装)
 **作成日**: 2026-04-08
 **最終更新**: 2026-04-15
-**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。
+**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善済（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。v7.3 は外部 CLI（[`tools/nswitch/`](../tools/nswitch/)）との整合を取るための SR-101 正規 CSV 化（planned）。
 
 ---
 
@@ -847,15 +847,29 @@ Header ボタン名を `Seed Import` → `Open saved review…` に変更。`boo
 
 ### 14.6 個別エクスポート（SR-100 / SR-101）
 
-新規ヘルパー: `src/services/clipboard.ts`（Copy with toast）と `src/engines/matrixSerializer.ts`（matrix → TSV / CSV）。
+ヘルパー: `src/services/clipboard.ts`（Copy with toast）と `src/engines/matrixSerializer.ts`（表示用マトリクスの TSV/HTML 化）、`src/engines/transitionTableSerializer.ts`（v7.3 新設：`StateMachineModel` → 正規 state-transition-table CSV）。
+
+**v7.2 の状態（現行）**: 画面上のマトリクスをそのまま TSV/CSV 化して出力。Copy も Save も同じ人間向けマトリクス形式。
+
+**v7.3 の変更（planned）**: SR-101 と外部ツール（[`tools/nswitch/`](../tools/nswitch/)）の整合のため、正規 state-transition-table CSV を採用する。対応表は以下。
+
+| 経路 | v7.2 | v7.3 |
+|---|---|---|
+| HTML clipboard payload | 人間向けマトリクス（`<table>`） | 同左（Excel/Word への貼り付け互換を優先） |
+| Plain-text clipboard payload | 人間向けマトリクスの TSV | **正規 CSV**（AI プロンプト・テキストエディタで直接 CLI に投入可） |
+| Save file | 人間向けマトリクスの CSV | **正規 CSV**（[`tools/nswitch/Requirements_Specification.md`](../tools/nswitch/Requirements_Specification.md) §4.2 に準拠） |
 
 ```typescript
-// matrixSerializer.ts
-export function matrixToTsv(m: MatrixData): string;  // clipboard 用
-export function matrixToCsv(m: MatrixData): string;  // file 用 (RFC 4180)
+// matrixSerializer.ts — on-screen matrix のフォーマッタ（HTML clipboard 用として残存）
+export function matrixToTsv(m: MatrixData): string;
+export function matrixToHtml(m: MatrixData): string;
+
+// transitionTableSerializer.ts — v7.3 新設
+// StateMachineModel → 正規 state-transition-table CSV（tools/nswitch と共有）
+export function modelToCanonicalCsv(model: StateMachineModel): string;
 ```
 
-UI: SourceEditor のヘッダ右に `Copy` / `Save .puml`、MatrixView のヘッダ右に `Copy` / `Save .csv`。共通の小さなコンポーネント `<ExportActions />` を作って 2 ボタンを統一。
+UI: SourceEditor のヘッダ右に `Copy` / `Save .puml`、MatrixView のヘッダ右に `Copy` / `Save .csv`。共通の小さなコンポーネント `<ExportActions />` を作って 2 ボタンを統一。v7.3 では MatrixView 側の Copy/Save 実装を `transitionTableSerializer` に差し替える（UI レイアウトは不変）。
 
 ### 14.7 英語 UI 統一
 
@@ -874,4 +888,39 @@ UI: SourceEditor のヘッダ右に `Copy` / `Save .puml`、MatrixView のヘッ
 9. matrixSerializer + clipboard helper、Source タブ + MatrixView に Copy/Save 配置
 10. ProposalView/Modal/Outcome バッジ英語化
 11. tsc / vitest / build
+
+---
+
+## 15. v7.3 変更（planned）
+
+v7.3 のスコープは SR-101 のエクスポート CSV を、外部 CLI（[`tools/nswitch/`](../tools/nswitch/)）と同一の**正規 state-transition-table CSV** に切り替えることに絞る。UI・モデル・パーサーには手を入れない。
+
+### 15.1 動機
+
+v7.2 の SR-101 は「画面マトリクスをそのまま CSV 化」したもので、**CLI 側が必要とする情報（state の id と label の区別、`parent`、`type=composite`、`initial=Y`、ガード/アクション、`[*]` 遷移）が欠落している**。ModelLogue で保存した CSV を `modellogue-nswitch` に食わせてラウンドトリップさせるためには、両者が同じフォーマットを採用する必要がある。仕様の本体は [`tools/nswitch/Requirements_Specification.md`](../tools/nswitch/Requirements_Specification.md) §4.2 に定める。
+
+### 15.2 差分
+
+| 経路 | v7.2 | v7.3 |
+|---|---|---|
+| HTML clipboard | 人間向けマトリクスの `<table>` | 同左（Excel 貼り付け互換） |
+| Plain-text clipboard | 人間向けマトリクスの TSV | **正規 CSV** |
+| Save file | 人間向けマトリクスの CSV | **正規 CSV** |
+| 画面表示（SR-020） | 人間向けマトリクス | 同左（不変） |
+
+### 15.3 新規コンポーネント
+
+- `src/engines/transitionTableSerializer.ts` — `modelToCanonicalCsv(model: StateMachineModel): string`。擬似状態（initial/final）は行として出力せず、`initial` 列と `[*]` セル値に畳み込む（§4.2.3）。`label` は空文字のときは出さない。イベント列の順序は `StateMachineModel.events` の既定順を採用。
+
+### 15.4 実装順
+
+1. `transitionTableSerializer.ts` を追加し、単体テスト（flat / composite 入りの両パターン）を作成
+2. ラウンドトリップテスト（PlantUML → model → canonical CSV → パース → 構造一致）を作成（tools/nswitch 実装時に共有コーパス化する）
+3. `MatrixView` の Save / plain-text Copy 実装を差し替え（HTML Copy は `matrixSerializer.matrixToHtml` のまま）
+4. tsc / vitest / build
+
+### 15.5 後続
+
+- v7.3 着地後、`tools/nswitch` 本体の Python 実装に着手（別リポジトリ構成にせず `tools/nswitch/` に同居、ADR-010）。
+- 共有ゴールデン入力コーパス（`tools/nswitch/tests/shared_corpus/` 予定）を TS 側の単体テストからも参照し、両パーサーの等価性を CI で担保する。
 
