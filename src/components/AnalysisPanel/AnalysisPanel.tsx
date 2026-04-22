@@ -3,13 +3,15 @@ import { useModelStore } from '../../stores/modelStore';
 import { SourceEditor } from './SourceEditor';
 import { MatrixView } from './MatrixView';
 import { RequirementsTab } from './RequirementsTab';
+import { TestCasesView } from './TestCasesView';
 import { ResizeHandle } from '../ResizeHandle';
 
 const tabs: { id: AnalysisTab; label: string }[] = [
   { id: 'requirements', label: 'Requirements' },
   { id: 'source', label: 'Source' },
-  { id: 'state-event', label: 'State\u00D7Event' },
-  { id: 'state-state', label: 'State\u00D7State' },
+  { id: 'state-event', label: 'State×Event' },
+  { id: 'state-state', label: 'State×State' },
+  { id: 'test-cases', label: 'Test cases' },
 ];
 
 // Resize bounds for the analysis panel height.
@@ -51,7 +53,7 @@ export function AnalysisPanel() {
           className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
           title={collapsed ? 'Expand' : 'Collapse'}
         >
-          {collapsed ? '\u25B2' : '\u25BC'}
+          {collapsed ? '▲' : '▼'}
         </button>
         {tabs.map((tab) => (
           <button
@@ -90,6 +92,7 @@ export function AnalysisPanel() {
               title="From \ To"
             />
           )}
+          {activeTab === 'test-cases' && <TestCasesView />}
         </div>
       )}
     </div>

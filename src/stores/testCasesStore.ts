@@ -1,0 +1,76 @@
+// Store for the Test cases tab (SR-103 / UR-013).
+//
+// Holds the last successful NswitchGenerationResult so the UI keeps
+// showing results while a new request is in flight, plus status and
+// error for inline hints. `generate` cancels any previous request via
+// AbortController so mid-keystroke calls don't pile up.
+
+import { create } from 'zustand';
+import type { NSwitchLevel, NswitchGenerationResult } from '../types/testCase';
+import { NswitchError, generate as generateApi } from '../services/nswitchService';
+
+export type TestCasesStatus = 'idle' | 'loading' | 'success' | 'error';
+
+interface TestCasesStore {
+  n: NSwitchLevel;
+  status: TestCasesStatus;
+  result: NswitchGenerationResult | null;
+  error: NswitchError | null;
+  setN: (n: NSwitchLevel) => void;
+  requestGeneration: (source: string) => Promise<void>;
+  reset: () => void;
+}
+
+let inflight: AbortController | null = null;
+
+export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
+  n: 1,
+  status: 'idle',
+  result: null,
+  error: null,
+
+  setN: (n) => {
+    set({ n });
+    // The effect in MainLayout will re-trigger on n change, so we do not
+    // fire the request from the store itself — keeps the store pure and
+    // the fetch-orchestration logic in one place.
+  },
+
+  reset: () => {
+    if (inflight) inflight.abort();
+    inflight = null;
+    set({ status: 'idle', result: null, error: null });
+  },
+
+  requestGeneration: async (source: string) => {
+    if (inflight) inflight.abort();
+    const controller = new AbortController();
+    inflight = controller;
+    set({ status: 'loading', error: null });
+    try {
+      const result = await generateApi(source, {
+        n: get().n,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      set({ status: 'success', result, error: null });
+    } catch (e) {
+      // AbortError from a superseding call is not a failure.
+      if ((e as { name?: string })?.name === 'AbortError') return;
+      const err =
+        e instanceof NswitchError
+          ? e
+          : new NswitchError({
+              message:
+                e instanceof Error ? e.message : 'Unexpected client error',
+              kind: 'unknown',
+              status: null,
+              probedUrl: '(unknown)',
+              cause: e,
+            });
+      set({ status: 'error', error: err });
+    } finally {
+      if (inflight === controller) inflight = null;
+    }
+  },
+}));

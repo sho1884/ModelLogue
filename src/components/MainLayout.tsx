@@ -6,6 +6,7 @@ import { ResizeHandle } from './ResizeHandle';
 import { useSessionStore } from '../stores/sessionStore';
 import { useModelStore } from '../stores/modelStore';
 import { useUiStore } from '../stores/uiStore';
+import { useTestCasesStore } from '../stores/testCasesStore';
 import { checkHealth as checkPlantUmlHealth } from '../services/plantUmlService';
 import { checkHealth as checkN8nHealth } from '../services/n8nService';
 import { isMockMode } from '../services/mockAi';
@@ -19,11 +20,17 @@ export function MainLayout() {
   const currentSource = useSessionStore((s) => s.currentSource);
   const parseSource = useModelStore((s) => s.parseSource);
   const fetchCoordinates = useModelStore((s) => s.fetchCoordinates);
+  const parseErrors = useModelStore((s) => s.parseErrors);
+  const model = useModelStore((s) => s.model);
   const chatPanelWidth = useUiStore((s) => s.chatPanelWidth);
   const setChatPanelWidth = useUiStore((s) => s.setChatPanelWidth);
   const setPlantUmlStatus = useUiStore((s) => s.setPlantUmlStatus);
   const setN8nStatus = useUiStore((s) => s.setN8nStatus);
+  const requestTestCases = useTestCasesStore((s) => s.requestGeneration);
+  const resetTestCases = useTestCasesStore((s) => s.reset);
+  const nSwitchLevel = useTestCasesStore((s) => s.n);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const testCasesDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   // Parse source immediately on change
   useEffect(() => {
@@ -49,6 +56,39 @@ export function MainLayout() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [currentSource, fetchCoordinates]);
+
+  // SR-103: request N-switch test cases after a clean parse, debounced
+  // (same 500ms as SVG fetch). When the source is empty or the parser
+  // reported errors, reset the tab to idle without calling the API.
+  useEffect(() => {
+    if (testCasesDebounceRef.current) {
+      clearTimeout(testCasesDebounceRef.current);
+    }
+    if (
+      currentSource.trim() === '' ||
+      parseErrors.length > 0 ||
+      !model ||
+      model.states.length === 0
+    ) {
+      resetTestCases();
+      return;
+    }
+    testCasesDebounceRef.current = setTimeout(() => {
+      requestTestCases(currentSource);
+    }, 500);
+    return () => {
+      if (testCasesDebounceRef.current) {
+        clearTimeout(testCasesDebounceRef.current);
+      }
+    };
+  }, [
+    currentSource,
+    parseErrors,
+    model,
+    nSwitchLevel,
+    requestTestCases,
+    resetTestCases,
+  ]);
 
   // Check PlantUML Server and n8n health on mount
   useEffect(() => {

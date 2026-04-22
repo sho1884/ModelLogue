@@ -4,7 +4,8 @@ export type AnalysisTab =
   | 'requirements'
   | 'source'
   | 'state-event'
-  | 'state-state';
+  | 'state-state'
+  | 'test-cases';
 
 interface UiStore {
   analysisPanelHeight: number;

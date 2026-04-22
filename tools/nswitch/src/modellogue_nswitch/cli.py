@@ -1,6 +1,9 @@
 """Command-line interface for modellogue-nswitch.
 
 See Requirements_Specification.md §3 for the full CLI contract.
+
+Two modes: batch (the default, no subcommand) and ``serve`` (a long-
+running HTTP server — see §9.2).
 """
 from __future__ import annotations
 
@@ -17,13 +20,46 @@ from .parse_csv import CsvParseError, parse_csv
 from .parse_puml import PumlParseError, parse_puml
 
 
+def build_serve_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="modellogue-nswitch serve",
+        description=(
+            "Expose the generator as an HTTP service so reactive clients "
+            "(the ModelLogue GUI, CI dashboards, etc.) can call it without "
+            "spawning a subprocess per request. See §9.2 of the requirements "
+            "specification."
+        ),
+    )
+    p.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address. Default: 127.0.0.1. Use 0.0.0.0 for container use.",
+    )
+    p.add_argument(
+        "--port",
+        type=int,
+        default=8090,
+        help="TCP port. Default: 8090.",
+    )
+    p.add_argument(
+        "--cors-origin",
+        default="*",
+        help=(
+            "Value for Access-Control-Allow-Origin. Default: *. "
+            "Set explicitly (e.g. http://localhost:5173) outside dev."
+        ),
+    )
+    return p
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="modellogue-nswitch",
         description=(
             "Generate N-switch coverage test cases from a state machine "
             "described as a PlantUML source or a canonical state-transition-"
-            "table CSV."
+            "table CSV. Use `modellogue-nswitch serve --help` for the HTTP "
+            "API mode."
         ),
     )
     p.add_argument(
@@ -32,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Input file. If omitted, reads from stdin.",
     )
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument(
         "-n",
         "--n",
@@ -89,11 +126,29 @@ def build_parser() -> argparse.ArgumentParser:
             "state."
         ),
     )
-    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Pre-dispatch: `serve` is a literal first positional that switches the
+    # whole parser. Keeping batch mode argparse-strict (no subparsers) avoids
+    # having every batch-mode positional rejected as "not a valid subcommand".
+    if argv and argv[0] == "serve":
+        from .server import ServerConfig, run  # local import keeps batch mode lean
+
+        serve_args = build_serve_parser().parse_args(argv[1:])
+        run(
+            ServerConfig(
+                host=serve_args.host,
+                port=serve_args.port,
+                cors_origin=serve_args.cors_origin,
+            )
+        )
+        return 0
+
     args = build_parser().parse_args(argv)
 
     try:
