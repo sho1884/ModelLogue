@@ -5,6 +5,7 @@ import { SaveAndFinishDialog } from '../SaveAndFinishDialog';
 import grammarSpec from '../../grammars/stateDiagram.ebnf?raw';
 import { downloadTextFile } from '../../services/download';
 import type { SeedBundle } from '../../types/session';
+import { MODEL_TYPE_REGISTRY } from '../../modelTypes/registry';
 
 // SR-081: EBNF grammar is available as a download; no in-app viewer.
 function downloadEbnf() {
@@ -37,6 +38,11 @@ function coerceToSeedBundle(parsed: unknown): SeedBundle {
     // ReviewSession uses `name` (not `sessionName`)
     seed.sessionName = obj.name;
   }
+  // SR-073 (v7.5): preserve the saved session's model type on re-open.
+  // Unknown ids are tolerated by sessionStore.resolveModelTypeId.
+  if (typeof obj.modelTypeId === 'string') {
+    seed.modelTypeId = obj.modelTypeId;
+  }
   if (
     seed.requirementsText === undefined &&
     seed.plantUmlSource === undefined
@@ -58,6 +64,9 @@ export function Header() {
   const sessionName = useSessionStore((s) => s.sessionName);
   const outcome = useSessionStore((s) => s.outcome);
   const currentSource = useSessionStore((s) => s.currentSource);
+  const modelTypeId = useSessionStore((s) => s.modelTypeId);
+  const hasEstablishedModel = useSessionStore((s) => s.hasEstablishedModel);
+  const setModelTypeId = useSessionStore((s) => s.setModelTypeId);
   const requirementsText = useRequirementsStore((s) => s.requirementsText);
   const bootstrapFromBundle = useSessionStore((s) => s.bootstrapFromBundle);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -66,6 +75,30 @@ export function Header() {
 
   const hasContent =
     currentSource.trim() !== '' || requirementsText.trim() !== '';
+
+  // SR-073: during SEED the selector is a `<select>`; after REVIEW it
+  // is a read-only label. Switching during SEED clears seed-phase
+  // input (see sessionStore.setModelTypeId) so we confirm first if
+  // anything is in-progress.
+  const activeTypeLabel =
+    MODEL_TYPE_REGISTRY.find((t) => t.id === modelTypeId)?.label ?? modelTypeId;
+
+  const handleModelTypeChange = (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const nextId = e.target.value;
+    if (nextId === modelTypeId) return;
+    if (hasContent) {
+      const ok = window.confirm(
+        'Switching the model type clears the current seed inputs (source, requirements, chat). Continue?'
+      );
+      if (!ok) {
+        e.target.value = modelTypeId;
+        return;
+      }
+    }
+    setModelTypeId(nextId);
+  };
 
   const handleImportClick = () => {
     if (hasContent) {
@@ -100,6 +133,33 @@ export function Header() {
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold text-gray-800">ModelLogue</h1>
           <span className="text-sm text-gray-500">{sessionName}</span>
+          {/* SR-073: model-type selector / locked label */}
+          {hasEstablishedModel ? (
+            <span
+              className="text-xs px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600"
+              title="Model type is locked once the session enters REVIEW phase."
+            >
+              Model: {activeTypeLabel}
+            </span>
+          ) : (
+            <label
+              className="text-xs text-gray-600 flex items-center gap-1"
+              title="Choose the model type for this session. Switching clears seed inputs."
+            >
+              Model:
+              <select
+                value={modelTypeId}
+                onChange={handleModelTypeChange}
+                className="px-1 py-0.5 border border-gray-300 rounded text-xs bg-white"
+              >
+                {MODEL_TYPE_REGISTRY.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {outcome && (
             <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-600">
               {OUTCOME_LABELS[outcome.status]}

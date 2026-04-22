@@ -1,8 +1,12 @@
 import { useUiStore } from '../../stores/uiStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { SourceEditor } from './SourceEditor';
 import { RequirementsTab } from './RequirementsTab';
 import { ResizeHandle } from '../ResizeHandle';
-import { getDefaultModelTypeDefinition } from '../../modelTypes/registry';
+import {
+  getDefaultModelTypeDefinition,
+  getModelTypeDefinition,
+} from '../../modelTypes/registry';
 import type { AnalysisTabSpec } from '../../modelTypes/types';
 
 // Common tabs are defined here — they apply to every model type.
@@ -34,9 +38,12 @@ export function AnalysisPanel() {
   const height = useUiStore((s) => s.analysisPanelHeight);
   const setHeight = useUiStore((s) => s.setAnalysisPanelHeight);
 
-  // v7.5 step 2: hardcoded to the default type. Step 3 replaces this
-  // with `SessionStore.modelTypeId`.
-  const modelType = getDefaultModelTypeDefinition();
+  // v7.5 step 3: the active model type is selected by the session.
+  // Unknown ids fall back to the default so the UI never renders a
+  // blank tab area.
+  const modelTypeId = useSessionStore((s) => s.modelTypeId);
+  const modelType =
+    getModelTypeDefinition(modelTypeId) ?? getDefaultModelTypeDefinition();
   const tabs: AnalysisTabSpec[] = [...commonTabs, ...modelType.analysisTabs];
 
   const activeSpec = tabs.find((t) => t.id === activeTab);

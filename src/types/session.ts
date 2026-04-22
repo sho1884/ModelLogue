@@ -39,6 +39,11 @@ export interface ReviewSession {
   name: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  // SR-073 (v7.5): identifies which ModelTypeDefinition backs this session.
+  // Fixed at seed time; read at Open saved review to pick parser / tabs.
+  // Optional on read for backward compatibility with pre-v7.5 saved files
+  // (treated as 'state-machine'); always written on export.
+  modelTypeId?: string;
   plantUmlSource: string;
   requirementsText: string; // SR-080 (v7.1): short requirements fragment scoped to this model
   messages: ChatMessage[];
@@ -51,4 +56,7 @@ export interface SeedBundle {
   requirementsText?: string;
   plantUmlSource?: string;
   sessionName?: string;
+  // v7.5: external seeds MAY pin a model type. Unknown / missing is
+  // treated as the default (currently 'state-machine').
+  modelTypeId?: string;
 }

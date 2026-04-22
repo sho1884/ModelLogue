@@ -10,6 +10,11 @@ import type {
 import { useMarkerStore } from './markerStore';
 import { useChatStore } from './chatStore';
 import { useRequirementsStore } from './requirementsStore';
+import { useUiStore } from './uiStore';
+import {
+  DEFAULT_MODEL_TYPE_ID,
+  getModelTypeDefinition,
+} from '../modelTypes/registry';
 
 // v7.1: session starts empty. Source is seeded via manual paste, bundle
 // import (SR-083), or the Generate Model shortcut (SR-082). Once source
@@ -20,6 +25,9 @@ interface SessionStore {
   sessionId: string;
   sessionName: string;
   createdAt: string;
+  // SR-073 (v7.5): model type chosen at seed time. Locked to the current
+  // value once hasEstablishedModel flips to true.
+  modelTypeId: string;
   currentSource: string;
   sourceHistory: SourceSnapshot[];
   redoStack: SourceSnapshot[]; // v7.2: SR-035 — Redo counterpart to Undo
@@ -34,10 +42,23 @@ interface SessionStore {
   undoSource: () => void;
   redoSource: () => void;
   setSessionName: (name: string) => void;
+  // SR-073: switch to another registered model type during SEED. Ignored
+  // after REVIEW (hasEstablishedModel=true) and for unknown ids. Resets
+  // in-progress seed inputs so the session never holds mixed-type state.
+  setModelTypeId: (id: string) => void;
   closeSession: (status: SessionOutcomeStatus, note: string | null) => void;
   exportSession: () => ReviewSession;
   bootstrapFromBundle: (bundle: SeedBundle) => void;
   markModelEstablished: () => void;
+}
+
+// SR-083: map an incoming modelTypeId to something the registry knows.
+// Unknown ids (future or typo) quietly fall back to the default so the
+// app never gets stuck on an unrenderable session.
+function resolveModelTypeId(raw: string | undefined): string {
+  if (!raw) return DEFAULT_MODEL_TYPE_ID;
+  if (getModelTypeDefinition(raw)) return raw;
+  return DEFAULT_MODEL_TYPE_ID;
 }
 
 function nextVersion(history: SourceSnapshot[]): number {
@@ -49,6 +70,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   sessionId: crypto.randomUUID(),
   sessionName: 'Untitled Session',
   createdAt: new Date().toISOString(),
+  modelTypeId: DEFAULT_MODEL_TYPE_ID,
   currentSource: INITIAL_SOURCE,
   sourceHistory: [],
   redoStack: [],
@@ -57,6 +79,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   hasEstablishedModel: false,
 
   setSessionName: (name) => set({ sessionName: name }),
+
+  setModelTypeId: (id) => {
+    const store = get();
+    // Lock after REVIEW starts; also silently ignore no-op changes and
+    // unknown ids so the selector UI never stores an invalid state.
+    if (store.hasEstablishedModel) return;
+    const resolved = resolveModelTypeId(id);
+    if (resolved === store.modelTypeId) return;
+    // Resetting the session is necessary so seed-phase input that was
+    // shaped for the previous type doesn't leak into the new one.
+    useChatStore.getState().clear();
+    useMarkerStore.setState({ markers: [] });
+    useRequirementsStore.setState({ requirementsText: '' });
+    // The active analysis tab for the previous type may not exist in
+    // the new type's analysisTabs (e.g. 'state-event' → requirement).
+    // Fall back to the always-present Requirements tab.
+    useUiStore.getState().setActiveAnalysisTab('requirements');
+    set({
+      modelTypeId: resolved,
+      currentSource: INITIAL_SOURCE,
+      sourceHistory: [],
+      redoStack: [],
+      outcome: null,
+    });
+  },
 
   markModelEstablished: () => {
     if (!get().hasEstablishedModel) {
@@ -68,6 +115,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // SR-083: replace the session with an externally composed seed.
     // Any new bootstrap clears the redo stack — new branch, new identity.
     if (bundle.sessionName) set({ sessionName: bundle.sessionName });
+    // SR-073 (v7.5): the incoming bundle / saved session MAY carry a
+    // modelTypeId; pre-v7.5 files don't. Resolve defensively so unknown
+    // ids fall back to the default rather than leaving the UI stuck.
+    const resolvedType = resolveModelTypeId(bundle.modelTypeId);
+    if (resolvedType !== get().modelTypeId) {
+      // Changing types invalidates the previously-active analysis tab id.
+      useUiStore.getState().setActiveAnalysisTab('requirements');
+    }
+    set({ modelTypeId: resolvedType });
     if (bundle.requirementsText !== undefined) {
       useRequirementsStore.setState({
         requirementsText: bundle.requirementsText,
@@ -190,6 +246,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       name: store.sessionName,
       createdAt: store.createdAt,
       updatedAt: new Date().toISOString(),
+      modelTypeId: store.modelTypeId,
       plantUmlSource: store.currentSource,
       requirementsText,
       messages: chatMessages,
