@@ -3,7 +3,7 @@
 **バージョン**: 7.2 (planned / 承認済・未実装)
 **作成日**: 2026-04-08
 **最終更新**: 2026-04-15
-**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善済（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。v7.3 は外部 CLI（[`tools/nswitch/`](../tools/nswitch/)）との整合を取るための SR-101 正規 CSV 化（planned）。
+**ステータス**: v7.0 は MVP、v7.1 は実装済（要求仕様タブ・読み取り専用ソース・モデル before/after 比較・EBNF ダウンロード）。v7.2 は UX 改善済（lock条件修正、Undo+Redo、Save 文言、エンプティステート、個別エクスポート、英語UI統一）。v7.3 は SR-101 正規 CSV 化（実装済、[`tools/nswitch/`](../tools/nswitch/) と CSV ラウンドトリップ）。v7.4 は SR-103 テストケースタブと nswitch の HTTP API 化（planned）。
 
 ---
 
@@ -923,4 +923,99 @@ v7.2 の SR-101 は「画面マトリクスをそのまま CSV 化」したも�
 
 - v7.3 着地後、`tools/nswitch` 本体の Python 実装に着手（別リポジトリ構成にせず `tools/nswitch/` に同居、ADR-010）。
 - 共有ゴールデン入力コーパス（`tools/nswitch/tests/shared_corpus/` 予定）を TS 側の単体テストからも参照し、両パーサーの等価性を CI で担保する。
+
+---
+
+## 16. v7.4 変更（planned）
+
+v7.4 のスコープは SR-103（テストケースタブ）と、その土台となる `tools/nswitch` の HTTP API 化（[`tools/nswitch/Requirements_Specification.md`](../tools/nswitch/Requirements_Specification.md) §9.2）に絞る。アルゴリズムやモデルは v7.3 のまま。
+
+### 16.1 全体像
+
+```
+┌──────────────────────────┐         HTTP                 ┌────────────────────────┐
+│ ModelLogue SPA           │  POST /generate              │ nswitch-api (Python)    │
+│ - TestCasesView          │ ───────────────────────────▶ │ stdlib http.server       │
+│ - testCasesStore         │  { source, n, ... }          │ wraps generate()         │
+│ - services/nswitchService│ ◀─────────────────────────── │ (docker-compose service) │
+└──────────────────────────┘      JSON response           └────────────────────────┘
+```
+
+全ての新規ロジックは SPA 側・補助サービス側の両方に分散させず、責務を明確に切る：**生成は tools/nswitch（Python）**、**表示と再描画トリガは SPA（TypeScript）**。
+
+### 16.2 nswitch 側の変更
+
+- 新規 `serve` サブコマンド（`modellogue-nswitch serve --port 8090`）
+- stdlib `http.server` + `socketserver.ThreadingMixIn` で実装。**追加の依存なし**（CLAUDE.md の依存最小化ポリシー）
+- エンドポイント: `GET /health`, `POST /generate`, `OPTIONS *`（CORS preflight）
+- CORS: `Access-Control-Allow-Origin` は `--cors-origin` で指定、デフォルト `*`（開発時のみ）
+- エラーは JSON で返す（`{error: {type, message}}`）、詳細は §9.2.4
+
+### 16.3 SPA 側の新規コンポーネント
+
+| パス | 役割 |
+|---|---|
+| `src/services/nswitchService.ts` | fetch クライアント。`generate(source, options)` と `checkHealth()` を export。エラーは `NswitchError` に正規化 |
+| `src/stores/testCasesStore.ts` | Zustand ストア。`{ tests, coverage, uncovered, status, error }` を保持。`requestGeneration(source, n)` アクションで nswitchService を叩き、結果を store に反映 |
+| `src/components/AnalysisPanel/TestCasesView.tsx` | タブ本体。N セレクタ、テスト一覧テーブル、uncovered 警告バナー、接続エラー・パースエラーのヒント表示 |
+| `src/types/testCase.ts` | API レスポンスの型（`TestCase`, `CoverageRow`, `Uncovered`） |
+
+既存コンポーネントへの影響:
+
+- `src/components/AnalysisPanel/AnalysisPanel.tsx` — タブ配列に `'test-cases'` を追加、`TestCasesView` の描画を分岐
+- `src/stores/uiStore.ts` — `AnalysisTab` 型に `'test-cases'` を追加
+- `src/stores/modelStore.ts` — `parseSource` 成功時に `testCasesStore.requestGeneration` をキックする購読（または `parseSource` 内の side-effect）
+
+### 16.4 リアクティブ更新ポリシー
+
+- **トリガ**: SVG 取得（`fetchCoordinates`）と同じ条件。ソース変更 → パース成功 → デバウンス（300ms）→ nswitch API 呼び出し
+- **空ソース / パースエラー**: API は叩かず、タブ内で前回の結果をグレー表示したまま、原因メッセージを上部に出す
+- **N セレクタ切替**: デバウンスなしで即時呼び出し（ユーザー操作の反応遅延を避ける）
+- **in-flight cancellation**: 2 回目の呼び出しで 1 回目の AbortController を `abort()` する（n8n チャットと同じパターン）
+- **キャッシュ**: 最後の成功レスポンスを store に保持。次の成功まで表示し続けるので「入力中に表が消える」問題を起こさない
+
+### 16.5 エラー処理
+
+| 状況 | UI 表示 | 動作 |
+|---|---|---|
+| `nswitch-api` 未起動 / ネットワーク到達不能 | 「Test case service unreachable. Probed: `<URL>`.」バナー | UI 全体は動作継続、前回結果をグレー表示 |
+| `400 parse_error`（API 側パーサーが reject） | 行番号付きの parse error メッセージ | TS パーサーは OK で API パーサーは NG のケース — ADR-009 適合性のズレを示唆。前回結果グレー表示 |
+| `422 unsatisfiable`（`require_final: true` 時） | v7.4 では発生しない（常に `require_final: false` で呼ぶ） | — |
+| `200 OK` with non-empty `uncovered` | 警告バナーに uncovered チェーンを列挙 | テーブルは通常表示 |
+| `500 internal_error` | 「Test case service returned an internal error. See console.」 | `console.error` にレスポンス本体、前回結果グレー表示 |
+
+### 16.6 docker-compose
+
+```yaml
+services:
+  # ... plantuml-server, n8n ...
+  nswitch-api:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./tools/nswitch:/app
+    command: ["python", "-m", "modellogue_nswitch", "serve", "--host", "0.0.0.0", "--port", "8090"]
+    environment:
+      - PYTHONPATH=/app/src
+    ports:
+      - "8090:8090"
+```
+
+- プロダクション配備は別途（Dockerfile 化、non-root user、read-only filesystem）
+- ローカル開発は `docker-compose up nswitch-api` で起動。ホット・リロードは使わず、CLI 本体と同じコードを読む
+
+### 16.7 実装順
+
+1. nswitch 側: `src/modellogue_nswitch/server.py` 新設、CLI に `serve` 分岐追加、ユニットテスト
+2. docker-compose に `nswitch-api` サービス追加、`docker-compose up nswitch-api` で `/health` と `/generate` を curl で動作確認
+3. SPA 側: `types/testCase.ts`、`services/nswitchService.ts` を追加、nswitchService の単体テスト（fetch モック）
+4. `stores/testCasesStore.ts` を追加、modelStore から呼び出す購読を設定
+5. `uiStore` にタブ追加、`AnalysisPanel` に分岐追加、`TestCasesView` を実装
+6. ブラウザで動作確認（画面表示が主目的 — SR-103 受入条件を全部踏む）
+
+### 16.8 非目標
+
+- Copy / Save 系（SR-102）は v7.4 ではやらない。まず画面表示を確定させ、UI が落ち着いてから Copy/Save を載せる
+- N=3 以上の対応（nswitch 側が対応していないので UI 側も N=0/1/2 のみ）
+- 提案モデル（Proposal）のテストケース比較 — Before/After 差分は v8.x で検討
 

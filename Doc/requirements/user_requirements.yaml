@@ -197,6 +197,19 @@ requirements:
       composed as an n8n workflow (ADR-008).
     priority: medium
 
+  UR-013:
+    task: "Review N-switch coverage test cases derived from the current model"
+    background: >
+      A reviewed state machine implies a set of test sequences needed to
+      cover its transitions (0-switch), transition pairs (1-switch), or
+      triples (2-switch). Seeing those sequences during the review — in
+      real time, alongside the diagram — surfaces gaps and impossible
+      chains that are easy to miss from the diagram alone. The generator
+      itself is an auxiliary service (ADR-010); ModelLogue's role is to
+      display the resulting test list reactively as the model evolves and
+      to let reviewers cross-reference a test sequence with the diagram.
+    priority: medium
+
   UR-011:
     task: "Convert between state machine source and state transition table"
     background: >

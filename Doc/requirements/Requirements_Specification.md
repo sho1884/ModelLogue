@@ -69,6 +69,7 @@ This document defines requirements for ModelLogue, a model review platform for s
 | UR-010 | Close the review session with an outcome / 結末を付けてレビューセッションを終了する | Medium / 中 |
 | UR-011 | Convert between state machine source and state transition table / 状態マシンソースと状態遷移表を相互変換する | Medium / 中 |
 | UR-012 | Refer to the target requirements text alongside the model / モデルと並べて要求仕様文を参照する | Medium / 中 |
+| UR-013 | Review N-switch coverage test cases derived from the current model / 現在のモデルから導かれる N-switch カバレッジ用テストケースをレビューする | Medium / 中 |
 
 > **Note 1**: UR-009とUR-010の前後（初版生成手段、終了後フィードバック先）はn8nワークフローで現場ごとに構成する。ModelLogue本体は入出力の境界に専念する。詳細は [ADR-008](../adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) を参照。
 >
@@ -257,7 +258,19 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 |----|----------------|-------------|
 | SR-100 | Export the current PlantUML source from the Source tab (Copy / Save .puml) / Source タブから .puml をコピー／保存 | UR-007 |
 | SR-101 | Export the state transition table as canonical CSV (plain-text clipboard + Save) while HTML clipboard retains the human-friendly matrix / プレーンテキスト・Save は正規 CSV、HTML クリップボードは人間向けマトリクスのまま | UR-007 |
-| SR-102 ⏳ deferred | Export generated test cases (placeholder, awaits the auxiliary test-generation service) / テストケースの出力（補助サービス追加待ち） | UR-003 |
+| SR-102 ⏳ deferred | Export generated test cases from the Test cases tab (Copy / Save) / Test cases タブからテストケースをコピー／保存 | UR-013 |
+
+### 3.10a Test Case Display / テストケース表示 (v7.4)
+
+| ID | Function / 機能 | Parent / 親 |
+|----|----------------|-------------|
+| SR-103 | Display N-switch test cases in a dedicated Analysis-panel tab, updated reactively from the current model / 専用タブにN-switchテストケースを表示し、現在のモデルに連動してリアクティブに更新する | UR-013 |
+
+**設計意図**:
+
+- テストケース生成は補助サービス（[`tools/nswitch/`](../../tools/nswitch/)）の責務。ModelLogue 本体はその HTTP API (§9.2) を叩いて結果を並べるだけ。重い計算ロジックは本体に取り込まない（ADR-010）。
+- タブ内での**リアクティブ更新**を最優先。パース成功時に SVG 取得と同じデバウンスで自動再計算する。ユーザーが N (0/1/2) を切り替えた時も即時反映。
+- エラーは **in-place 表示**：サービスが落ちていても、パースエラーがあっても、タブ内に原因を出すだけで UI 全体は動き続ける。
 
 **設計意図**:
 
@@ -290,31 +303,32 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 | ID | Function / 機能 | Parent / 親 |
 |----|----------|--------|
 | SR-070 | Render the diagram as primary view, with an empty-state guide when no model exists / プライマリビュー＋モデル未投入時のエンプティステート **(v7.2)** | UR-001 |
-| SR-071 | Render resizable analysis panel with tabs (Requirements / Source / S×E / S×S) / タブ付き解析パネル（要求仕様・ソース・S×E・S×S）**(v7.1 tab set)** | UR-002, UR-003, UR-012 |
+| SR-071 | Render resizable analysis panel with tabs (Requirements / Source / S×E / S×S / Test cases) / タブ付き解析パネル（要求仕様・ソース・S×E・S×S・テストケース）**(v7.4 tab set)** | UR-002, UR-003, UR-012, UR-013 |
 | SR-072 | Render chat panel with ProposalView (no longer hosts Undo — relocated per SR-035) / チャットパネル + 提案ビュー（Undo は移設） **(v7.2)** | UR-005, UR-006 |
 
-**Screen Layout / 画面構成 (v7.2)**:
+**Screen Layout / 画面構成 (v7.4)**:
 
 ```
-┌── Header ────────────────────────────────────────────────────────┐
-│  ModelLogue   <session>          [Save & finish…] [Open saved    │
-│                                   review…] [Download grammar]    │
-├──────────────────────────────────────────────────┬──────────────┤
-│  Diagram View                                    │  Chat        │
-│  [marker tools] [↶ Undo] [↷ Redo]               │  messages    │
-│  PlantUML SVG + marker overlay                   │  + Proposal  │
-│   (or empty-state guide when no model yet)       │    View      │
-├── drag to resize ────────────────────────────────┤              │
-│  Analysis Panel  [Requirements|Source|S×E|S×S]   │  input       │
-├──────────────────────────────────────────────────┴──────────────┤
-│  Status Bar                                                      │
-└──────────────────────────────────────────────────────────────────┘
+┌── Header ──────────────────────────────────────────────────────────────┐
+│  ModelLogue   <session>          [Save & finish…] [Open saved          │
+│                                   review…] [Download grammar]          │
+├──────────────────────────────────────────────────────────┬────────────┤
+│  Diagram View                                            │  Chat       │
+│  [marker tools] [↶ Undo] [↷ Redo]                       │  messages   │
+│  PlantUML SVG + marker overlay                           │  + Proposal │
+│   (or empty-state guide when no model yet)               │    View     │
+├── drag to resize ────────────────────────────────────────┤             │
+│  Analysis Panel  [Requirements|Source|S×E|S×S|Test cases]│  input      │
+├──────────────────────────────────────────────────────────┴────────────┤
+│  Status Bar                                                            │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 Notes:
 - Undo / Redo live on the diagram toolbar (SR-035) — they affect the model, not the chat
 - Empty-state guide replaces the diagram pane until a parseable model exists (SR-070)
 - Source tab shows **Copy** / **Save .puml** actions (SR-100); each matrix tab shows **Copy** / **Save .csv** (SR-101 — v7.3 は正規 CSV 形式で保存)
+- Test cases tab shows N selector (0/1/2) and a reactive test list fed by the nswitch HTTP API (SR-103, v7.4)
 - ProposalView: 提案があるメッセージ内で、**現モデル SVG（左） / 提案モデル SVG（右）** を並置。提案側には SR-090 の差分に基づく緑/赤/橙オーバーレイを重ねる。下には提案ソースの折りたたみ表示と Apply ボタン。⛶ Open larger comparison でフルスクリーンモーダルへ。
 
 ---

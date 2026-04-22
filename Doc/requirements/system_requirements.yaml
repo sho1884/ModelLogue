@@ -3,10 +3,21 @@
 # Subject is always the artifact (component/system), omitted by convention.
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-version: "7.3"
+version: "7.4"
 last_updated: "2026-04-22"
 
-# Version 7.3 highlights (planned, not yet implemented):
+# Version 7.4 highlights (planned, not yet implemented):
+#   - SR-103 (new): display N-switch coverage test cases in a dedicated
+#     Analysis-panel tab, driven by the tools/nswitch/ HTTP API (§9.2 of
+#     tools/nswitch/Requirements_Specification.md). Reactive on parse.
+#   - UR-013 (new): "Review N-switch coverage test cases derived from the
+#     current model" — the parent user requirement for SR-103.
+#   - tools/nswitch/ gains a `serve` subcommand exposing POST /generate
+#     over HTTP via stdlib http.server (no new runtime deps).
+#   - docker-compose.yml gains a `nswitch-api` service on port 8090,
+#     joining plantuml-server (8080) and n8n (5678).
+#
+# Version 7.3 highlights (implemented):
 #   - SR-101: replace the v7.2 human-friendly matrix CSV with the
 #     canonical state-transition-table CSV defined in
 #     tools/nswitch/Requirements_Specification.md §4.2. The same CSV
@@ -754,18 +765,43 @@ artifact_export:
       - "Both actions are disabled while the matrix is empty (no model)"
 
   SR-102:
-    function: "Export generated test cases (placeholder)"
-    parent: [UR-003]
-    component: (test generation auxiliary service, ADR-010)
+    function: "Export generated test cases from the Test cases tab"
+    parent: [UR-013]
+    component: TestCasesView (Copy / Save actions)
     status: deferred
     deferred_reason: |
-      The N-switch coverage test generator (UR-003 follow-up) is
-      planned as an external auxiliary service per ADR-010, not part
-      of the ModelLogue body. Once it lands, this SR mirrors SR-101's
-      Copy/Save pattern for the generated test-case CSV. Stub kept
-      here so the export pattern is consistent across artifacts when
-      the time comes.
+      v7.4 delivers SR-103 (display) only; Copy / Save of the generated
+      test-case CSV follows the same pattern SR-101 established and will
+      be added once SR-103 lands and the tab layout is settled.
     acceptance_criteria: []
+
+  SR-103:
+    function: "Display N-switch test cases in a dedicated Analysis panel tab, updated reactively from the current model"
+    parent: [UR-013]
+    component: TestCasesView + nswitch HTTP client (src/services/nswitchService.ts) + testCasesStore
+    status: planned
+    notes: |
+      v7.4 lands this end-to-end: an independent auxiliary service
+      (tools/nswitch/, ADR-010) exposes an HTTP API via its `serve`
+      subcommand (spec: tools/nswitch/Requirements_Specification.md §9.2),
+      and the GUI adds a Test cases tab that calls that service whenever
+      the PlantUML source parses cleanly. Failure modes (service down,
+      parse error, uncovered-within-cap warnings) are surfaced in-place
+      inside the tab rather than blocking the rest of the UI.
+
+      Trigger policy mirrors SR-010's SVG-fetch policy: debounce on source
+      change (same debounce key as the SVG fetch), skip the call while the
+      source is empty or has parse errors, and cache the last good
+      response while a new one is in flight so the tab is never blank
+      mid-keystroke.
+    acceptance_criteria:
+      - "A fourth Analysis-panel tab labelled 'Test cases' appears after State×State"
+      - "The tab shows a table with one row per generated test case (test_id, layer, length, start, sequence, end) and a tooltip / expand for the full `covers` chain"
+      - "Selecting N (0 / 1 / 2) updates the list in place; default N=1"
+      - "The list updates reactively after a successful parse (same debounce as SVG fetch) without requiring a manual refresh"
+      - "When tools/nswitch/ responds with `uncovered` entries, a warning banner lists them above the table"
+      - "When the nswitch service is unreachable, the tab shows a connection-error hint with the probed URL; the rest of the UI keeps working"
+      - "When the current source has parse errors, the tab shows a parse-error hint with line numbers from the service response; the previous good result stays visible, greyed"
 
 # =============================================================================
 # Data Model

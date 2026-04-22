@@ -3,9 +3,9 @@
 | Item / 項目 | Content / 内容 |
 |------|---------|
 | Document / 文書 | Requirements Specification — N-switch coverage test case generator |
-| Version | 0.5 |
+| Version | 0.6 |
 | Created | 2026-04-21 |
-| Status / 状態 | Implemented (v0.1.0) — reference implementation at `tools/nswitch/src/modellogue_nswitch/` |
+| Status / 状態 | CLI implemented (v0.1.0) at `tools/nswitch/src/modellogue_nswitch/`. HTTP API (`serve` subcommand) planned for v0.2.0 to enable reactive integration with the ModelLogue GUI (SR-103). |
 | Language / 実装言語 | **Python** (3.10+) |
 | Related ADR | ADR-009 (one-level composite states), ADR-010 (auxiliary services in the same repo), ADR-011 (strict formats and deterministic conversion) |
 | Canonical CSV | §4.2 defines the **project-wide canonical state-transition-table CSV**. ModelLogue's SR-101 export is required to emit this same format so artifacts round-trip between the GUI, this CLI, and version control. |
@@ -75,13 +75,12 @@ python -m modellogue_nswitch [options] [input-file]
 ### Basic syntax / 基本構文
 
 ```
-modellogue-nswitch [options] [input-file]
+modellogue-nswitch [options] [input-file]     # one-shot batch mode
+modellogue-nswitch serve [--port PORT] ...    # long-running HTTP server
 ```
 
-- If `input-file` is given, reads from that file. If omitted, reads from stdin.
-- Output is written to stdout by default. `-o FILE` writes to a file.
-- Diagnostics (errors, warnings) go to **stderr**, keeping stdout clean for piping.
-- Input format is auto-detected by extension (`.puml` / `.plantuml` → PlantUML, `.csv` → CSV transition table) or by the first non-blank line (starts with `@startuml` → PlantUML; otherwise CSV). Use `--format` to force.
+- **Batch mode** (default): if `input-file` is given, reads from that file; otherwise stdin. Output written to stdout (or `-o FILE`), diagnostics to stderr. Input format is auto-detected by extension (`.puml` / `.plantuml` → PlantUML, `.csv` → CSV) or by the first non-blank line (`@startuml` → PlantUML, else CSV). Use `--format` to force.
+- **Serve mode**: exposes an HTTP API for reactive callers (the ModelLogue GUI, CI dashboards, etc.). See §9.2 for the endpoint contract. Triggered by the literal subcommand `serve`.
 
 ### Options / オプション
 
@@ -96,6 +95,16 @@ modellogue-nswitch [options] [input-file]
 | `--require-final` | off | Error out (exit 2) if the model has no initial→final reachable path. Default behavior accepts cyclic / mainloop-style models and generates tests that close on a revisited state — see §7.4. |
 | `-h`, `--help` | — | Show help and exit. |
 | `--version` | — | Show version and exit. |
+
+### Serve-mode options / serve モードオプション
+
+When invoked as `modellogue-nswitch serve [...]`, only the following options apply (the batch-mode flags are rejected in this mode):
+
+| Option | Default | Description |
+|---|---|---|
+| `--host HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` to accept connections from outside the loopback (e.g. a Docker service). |
+| `--port PORT` | `8090` | TCP port. 8090 avoids collisions with PlantUML Server (8080) and n8n (5678). |
+| `--cors-origin ORIGIN` | `*` | Value for `Access-Control-Allow-Origin`. Set explicitly (e.g. `http://localhost:5173`) when exposing beyond loopback. |
 
 ### Exit codes / 終了コード
 
@@ -439,9 +448,11 @@ Diagnostics are written to **stderr** only. `stdout` stays clean even on errors,
 
 ---
 
-## 9. Programmatic API / ライブラリ API
+## 9. Programmatic APIs / プログラムからの呼び出し
 
-In addition to the CLI, the tool exposes an importable Python API so it can be embedded in test frameworks without spawning a subprocess.
+The tool exposes two programmatic surfaces over the same core: an **in-process Python API** (§9.1) for frameworks that embed the library, and an **HTTP API** (§9.2) for the ModelLogue GUI and other out-of-process callers. Both consume the same internal `StateMachineModel` and emit the same `GenerationResult`.
+
+### 9.1 Python API / Python ライブラリ
 
 ```python
 from modellogue_nswitch import generate, parse_puml, parse_csv
@@ -465,6 +476,109 @@ Contract:
 - **No I/O in the core**: readers and writers live in separate modules so the library is usable in offline / sandboxed contexts.
 - **Serializable results**: `dataclasses.asdict(result)` yields a JSON-serializable dict.
 - **No ModelLogue dependency**: the library does not import anything from the ModelLogue frontend; it is self-contained in `tools/nswitch/`.
+
+### 9.2 HTTP API / HTTP API
+
+Launched with `modellogue-nswitch serve`. Implemented on top of Python's stdlib `http.server` — no runtime dependencies beyond the standard library, consistent with §4.1.1.
+
+Default bind: `127.0.0.1:8090`. See the Serve-mode options table in §3 for `--host` / `--port` / `--cors-origin`.
+
+#### 9.2.1 Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | Liveness probe. Returns `{"status": "ok", "version": "<x.y.z>"}`. Safe to poll at high frequency. |
+| `POST` | `/generate` | Parse + generate test cases. Body JSON shape in §9.2.2. |
+| `OPTIONS` | `*` | CORS preflight. Echoes `Access-Control-Allow-Origin` per `--cors-origin`. |
+
+All successful responses are JSON with `Content-Type: application/json; charset=utf-8`. Errors return `{"error": {"type": "...", "message": "..."}}` with the appropriate HTTP status code.
+
+#### 9.2.2 POST /generate — request
+
+```json
+{
+  "source": "@startuml\n[*] --> A\n...\n@enduml",
+  "format": "puml",
+  "n": 1,
+  "layered": true,
+  "max_cycle_unroll": 3,
+  "require_final": false
+}
+```
+
+Fields:
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `source` | string | — (required) | The PlantUML source or canonical CSV text. |
+| `format` | `"puml"` \| `"csv"` \| `null` | auto | Explicit when the caller already knows; otherwise the server auto-detects using the same rule as the CLI (§3). |
+| `n` | 0 \| 1 \| 2 | `1` | N-switch level. |
+| `layered` | boolean | `true` | Per §7.1. |
+| `max_cycle_unroll` | integer ≥ 1 | `3` | Per §7.3. |
+| `require_final` | boolean | `false` | Per §7.4. |
+
+#### 9.2.3 POST /generate — response (200 OK)
+
+```json
+{
+  "tests": [
+    {
+      "test_id": "top-001",
+      "layer": "top",
+      "length": 3,
+      "start": "[*]_init",
+      "sequence": "()|start|done",
+      "end": "[*]_final",
+      "covers": "[*]_init--()-->A;A--start-->B;B--done-->[*]_final"
+    }
+  ],
+  "coverage": [
+    {
+      "kind": "chain",
+      "layer": "top",
+      "element": "A --start--> B --done--> [*]_final",
+      "hits": { "top-001": "#" },
+      "status": "",
+      "reason": ""
+    }
+  ],
+  "uncovered": [
+    {
+      "layer": "top",
+      "chain": [{ "source": "...", "target": "...", "event": "...", "guard": null, "action": null }],
+      "reason": "no final-reaching or cycle-closing suffix within cap"
+    }
+  ],
+  "layers": ["top"]
+}
+```
+
+The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is a JSON transport on top of the Python API, so behavior is identical.
+
+#### 9.2.4 POST /generate — error responses
+
+| HTTP | `error.type` | Trigger |
+|---|---|---|
+| `400` | `parse_error` | PlantUML or CSV input rejected by the respective parser. `error.message` carries the line number and reason. |
+| `400` | `invalid_request` | Malformed JSON, missing `source`, invalid `n`, unknown field, etc. |
+| `422` | `unsatisfiable` | `require_final: true` and the model has no initial→final path. Analogue of CLI exit 2. |
+| `405` | `method_not_allowed` | Wrong HTTP method for the path. |
+| `500` | `internal_error` | Unexpected exception from the library. Logged server-side; response contains a generic message. |
+
+Uncovered chains caused by `--max-cycle-unroll` **do not** return an error — they appear in `response.uncovered` with status `"unreachable-within-cap"`. The analogue of CLI exit 3 is a warning state surfaced in the payload; the HTTP status stays `200`.
+
+#### 9.2.5 CORS
+
+- `Access-Control-Allow-Origin`: value of `--cors-origin` (default `*`).
+- `Access-Control-Allow-Methods`: `GET, POST, OPTIONS`.
+- `Access-Control-Allow-Headers`: `Content-Type`.
+- Preflight responses are `204 No Content`.
+
+When the server runs inside docker-compose alongside the SPA's dev server, set `--cors-origin http://localhost:5173` in production configurations to narrow the accept-list. The default `*` is convenient for local development only.
+
+#### 9.2.6 Determinism & caching
+
+Identical request bodies yield byte-identical responses (ADR-011). Clients MAY cache responses keyed by a hash of the request JSON; the server does not implement HTTP caching headers because the generation is cheap for review-scale models (sub-10ms typical) and cache invalidation would need to track code version plus input anyway.
 
 ---
 
