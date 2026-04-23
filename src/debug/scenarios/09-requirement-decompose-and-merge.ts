@@ -6,10 +6,12 @@ import type { Scenario } from './types';
 //    contained in the original — the 3 new sub-reqs get green markers,
 //    the parent (relations added) gets an orange marker.
 //  - Step 3: MERGE two of the sub-requirements back into one — the
-//    merged survivor gets an orange marker (statement + relations
-//    changed), the removed sibling gets NO marker (per user direction:
-//    deletion is confirmed in the Requirement list tab, not on the
-//    diagram).
+//    merged survivor gets an orange marker (statement changed), the
+//    absorbed sibling is soft-deleted with a reason so it stays in the
+//    Requirement list tab as evidence of the decision (ADR-014). The
+//    deleted row is NOT shown on the diagram (the renderer filters it
+//    out) and gets NO marker (per user direction: deletion is
+//    confirmed in the list tab, not on the diagram).
 
 function wrapCsv(csv: string): string {
   return '```csv\n' + csv + '\n```';
@@ -34,10 +36,12 @@ const STEP2 = [
 const STEP3 = [
   HEADER,
   'R1,雨天でも使える,functional,,,,,,',
-  // R11 is merged into a more general requirement, absorbing R12.
+  // R11 absorbs R12 — statement generalised, relations unchanged.
   'R11,本体全体の水密性,functional,,R1,,,,',
-  // R12 removed (deleted=Y would keep it as evidence — here we drop it
-  // entirely to test the "removed → no marker" path).
+  // R12 soft-deleted with a merge reason (ADR-014). Keeps the row as
+  // evidence in the Requirement list tab; the renderer drops the
+  // declaration from the diagram.
+  'R12,スイッチの防滴,functional,,R1,,,Y,R11 に統合',
   'R13,電池室の密閉,functional,,R1,,,,',
 ].join('\n');
 
@@ -45,7 +49,7 @@ const scenario: Scenario = {
   id: '09-requirement-decompose-and-merge',
   label: 'Requirement: 分解 → 統合',
   description:
-    '「雨天でも使える」1 要求からスタートし、3 つの子要求に分解 → 2 つを 1 つに統合、という構造変更を連続 apply する。分解ステップでは追加された子 3 件が緑・親 R1 が関係追加でオレンジ、統合ステップでは R11 がオレンジ・R12 は図からは消えてマーカー無し（表で確認）。',
+    '「雨天でも使える」1 要求からスタートし、3 つの子要求に分解 → 2 つを 1 つに統合、という構造変更を連続 apply する。分解ステップでは追加された子 3 件が緑・親 R1 が関係追加でオレンジ、統合ステップでは R11 がオレンジ・R12 は deleted=Y で図からは消えるが要求リスト上では理由付きの打ち消し線行として残る（ADR-014）。',
   modelTypeId: 'requirement',
   requirementsText:
     'LED 懐中電灯の防水要求。最初は粗い 1 要求だが、レビュー中に水密の観点で分解し、その後 2 つをまとめる想定。',
@@ -81,7 +85,7 @@ const scenario: Scenario = {
         },
       ],
       pauseMs: 2500,
-      note: '統合: R11 オレンジ（記述変更）、R12 は図から消え、R13 は据え置き',
+      note: '統合: R11 オレンジ（記述変更）、R12 は deleted=Y で図から消え表は打ち消し線（ADR-014）、R13 は据え置き',
     },
   ],
 };
