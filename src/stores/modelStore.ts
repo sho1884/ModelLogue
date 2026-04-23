@@ -8,7 +8,6 @@ import {
   generateStateStateMatrix,
 } from '../engines/matrixGenerator';
 import { fetchSvg } from '../services/plantUmlService';
-import { extractCoordinates } from '../engines/svgCoordinateExtractor';
 import { useSessionStore } from './sessionStore';
 import { getModelTypeDefinition } from '../modelTypes/registry';
 import type { RequirementModel } from '../modelTypes/requirement/model';
@@ -48,9 +47,6 @@ interface ModelStore {
 
 function isRequirementModel(m: ActiveModel): m is RequirementModel {
   return !!(m && 'requirements' in (m as object));
-}
-function isStateMachineModel(m: ActiveModel): m is StateMachineModel {
-  return !!(m && 'states' in (m as object));
 }
 
 export const useModelStore = create<ModelStore>((set, get) => ({
@@ -115,14 +111,13 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
     try {
       const svgString = await fetchSvg(renderable);
-      // Coordinate extraction is state-machine-only for now; the
-      // requirement-diagram output uses class-diagram SVG which the
-      // existing extractor isn't tuned for. Non-state-machine sessions
-      // get SVG display without marker-to-model coordinate mapping.
-      const coords =
-        modelTypeId === 'state-machine' && isStateMachineModel(model)
-          ? extractCoordinates(svgString, model)
-          : null;
+      // v7.5: each model-type definition owns coordinate extraction.
+      // state-machine matches state <rect>s and pseudo-state ellipses;
+      // requirement matches class-diagram entity <rect>s. Missing
+      // extractor or empty map → null so the marker layer treats the
+      // session as "positions unknown" rather than "zero elements".
+      const extracted = def?.extractCoordinates(svgString, model);
+      const coords = extracted && extracted.size > 0 ? extracted : null;
       set({ coordinates: coords, svgString, svgFetchError: null });
     } catch (e) {
       set({

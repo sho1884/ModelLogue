@@ -119,4 +119,19 @@ export interface ModelTypeDefinition {
     aiText: string,
     currentSource: string
   ) => string | null;
+
+  /**
+   * Extract on-diagram coordinates for the model's elements from the
+   * PlantUML-generated SVG. Drives marker placement (SR-022 for
+   * state-machine; v7.5 auto-markers for requirement). Implementations
+   * return an empty map when the SVG doesn't match the expected shape —
+   * missing coordinates just mean "no marker placement for this
+   * element", not a fatal error.
+   *
+   * Called in a browser context; happy-dom is enough for unit tests.
+   */
+  extractCoordinates: (
+    svgString: string,
+    model: unknown
+  ) => Map<string, { x: number; y: number; width: number; height: number }>;
 }

@@ -9,6 +9,7 @@ import { parse as parseStateMachine } from './parser';
 import { diffModels } from './diff';
 import type { StateMachineModel } from './model';
 import { extractPlantUmlBlock } from '../../services/n8nService';
+import { extractCoordinates as extractStateMachineCoordinates } from '../../engines/svgCoordinateExtractor';
 
 export const stateMachineDefinition: ModelTypeDefinition = {
   id: 'state-machine',
@@ -41,5 +42,12 @@ export const stateMachineDefinition: ModelTypeDefinition = {
   // IS the canonical source — just unwrap it.
   extractSuggestedSource(aiText: string): string | null {
     return extractPlantUmlBlock(aiText) ?? null;
+  },
+
+  extractCoordinates(svgString: string, model: unknown) {
+    return extractStateMachineCoordinates(
+      svgString,
+      model as StateMachineModel
+    );
   },
 };

@@ -9,6 +9,7 @@ import { renderPlantUml as renderFromSource } from './renderer';
 import { DEFAULT_REQUIREMENT_SEED_SOURCE } from './preamble';
 import { parseRequirementsCsv } from './csvParser';
 import { modelToPlantUml } from './plantUmlGenerator';
+import { extractRequirementCoordinates } from './svgCoordinates';
 import type { RequirementModel } from './model';
 
 function extractCsvBlock(text: string): string | null {
@@ -50,5 +51,12 @@ export const requirementDefinition: ModelTypeDefinition = {
     const parsed = parseRequirementsCsv(csv);
     if (!parsed.model || parsed.errors.length > 0) return null;
     return modelToPlantUml(parsed.model);
+  },
+
+  extractCoordinates(svgString: string, model: unknown) {
+    return extractRequirementCoordinates(
+      svgString,
+      model as RequirementModel
+    );
   },
 };
