@@ -47,9 +47,20 @@ v7.5 で要求図セッションに対応したことに伴い、n8n の AI Agen
    - 要求図セッションを新規作成 → Requirements タブに仕様を書き込む → Generate model。
    - AI の応答が ` ```csv ` ブロック付きで返り、自動 apply で class 図が描かれることを確認。
 
-## Prompt Rules（system message に埋め込まれている要点）
+## Prompt design / プロンプト設計
 
-**共通**: 応答言語は `responseLanguage` に従う（単一言語、混在禁止）。
+**systemMessage は静的な 1 本の文字列**にして、state-machine ルールと requirement ルールを両方とも書き並べ、AI が user text の `Session type:` 行を見てどちらに従うかを判断する構造にした。n8n の式エンジン（tmpl）は backtick テンプレートリテラル + `${...}` の組み合わせを時々うまく展開できず、`NodeOperationError: invalid syntax` を吐くことがあったので、式は **`+` による文字列連結と三項のみ**に留めるのが安全。
+
+**text は式**、式エンジンで：
+- `Session type: REQUIREMENT DIAGRAM` / `STATE-MACHINE DIAGRAM` のヘッダ行を生成
+- `responseLanguage: ja` の行
+- `userMessage`
+- 型別のコンテキスト（要求図なら `requirementsCsv`、状態遷移図なら `currentSource + markerContext + grammarSpec`）
+- `requirementsText` があれば末尾に付与
+
+## Prompt Rules / プロンプトの要点
+
+**共通**: 応答言語は user text 先頭の `responseLanguage:` に従う（単一言語、混在禁止）。
 
 **state-machine のとき**: これまで通り（ADR-009 のサブセット説明、` ```plantuml ` ブロックで完全なソースを返す）。
 
@@ -61,10 +72,11 @@ v7.5 で要求図セッションに対応したことに伴い、n8n の AI Agen
 - 一時的に関心外にするだけなら `hidden=Y`（理由不要）を使う。
 - 返すのは ` ```csv ` コードブロックひとつだけ。PlantUML は返さない（ツールが自動生成する）。**部分 CSV でなく、現時点の全要求を含めた完全な CSV** を返す。
 
-詳細は `n8n/workflows/modellogue-chat.json` 内の `systemMessage` を参照。
+詳細は `n8n/workflows/modellogue-chat.json` 内の `options.systemMessage` を参照。
 
 ## トラブルシュート / Troubleshooting
 
-- **AI が ` ```plantuml ` を返してくる**: system message の `modelTypeId === 'requirement'` 分岐が効いていない。n8n の AI Agent ノードで **System Message** 欄に式 (`={{ ... }}`) が正しく入っているか確認。
-- **CSV がパースできない → 自動 re-ask が走る**: SPA 側 (`chatStore.sendAndAutoReask`) が type 別に ` ```csv ` / ` ```plantuml ` をリクエストし直す。2 回で回復しない場合はヘッダ/列順のずれが多い。`system prompt` のヘッダ列と CSV parser (`src/modelTypes/requirement/csvParser.ts`) のヘッダ列を照合。
-- **`requirementsCsv` が空**: 初回生成。system prompt 内のテンプレートで空の場合は `(empty — no requirements yet, this is the initial generation)` に置き換わっているはず。
+- **`NodeOperationError: invalid syntax`**: 式がパースできていない。`text` 欄は `+` 連結 + ternary のみで書く（backtick テンプレートリテラルや `${...}` を避ける）。
+- **AI が ` ```plantuml ` を返してくる**: user text の 1 行目に `Session type: REQUIREMENT DIAGRAM` が出ているか確認（ネットワークペインで POST ボディを見ると早い）。`$json.body.modelTypeId` が届いていないと text 式が state-machine 側の分岐に落ちる。
+- **CSV がパースできない → 自動 re-ask が走る**: SPA 側 (`chatStore.sendAndAutoReask`) が type 別に ` ```csv ` / ` ```plantuml ` をリクエストし直す。2 回で回復しない場合はヘッダ/列順のずれが多い。systemMessage 内のヘッダ列と CSV parser (`src/modelTypes/requirement/csvParser.ts`) のヘッダ列を照合。
+- **`requirementsCsv` が空**: 初回生成。text 式で空の場合は `(empty - no requirements yet, this is the initial generation)` に置き換わるようフォールバックあり。
