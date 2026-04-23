@@ -17,8 +17,22 @@ export interface ChatHistoryEntry {
 }
 
 export interface ChatRequest {
+  /**
+   * Session model type (v7.5). Drives prompt branching in n8n: the
+   * state-machine path feeds the AI the PlantUML source + EBNF; the
+   * requirement path feeds the AI the requirement-list CSV and expects
+   * a CSV reply (ADR-012).
+   */
+  modelTypeId: 'state-machine' | 'requirement';
   /** The current PlantUML source (context for the AI). */
   currentSource: string;
+  /**
+   * v7.5: for requirement-type sessions, the current Requirement list
+   * rendered as SR-113 CSV. The AI works in CSV space here — the
+   * PlantUML buffer is a mechanically-generated visualization. Absent
+   * for state-machine sessions.
+   */
+  requirementsCsv?: string;
   /** Prior turns of the conversation, oldest first. */
   history: ChatHistoryEntry[];
   /** The new message the user is sending. */

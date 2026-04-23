@@ -12,6 +12,8 @@ import {
   getModelTypeDefinition,
 } from '../modelTypes/registry';
 import type { StateMachineModel } from '../modelTypes/state-machine/model';
+import type { RequirementModel } from '../modelTypes/requirement/model';
+import { modelToRequirementsCsv } from '../modelTypes/requirement/listSerializer';
 
 function activeTypeDefinition() {
   const id = useSessionStore.getState().modelTypeId;
@@ -89,6 +91,9 @@ async function sendAndAutoReask(
   get: () => { messages: ChatMessage[] }
 ): Promise<void> {
   const currentSource = useSessionStore.getState().currentSource;
+  const modelTypeId = useSessionStore.getState().modelTypeId as
+    | 'state-machine'
+    | 'requirement';
   const { model, coordinates } = useModelStore.getState();
   const { markers } = useMarkerStore.getState();
   // markerContext's position lookup only knows state-machine shape today;
@@ -104,6 +109,15 @@ async function sendAndAutoReask(
   );
   const requirementsText = useRequirementsStore.getState().requirementsText;
 
+  // v7.5: for requirement-type sessions, also send the CURRENT Requirement
+  // list as CSV so n8n can hand that (not the PlantUML buffer) to the AI.
+  // The AI works in CSV space per ADR-012 — the diagram is a
+  // mechanically-derived visualization.
+  const requirementsCsv =
+    modelTypeId === 'requirement' && model && 'requirements' in (model as object)
+      ? modelToRequirementsCsv(model as RequirementModel)
+      : undefined;
+
   const history = get()
     .messages.slice(0, -1) // drop the just-inserted user message itself
     .map((m) => ({ role: m.role, content: m.content }));
@@ -115,7 +129,9 @@ async function sendAndAutoReask(
   );
 
   const response = await callChat({
+    modelTypeId,
     currentSource,
+    requirementsCsv,
     history,
     userMessage: userContent,
     markerContext,
@@ -145,22 +161,28 @@ async function sendAndAutoReask(
     isSending: false,
   });
 
-  // If the AI gave us a code block, validate it. Only retry when the
-  // block failed to produce a model at all; a model with warnings is
-  // fine.
-  if (response.suggestedSource && remainingRetries > 0) {
-    const parseResult = parseForActiveType(response.suggestedSource);
+  // If the AI gave us a block we were able to turn into source, validate
+  // that source parses. Only retry when the result failed to produce a
+  // model at all; a model with warnings is fine.
+  const suggestedForRetry = typedSuggestedSource ?? response.suggestedSource;
+  if (suggestedForRetry && remainingRetries > 0) {
+    const parseResult = parseForActiveType(suggestedForRetry);
     const parseFailed = !parseResult.model || parseResult.errors.length > 0;
     if (parseFailed) {
       const summary = summariseParseErrors(parseResult.errors);
+      // v7.5: the code-block kind differs per model type (```plantuml for
+      // state-machine, ```csv for requirement). Ask for the right one so
+      // the AI doesn't bounce between the two on the retry.
+      const retryBlockLabel =
+        modelTypeId === 'requirement' ? '```csv' : '```plantuml';
       const retryContent =
         (responseLanguage === 'ja'
-          ? 'そのPlantUMLはModelLogueのサブセット文法でパースできませんでした。エラー: '
-          : "That PlantUML did not parse under ModelLogue's supported subset. Errors: ") +
+          ? 'その応答は ModelLogue のサブセット/形式ではパースできませんでした。エラー: '
+          : "That reply did not parse under ModelLogue's supported subset/format. Errors: ") +
         summary +
         (responseLanguage === 'ja'
-          ? '。文法定義を守って、もう一度だけPlantUMLコードブロックを出し直してください。'
-          : '. Please regenerate — emit only one ```plantuml code block that conforms to the grammar you were given.');
+          ? `。定義に従って、もう一度だけ ${retryBlockLabel} コードブロックを出し直してください。`
+          : `. Please regenerate — emit only one ${retryBlockLabel} code block that conforms to the spec you were given.`);
       const retryUser: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'user',
