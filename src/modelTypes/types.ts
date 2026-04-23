@@ -85,4 +85,14 @@ export interface ModelTypeDefinition {
    * cast the return type based on the known model type id.
    */
   diff?: (before: unknown, after: unknown) => unknown;
+
+  /**
+   * Optional seed text for the edit buffer when a fresh session of
+   * this type starts. Requirement sessions use it to pre-populate the
+   * `!procedure` preamble so the buffer is a valid PlantUML source
+   * from the first keystroke. State-machine sessions leave it
+   * undefined — the buffer stays empty and the user types raw
+   * PlantUML.
+   */
+  defaultSeedSource?: string;
 }

@@ -96,9 +96,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // the new type's analysisTabs (e.g. 'state-event' → requirement).
     // Fall back to the always-present Requirements tab.
     useUiStore.getState().setActiveAnalysisTab('requirements');
+    // Seed the source with the new type's default template (e.g. the
+    // requirement-diagram preamble) so the buffer is a valid PlantUML
+    // source from the first keystroke.
+    const def = getModelTypeDefinition(resolved);
     set({
       modelTypeId: resolved,
-      currentSource: INITIAL_SOURCE,
+      currentSource: def?.defaultSeedSource ?? INITIAL_SOURCE,
       sourceHistory: [],
       redoStack: [],
       outcome: null,

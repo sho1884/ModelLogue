@@ -19,8 +19,11 @@ last_updated: "2026-04-22"
 #     test artifacts are a separate future review phase.
 #   - ADR-014: review-time deletion is soft-delete + mandatory reason
 #     so that deleted requirements stay as evidence. Adds `hidden`,
-#     `deleted`, and `note` fields to Requirement. Three new meta
-#     macros: $hide, $deleted, $note.
+#     `deleted`, and `note` fields to Requirement. Review-state is
+#     expressed in PlantUML comment directives (`' @modellogue ...`)
+#     so the DSL remains a pure subset of PlantUML (no invented
+#     macros; the source renders directly on PlantUML Server without
+#     going through this tool).
 #   - SR-073 (new): model-type selector at session seed.
 #   - SR-071 REDEFINED: Analysis-panel tab set is built dynamically
 #     from ModelTypeDefinition.analysisTabs (common: Requirements /
@@ -914,17 +917,15 @@ requirement_diagram:
     status: planned
     notes: |
       Accepts two coexisting input forms defined in
-      `src/grammars/requirementDiagram.ebnf` v1.2:
+      `src/grammars/requirementDiagram.ebnf` v2.0:
 
-      1. Macro DSL form (the PlantUML-renderable canonical form):
+      1. Macro DSL form (canonical, PlantUML-renderable):
          - Requirements: $req / $fReq / $nfReq / $dConstraint
          - Relations:    $contain / $derive / $refine / $satisfy /
                          $verify / $trace / $copy
          - Grouping:     `package "…" <<Frame>> { … }`
-         - Review-state meta (ADR-014): $hide / $deleted / $note
-           (no PlantUML output; drive filtering and the list tab)
-         This is what the AI returns in chat proposals and what
-         PlantUML Server renders.
+         These macros are defined by the `!procedure` preamble the
+         user's source carries. No ModelLogue-invented macros.
 
       2. Seed form (friendly paste into the Requirements tab):
          - `id, name[, type[, text[, hidden[, deleted[, note]]]]]`
@@ -934,29 +935,40 @@ requirement_diagram:
            (default kind = derive; kinds limited to derive / contain /
            refine / copy to stay within ADR-013 scope)
 
-      Both forms may be mixed in one file. The !procedure definition
-      preamble, `hide …`, `title …`, and similar decorative
-      directives are tolerated and ignored.
+      Review-state is expressed in PlantUML comment directives
+      (ADR-014, 2026-04-23 redesign), not macros:
+         ' @modellogue hide "id"
+         ' @modellogue deleted "id" "reason"
+         ' @modellogue note "id" "text"
+      Delete blocks also carry the commented-out declaration and
+      tagged suppressed relations so the source renders correctly
+      without going through ModelLogue:
+         ' @modellogue deleted "R2" "out of scope"
+         ' $fReq("R2", "old")
+         ' $derive("R1", "R2") ' @modellogue deleted-side "R2"
 
-      Determinism: both forms convert deterministically to a single
+      Both forms may be mixed in one file. The `!procedure` preamble,
+      `hide …`, `title …`, and similar decorative directives are
+      tolerated and ignored.
+
+      Determinism: all forms convert deterministically to a single
       RequirementModel. No AI call is needed to seed. When the user's
       input doesn't match either form (e.g. pure natural language),
       SR-082 (AI generation) handles it via a requirement-type
       prompt.
 
-      Validation (ADR-014): when a requirement has `deleted=Y` in
-      the seed form OR `$deleted(id, reason)` in the DSL form, a
-      non-empty `reason` / `note` is required. An empty reason is a
-      parse error with a line-numbered message.
+      Validation (ADR-014): `deleted=Y` rows in seed form require a
+      non-empty note; `' @modellogue deleted` directives require a
+      non-empty reason. Empty reason is a parse error.
     acceptance_criteria:
-      - "Accepts every construct listed in src/grammars/requirementDiagram.ebnf v1.2"
+      - "Accepts every construct listed in src/grammars/requirementDiagram.ebnf v2.0"
       - "Produces RequirementModel { requirements, relations } with id / name / type / text / parentId / hidden / deleted / note / relation.kind per the data model section"
       - "Default type when the seed form omits the type column is `functional`"
       - "Default relation kind when a seed-form arrow has no `: kind` suffix is `derive`"
-      - "Recognizes $hide(id) / $deleted(id, reason) / $note(id, text) meta macros and applies them to the named requirement; unknown id is a parse error"
-      - "Rejects `deleted=Y` rows / `$deleted(id, reason)` calls with an empty reason (ADR-014)"
+      - "Recognizes `' @modellogue hide / deleted / note` comment directives and applies them to the named requirement; unknown id is a parse error"
+      - "A delete marker (`' @modellogue deleted ...`) is paired with the next commented-out requirement declaration to populate the deleted requirement's id / name / type / text / note"
+      - "Rejects `deleted=Y` rows in seed form with empty note; rejects `' @modellogue deleted` directives with empty reason (ADR-014)"
       - "Rejects unknown seed-form relation kinds (e.g. `satisfy`) with a clear message pointing at the macro form — seed form stays within ADR-013's requirement-to-requirement scope"
-      - "Rejects raw PlantUML class declarations and bare non-macro relation arrows (must go through macros or seed form)"
       - "Reports a clear line-numbered error for any construct outside the EBNF"
       - "Parse completes within the NFR-001 Parse < 100 ms budget for review-scale diagrams (~50 requirements)"
 
@@ -1050,51 +1062,69 @@ requirement_diagram:
       - "A file saved here is a valid seed-form input to SR-110 — round-trip is byte-stable for a given RequirementModel (ADR-011)"
 
   SR-114:
-    function: "Render-pipeline filter: exclude hidden and deleted requirements (and their relations) from the PlantUML source sent to PlantUML Server"
+    function: "Render-pipeline filter: comment out hidden-requirement declarations and their relations before sending the PlantUML source to PlantUML Server"
     parent: [UR-014]
     component: src/modelTypes/requirement/renderer.ts
     status: planned
     notes: |
-      The PlantUML source persisted in the session (canonical DSL
-      form) contains the full model including $hide / $deleted
-      entries, because they are evidence (ADR-014). But when the
-      source is rendered to SVG by PlantUML Server, the renderer
-      transforms it: requirements marked `hidden` or `deleted` are
-      removed along with every relation that touches them.
+      The edit buffer IS the canonical source and stays a valid
+      PlantUML subset. Delete is already baked into the buffer
+      (declaration commented out, relations tagged) per ADR-014 —
+      the renderer does nothing for deleted ids. Hide is expressed
+      only by a `' @modellogue hide "id"` marker comment; the
+      declaration stays uncommented in the source so a direct PlantUML
+      render shows everything. When ModelLogue prepares the source
+      for its own diagram display, the renderer transforms the buffer:
 
-      This filtering is a pure function of the model (RequirementModel
-      → filtered PlantUML string) — the original source in the editor
-      buffer is never modified.
+        - for each hidden id, comment out its declaration line
+        - for each relation touching a hidden id, comment it out too
+
+      The stored buffer is untouched — only the text sent to
+      PlantUML Server is filtered. The function is a pure
+      (source, model) → string, so it is deterministic (ADR-011).
 
       Scope: applies to requirement-diagram sessions only. State-
-      machine sessions do not use this filter (no hide/delete flag
-      on state machines in v7.5).
+      machine sessions do not use this filter (no hide flag on state
+      machines in v7.5).
     acceptance_criteria:
-      - "Requirements with hidden=true OR deleted=true are not emitted in the PlantUML source sent to PlantUML Server"
-      - "Relations whose source or target is hidden / deleted are also not emitted (dangling references never reach the server)"
-      - "The editor source (Source tab) is unchanged — what the user sees in the source buffer always matches what would serialize to .puml"
-      - "Toggling a hidden / deleted flag triggers a re-render of the SVG with the new filter applied (reactive)"
-      - "Filter output is byte-deterministic for a given (model, hidden-set, deleted-set) so the SVG round-trip is stable (ADR-011)"
+      - "For each requirement with hidden=true, its declaration line in the source is commented out in the PlantUML sent to the server"
+      - "Relations whose source or target is hidden are also commented out"
+      - "Already-commented lines are not re-commented (the prefix is idempotent)"
+      - "Deleted requirements require no renderer action (their source lines are already commented-out per ADR-014)"
+      - "The editor source in the Source tab is never modified by the renderer"
+      - "Toggling a hidden flag triggers a re-render of the SVG with the new filter applied (reactive, via MainLayout's model-dep effect)"
+      - "Filter output is byte-deterministic for a given (source, hidden-set) so the SVG round-trip is stable (ADR-011)"
 
   SR-115:
-    function: "Auto-inject !procedure preamble when rendering, strip on display, round-trip on save"
+    function: "Seed new requirement-diagram sessions with the !procedure preamble so the edit buffer is a valid PlantUML source from the first keystroke"
     parent: [UR-014]
-    component: src/modelTypes/requirement/preamble.ts
+    component: src/modelTypes/requirement/preamble.ts + ModelTypeDefinition.defaultSeedSource + sessionStore.setModelTypeId
     status: planned
     notes: |
-      PlantUML Server needs the !procedure definitions to render the
-      diagram. We keep the edit buffer free of the preamble so users
-      see only the semantic content. Rendering prepends the preamble
-      transparently. Save .puml writes a self-contained file with
-      preamble included. Open a .puml file detects the preamble and
-      strips it before populating the edit buffer. The preamble text
-      is fixed — no per-user customization — so strip / restore is
-      a pure textual operation.
+      Per the 2026-04-23 principle, the source buffer in a
+      requirement session must be a valid PlantUML subset that renders
+      directly on PlantUML Server without going through ModelLogue.
+      That means the `!procedure` preamble defining $req / $fReq /
+      $nfReq / $dConstraint / $contain / $derive / etc. must live
+      INSIDE the edit buffer.
+
+      ModelLogue does not auto-inject the preamble at render time.
+      Instead, a fresh requirement session starts with the preamble
+      pre-populated (ModelTypeDefinition.defaultSeedSource points at
+      DEFAULT_REQUIREMENT_SEED_SOURCE — a wrapped `@startuml` /
+      preamble / `@enduml` template). The user's content is added
+      between the preamble and `@enduml`. Save .puml just writes the
+      buffer, which is already self-contained.
+
+      Open saved review: no strip-on-display; the saved file carries
+      the preamble, the parser's `!procedure` tolerance silently
+      skips it, and the buffer matches the file.
     acceptance_criteria:
-      - "The edit buffer (SourceEditor) shows only the user-written content (no !procedure definitions)"
-      - "Render-time concatenation produces the same PlantUML source the user would write manually with the preamble"
-      - "Save .puml produces a self-contained file that PlantUML Server can render without further preprocessing"
-      - "Open saved review / paste-source flow detects the fixed preamble and strips it before showing in the editor; if the preamble text differs, leave the file as-is (do not guess)"
+      - "Switching to a requirement-diagram session seeds currentSource with the full preamble template (`@startuml`, `!procedure` definitions, `@enduml`)"
+      - "State-machine sessions are unaffected (defaultSeedSource left undefined; buffer stays empty)"
+      - "The source tab in a requirement session shows the preamble — users see and can (during SEED) edit everything that will be sent to PlantUML Server"
+      - "Save .puml writes currentSource unchanged — no magic injection at save time"
+      - "PlantUML Server can render the saved file directly with no ModelLogue pre-processing"
 
 # =============================================================================
 # Data Model
@@ -1171,13 +1201,13 @@ data_model:
         description: "Package or containing-requirement id, or null for top-level. Populated by `package { … }` grouping or `$contain(parent, child)` relations."
       - name: hidden
         type: boolean
-        description: "Review-state flag (ADR-014). true = omit from the diagram but keep in the list and analyses. Populated by $hide(id) in the DSL or the `hidden` CSV column. Default false."
+        description: "Review-state flag (ADR-014). true = omit from the diagram but keep in the list and analyses. Populated by the `' @modellogue hide \"id\"` comment directive in the DSL or the `hidden` CSV column. Default false."
       - name: deleted
         type: boolean
-        description: "Review-state flag (ADR-014). true = reviewer decided this requirement is out. Shown strikethrough in the list tab as evidence, omitted from the diagram, excluded from orphan analysis. Populated by $deleted(id, reason) in the DSL or the `deleted` CSV column. Default false."
+        description: "Review-state flag (ADR-014). true = reviewer decided this requirement is out. Shown strikethrough in the list tab as evidence, omitted from the diagram. Populated by the `' @modellogue deleted \"id\" \"reason\"` comment marker paired with the following commented-out declaration, or by the `deleted` CSV column. Default false."
       - name: note
         type: string
-        description: "Free-form review annotation attached to this requirement (ADR-014). When `deleted=true`, MUST be non-empty (carries the deletion reason). Otherwise optional — used for working notes like 'needs clarification'. Populated by $note(id, text), the reason argument of $deleted(id, reason), or the `note` CSV column. Default empty string."
+        description: "Free-form review annotation attached to this requirement (ADR-014). When `deleted=true`, MUST be non-empty (carries the deletion reason). Otherwise optional — used for working notes like 'needs clarification'. Populated by `' @modellogue note \"id\" \"text\"`, the reason argument of the delete marker, or the `note` CSV column. Default empty string."
 
   RequirementRelation:
     fields:

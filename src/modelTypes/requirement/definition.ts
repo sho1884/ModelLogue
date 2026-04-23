@@ -5,26 +5,31 @@
 import type { GenericParseResult, ModelTypeDefinition } from '../types';
 import { requirementAnalysisTabs } from './analysisTabs';
 import { parse as parseRequirement } from './parser';
-import { renderPlantUml as renderFromModel } from './renderer';
+import { renderPlantUml as renderFromSource } from './renderer';
+import { DEFAULT_REQUIREMENT_SEED_SOURCE } from './preamble';
 import type { RequirementModel } from './model';
 
 export const requirementDefinition: ModelTypeDefinition = {
   id: 'requirement',
   label: 'Requirement',
   description:
-    'SysML-style requirement diagram (macro DSL + seed form per ADR-013/014). Requirement list + traceability matrix + orphan report.',
+    'SysML-style requirement diagram (PlantUML-subset DSL with !procedure preamble). Review-state expressed in PlantUML comments so the source renders directly on PlantUML Server without going through this tool.',
   analysisTabs: requirementAnalysisTabs,
+
+  // New sessions start from the seed template so the edit buffer has
+  // the preamble from the first keystroke (makes `Save .puml` always
+  // produce a standalone-renderable file).
+  defaultSeedSource: DEFAULT_REQUIREMENT_SEED_SOURCE,
 
   parse(source: string): GenericParseResult {
     const r = parseRequirement(source);
     return { model: r.model, errors: r.errors };
   },
 
-  // Filter hidden/deleted and prepend the preamble for PlantUML Server.
-  // If we don't have a parsed model yet (first render), fall back to
-  // passing the source through so the server shows what it can.
+  // Pass the source through, commenting out hidden requirement
+  // declarations and their relations. Deleted requirements are already
+  // commented-out in the source — no renderer action needed.
   renderPlantUml(source: string, model: unknown | null): string {
-    if (!model) return source;
-    return renderFromModel(model as RequirementModel);
+    return renderFromSource(source, (model as RequirementModel | null) ?? null);
   },
 };

@@ -69,12 +69,12 @@ $fReq("R3", "outside")
     });
   });
 
-  describe('meta macros (ADR-014)', () => {
-    it('$hide sets hidden=true on the referenced requirement', () => {
+  describe('review-state comment directives (ADR-014 v2)', () => {
+    it(`' @modellogue hide "id" sets hidden=true`, () => {
       const r = parse(`@startuml
 $fReq("R1", "foo")
 $fReq("R2", "bar")
-$hide("R2")
+' @modellogue hide "R2"
 @enduml`);
       expect(r.errors).toEqual([]);
       expect(r.model!.requirements.find((x) => x.id === 'R2')?.hidden).toBe(
@@ -85,54 +85,71 @@ $hide("R2")
       );
     });
 
-    it('$deleted sets deleted=true and stores the reason in note', () => {
+    it('delete marker + commented declaration sets deleted=true with reason', () => {
       const r = parse(`@startuml
-$fReq("R1", "foo")
-$deleted("R1", "out of scope")
+' @modellogue deleted "R1" "out of scope"
+' $fReq("R1", "old requirement")
 @enduml`);
       expect(r.errors).toEqual([]);
       const req = r.model!.requirements[0];
+      expect(req.id).toBe('R1');
       expect(req.deleted).toBe(true);
       expect(req.note).toBe('out of scope');
     });
 
-    it('$deleted with empty reason is rejected (ADR-014)', () => {
+    it('delete marker with empty reason is rejected (ADR-014)', () => {
       const r = parse(`@startuml
-$fReq("R1", "foo")
-$deleted("R1", "")
+' @modellogue deleted "R1" ""
+' $fReq("R1", "foo")
 @enduml`);
       expect(r.errors.length).toBeGreaterThan(0);
-      expect(r.errors[0].message).toMatch(/reason must be non-empty/);
+      expect(r.errors[0].message).toMatch(
+        /reason|non-empty/
+      );
     });
 
-    it('$note attaches a free-form note', () => {
+    it('deleted-side tagged commented relation is skipped', () => {
+      const r = parse(`@startuml
+$fReq("R1", "one")
+' @modellogue deleted "R2" "out of scope"
+' $fReq("R2", "old")
+' $derive("R1", "R2") ' @modellogue deleted-side "R2"
+@enduml`);
+      expect(r.errors).toEqual([]);
+      const r1 = r.model!.requirements.find((x) => x.id === 'R1');
+      const r2 = r.model!.requirements.find((x) => x.id === 'R2');
+      expect(r1?.deleted).toBe(false);
+      expect(r2?.deleted).toBe(true);
+      // The derive relation touching R2 is suppressed, not in the model.
+      expect(r.model!.relations).toEqual([]);
+    });
+
+    it(`' @modellogue note "id" "text" attaches a note`, () => {
       const r = parse(`@startuml
 $fReq("R1", "foo")
-$note("R1", "needs clarification")
+' @modellogue note "R1" "needs clarification"
 @enduml`);
       expect(r.errors).toEqual([]);
       expect(r.model!.requirements[0].note).toBe('needs clarification');
     });
 
-    it('meta macros referencing unknown ids are rejected', () => {
+    it('comment directives referencing unknown ids are rejected', () => {
       const r = parse(`@startuml
 $fReq("R1", "foo")
-$hide("R99")
+' @modellogue hide "R99"
 @enduml`);
       expect(r.errors.length).toBeGreaterThan(0);
       expect(r.errors[0].message).toMatch(/unknown requirement id 'R99'/);
     });
 
-    it('$note after $deleted appends to the note with a newline', () => {
+    it('plain comment lines are ignored', () => {
       const r = parse(`@startuml
+' this is just a note from the user
 $fReq("R1", "foo")
-$deleted("R1", "out of scope")
-$note("R1", "see meeting notes 2026-05")
+' unrelated comment
 @enduml`);
       expect(r.errors).toEqual([]);
-      expect(r.model!.requirements[0].note).toBe(
-        'out of scope\nsee meeting notes 2026-05'
-      );
+      expect(r.model!.requirements).toHaveLength(1);
     });
   });
 
@@ -231,7 +248,7 @@ R1 --> D1: satisfy
 $fReq("R1", "root")
 R11, child, nonfunctional
 R1 --> R11
-$note("R11", "working memo")
+' @modellogue note "R11" "working memo"
 @enduml`);
       expect(r.errors).toEqual([]);
       expect(r.model!.requirements.map((x) => x.id)).toEqual(['R1', 'R11']);

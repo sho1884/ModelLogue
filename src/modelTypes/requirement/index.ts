@@ -5,9 +5,8 @@ export * from './parseResult';
 export { parse } from './parser';
 export {
   INJECTED_PREAMBLE,
-  matchesPreamble,
-  stripPreamble,
-  injectPreamble,
+  DEFAULT_REQUIREMENT_SEED_SOURCE,
+  hasPreamble,
 } from './preamble';
 export { REQUIREMENT_DIAGRAM_GRAMMAR } from './grammar';
 export { renderPlantUml } from './renderer';

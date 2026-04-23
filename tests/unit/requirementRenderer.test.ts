@@ -1,109 +1,83 @@
 import { describe, it, expect } from 'vitest';
 import { renderPlantUml } from '../../src/modelTypes/requirement/renderer';
 import { parse } from '../../src/modelTypes/requirement/parser';
-import { INJECTED_PREAMBLE } from '../../src/modelTypes/requirement/preamble';
-import type { RequirementModel } from '../../src/modelTypes/requirement/model';
 
-function parsed(source: string): RequirementModel {
-  const r = parse(source);
-  expect(r.errors).toEqual([]);
-  return r.model!;
-}
-
-describe('requirement renderer (SR-114)', () => {
-  it('emits @startuml / preamble / @enduml wrapping', () => {
-    const out = renderPlantUml(parsed(`@startuml
+describe('requirement renderer (SR-114, 2026-04-23 redesign)', () => {
+  it('returns the source unchanged when nothing is hidden', () => {
+    const src = `@startuml
 $fReq("R1", "foo")
-@enduml`));
-    expect(out.startsWith('@startuml')).toBe(true);
-    expect(out.endsWith('@enduml')).toBe(true);
-    expect(out).toContain(INJECTED_PREAMBLE);
+$fReq("R2", "bar")
+$derive("R1", "R2")
+@enduml`;
+    const m = parse(src).model!;
+    expect(renderPlantUml(src, m)).toBe(src);
   });
 
-  it('quotes requirement arguments', () => {
-    const out = renderPlantUml(parsed(`@startuml
-$fReq("R1", "光を出す")
-@enduml`));
-    expect(out).toContain('$fReq("R1", "光を出す")');
+  it('returns the source unchanged when the model is null', () => {
+    const src = `@startuml\n$fReq("R1", "foo")\n@enduml`;
+    expect(renderPlantUml(src, null)).toBe(src);
   });
 
-  it('includes optional text when present', () => {
-    const out = renderPlantUml(parsed(`@startuml
-$fReq("R1", "電流", "2.2V, 0.25A")
-@enduml`));
-    expect(out).toContain('$fReq("R1", "電流", "2.2V, 0.25A")');
+  it('comments out the declaration of a hidden requirement', () => {
+    const src = `@startuml
+$fReq("R1", "keep")
+$fReq("R2", "hide me")
+' @modellogue hide "R2"
+@enduml`;
+    const m = parse(src).model!;
+    const out = renderPlantUml(src, m);
+    // R1 stays as-is
+    expect(out).toContain('$fReq("R1", "keep")');
+    // R2 declaration is now commented
+    expect(out).toContain(`' $fReq("R2", "hide me")`);
   });
 
-  it('emits derive / refine / copy relations', () => {
-    const out = renderPlantUml(parsed(`@startuml
-$fReq("R1", "root")
-$fReq("R11", "child")
-$derive("R1", "R11")
-$refine("R1", "R11")
-$copy("R1", "R11")
-@enduml`));
-    expect(out).toContain('$derive("R1", "R11")');
-    expect(out).toContain('$refine("R1", "R11")');
-    expect(out).toContain('$copy("R1", "R11")');
-  });
-
-  it('wraps requirements with a free-form package parent in a package block', () => {
-    const out = renderPlantUml(parsed(`@startuml
-package "PocketLight" <<Frame>> {
-  $fReq("R1", "first")
-  $fReq("R2", "second")
-}
-@enduml`));
-    expect(out).toContain('package "PocketLight" <<Frame>> {');
-    expect(out).toMatch(/package "PocketLight"[\s\S]*\$fReq\("R1"[\s\S]*\}/);
-  });
-
-  it('encodes requirement-to-requirement parent via synthetic $contain', () => {
-    const out = renderPlantUml(parsed(`@startuml
-$fReq("P", "parent")
-$fReq("C", "child")
-$contain("P", "C")
-@enduml`));
-    expect(out).toContain('$contain("P", "C")');
-    // Both requirements declared at top level; not in a package
-    expect(out).not.toContain('package "P"');
-  });
-
-  it('filters hidden requirements and their touching relations (SR-114)', () => {
-    const out = renderPlantUml(parsed(`@startuml
+  it('comments out relations that touch a hidden requirement', () => {
+    const src = `@startuml
 $fReq("R1", "keep")
 $fReq("R2", "hide me")
 $derive("R1", "R2")
-$hide("R2")
-@enduml`));
-    expect(out).toContain('$fReq("R1"');
-    expect(out).not.toContain('$fReq("R2"');
-    expect(out).not.toContain('$derive("R1", "R2")');
+$derive("R2", "R3")
+' @modellogue hide "R2"
+@enduml`;
+    // R3 is undeclared but that's not the renderer's concern here.
+    const m = parse(src).model!;
+    const out = renderPlantUml(src, m);
+    expect(out).toContain(`' $derive("R1", "R2")`);
+    expect(out).toContain(`' $derive("R2", "R3")`);
   });
 
-  it('filters deleted requirements and their touching relations', () => {
-    const out = renderPlantUml(parsed(`@startuml
-$fReq("R1", "keep")
-$fReq("R2", "gone")
-$derive("R1", "R2")
-$deleted("R2", "out of scope")
-@enduml`));
-    expect(out).toContain('$fReq("R1"');
-    expect(out).not.toContain('$fReq("R2"');
-    expect(out).not.toContain('$derive("R1", "R2")');
+  it('does not re-comment a line already commented', () => {
+    const src = `@startuml
+$fReq("R1", "one")
+' @modellogue deleted "R2" "out"
+' $fReq("R2", "gone")
+' @modellogue hide "R1"
+@enduml`;
+    const m = parse(src).model!;
+    const out = renderPlantUml(src, m);
+    // R2 line already starts with `'` — should NOT gain a second one.
+    expect(out).not.toContain(`' ' $fReq("R2"`);
   });
 
-  it('is byte-deterministic for the same input (ADR-011)', () => {
-    const m1 = parsed(`@startuml
-$fReq("R1", "one")
-$fReq("R2", "two")
+  it('leaves delete blocks alone (they are already commented)', () => {
+    const src = `@startuml
+' @modellogue deleted "R1" "out"
+' $fReq("R1", "gone")
+@enduml`;
+    const m = parse(src).model!;
+    expect(renderPlantUml(src, m)).toBe(src);
+  });
+
+  it('is deterministic for the same input (ADR-011)', () => {
+    const src = `@startuml
+$fReq("R1", "a")
+$fReq("R2", "b")
 $derive("R1", "R2")
-@enduml`);
-    const m2 = parsed(`@startuml
-$fReq("R1", "one")
-$fReq("R2", "two")
-$derive("R1", "R2")
-@enduml`);
-    expect(renderPlantUml(m1)).toBe(renderPlantUml(m2));
+' @modellogue hide "R2"
+@enduml`;
+    const m1 = parse(src).model!;
+    const m2 = parse(src).model!;
+    expect(renderPlantUml(src, m1)).toBe(renderPlantUml(src, m2));
   });
 });

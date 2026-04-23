@@ -13,10 +13,10 @@ import { useSessionStore } from './sessionStore';
 import { getModelTypeDefinition } from '../modelTypes/registry';
 import type { RequirementModel } from '../modelTypes/requirement/model';
 import {
-  ensureDeletedLine,
-  ensureHideLine,
-  removeDeletedLine,
-  removeHideLine,
+  insertHideMarker,
+  markDeleted,
+  removeHideMarker,
+  unmarkDeleted,
 } from '../modelTypes/requirement/sourceEdit';
 
 // v7.5 step 5: `model` is typed as a union so stores and components
@@ -144,11 +144,11 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       ),
     };
     set({ model: next });
-    // Step 6: sync to currentSource so Save / round-trip preserves the flag.
+    // Sync to currentSource so Save / round-trip preserves the flag.
     const source = useSessionStore.getState().currentSource;
     const updated = willBeHidden
-      ? ensureHideLine(source, id)
-      : removeHideLine(source, id);
+      ? insertHideMarker(source, id)
+      : removeHideMarker(source, id);
     if (updated !== source) {
       useSessionStore.getState().updateSource(updated, 'review-state');
     }
@@ -173,7 +173,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
     };
     set({ model: next });
     const source = useSessionStore.getState().currentSource;
-    const updated = ensureDeletedLine(source, id, trimmed);
+    const updated = markDeleted(source, id, trimmed);
     if (updated !== source) {
       useSessionStore.getState().updateSource(updated, 'review-state');
     }
@@ -190,7 +190,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
     };
     set({ model: next });
     const source = useSessionStore.getState().currentSource;
-    const updated = removeDeletedLine(source, id);
+    const updated = unmarkDeleted(source, id);
     if (updated !== source) {
       useSessionStore.getState().updateSource(updated, 'review-state');
     }

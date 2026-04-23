@@ -1,30 +1,35 @@
 (* ModelLogue Requirement Diagram Subset Grammar            *)
-(* Version: 1.2                                             *)
+(* Version: 2.0                                             *)
 (* Reference: ADR-012 (model-type framework),               *)
 (*            ADR-013 (requirement-review scope boundary),  *)
 (*            ADR-014 (soft-delete + reason preservation),  *)
 (*            ADR-009 analogue (minimal subset principle)   *)
 (*                                                          *)
-(* PlantUML does NOT natively provide a SysML requirement    *)
-(* diagram. The community workaround is to use class         *)
-(* diagram syntax with stereotypes and a preamble of         *)
-(* !procedure macros ($fReq / $nfReq / $dConstraint /        *)
-(* $contain / $derive / $refine, etc.). ModelLogue adopts    *)
-(* the macro-call form as its PlantUML-Server-renderable     *)
-(* form.                                                     *)
+(* Core principle (as of 2026-04-23): the DSL is a SUBSET    *)
+(* of PlantUML. A source that is valid under this grammar    *)
+(* must also be valid PlantUML when fed directly to the      *)
+(* PlantUML Server without going through ModelLogue. The    *)
+(* only "tool magic" is the `!procedure` preamble that       *)
+(* defines the SysML-convention macros; the preamble lives   *)
+(* INSIDE the edit buffer (seeded at session start), not     *)
+(* injected at render time.                                  *)
+(*                                                          *)
+(* The macro names $req / $fReq / $nfReq / $dConstraint /    *)
+(* $contain / $derive / $refine / $satisfy / $verify /       *)
+(* $trace / $copy come from the community SysML-via-         *)
+(* PlantUML convention and are defined by the preamble. No   *)
+(* ModelLogue-specific macros are added beyond those.       *)
 (*                                                          *)
 (* In addition to the macro form, this grammar defines a     *)
 (* semi-structured SEED form accepted in the Requirements    *)
-(* tab at session seeding time (SR-110). The seed form is    *)
-(* friendlier to paste from spreadsheets / specs, but the    *)
-(* canonical serialization that gets sent to PlantUML        *)
-(* Server is always the macro form. Seed-form lines are     *)
-(* deterministically converted to macro calls by the         *)
-(* parser; no AI intervention is required.                   *)
+(* tab at session seeding time (SR-110). Both forms coexist  *)
+(* in the same file; the parser normalizes them into a       *)
+(* single RequirementModel.                                  *)
 (*                                                          *)
-(* Both forms coexist in the same file: a seed file can      *)
-(* contain seed-form lines AND macro-form lines mixed, and   *)
-(* the parser normalizes them into a single RequirementModel. *)
+(* Review-state — hide / delete / note (ADR-014) — is        *)
+(* expressed entirely in PlantUML COMMENTS so the source    *)
+(* stays PlantUML-valid even without ModelLogue. See         *)
+(* "Review-state comment directives" below.                  *)
 (*                                                          *)
 (* Scope note (ADR-013): satisfy / verify / trace relations  *)
 (* are accepted at the grammar level so they don't disappear *)
@@ -41,14 +46,15 @@ diagram          = "@startuml" , newline ,
                    "@enduml" ;
 
 line             = empty_line
+                 | review_state_comment
                  | comment
                  | preamble_line
                  | package_block
                  | requirement_call
                  | relation_call
-                 | meta_call
                  | seed_requirement_line
-                 | seed_relation_line ;
+                 | seed_relation_line
+                 | commented_declaration  (* for delete blocks *) ;
 
 empty_line       = { whitespace } ;
 
@@ -153,41 +159,47 @@ relation_macro_name
                  | "$trace"
                  | "$copy" ;
 
-(* ===== Review-state meta macros (ADR-014) ===== *)
+(* ===== Review-state comment directives (ADR-014) ===== *)
 (*                                                               *)
-(* These macros attach review-state metadata to a requirement.   *)
-(* They produce NOTHING in the PlantUML output — the renderer    *)
-(* reads them to decide what to send to PlantUML Server and how  *)
-(* to display the list tab row. They round-trip through DSL and  *)
-(* CSV, preserving review decisions as evidence.                 *)
+(* Hide / delete / note are expressed as PlantUML COMMENTS, so   *)
+(* the source remains valid PlantUML when sent directly to the   *)
+(* server without going through ModelLogue. PlantUML silently     *)
+(* ignores the comments; ModelLogue's parser extracts the         *)
+(* metadata to populate Requirement.hidden / deleted / note.      *)
 (*                                                               *)
-(*   $hide(id)                                                   *)
-(*       Requirement is hidden from the diagram and not drawn,   *)
-(*       but remains in the list and all analyses. Use for       *)
-(*       "I am not focused on this right now".                   *)
+(*   ' @modellogue hide "id"                                      *)
+(*       Mark id as hidden. The declaration stays UNCOMMENTED    *)
+(*       in the source — PlantUML directly renders it; only      *)
+(*       ModelLogue's render-time filter (SR-114) comments it    *)
+(*       out when displaying the diagram.                         *)
 (*                                                               *)
-(*   $deleted(id, reason)                                        *)
-(*       Requirement is marked deleted with a non-empty reason.  *)
-(*       Not drawn; shown strikethrough in the list tab as       *)
-(*       evidence. Excluded from orphan analysis.                *)
+(*   ' @modellogue deleted "id" "reason"                          *)
+(*       Mark id as deleted (review decision). The declaration    *)
+(*       and all relations touching id are commented OUT in the   *)
+(*       source itself, so PlantUML never renders them — with     *)
+(*       or without ModelLogue. The marker line retains the       *)
+(*       reason as evidence. Each suppressed relation carries an  *)
+(*       inline tag `' ... ' @modellogue deleted-side "id"` so    *)
+(*       Undelete can restore them.                               *)
 (*                                                               *)
-(*   $note(id, text)                                             *)
-(*       Free-form annotation attached to a requirement. Shown   *)
-(*       in the list tab note column; not drawn.                 *)
-(*       When $deleted(id, …) is present, its reason argument    *)
-(*       populates the note column; an additional $note(id, …)   *)
-(*       can append further context.                             *)
+(*   ' @modellogue note "id" "text"                               *)
+(*       Free-form annotation attached to id. Declaration stays   *)
+(*       uncommented. Multiple notes append in source order.      *)
 (*                                                               *)
-(* Target id MUST refer to a requirement declared elsewhere in   *)
-(* the same file (by $req / $fReq / $nfReq / $dConstraint or by  *)
-(* a seed-form requirement row). A meta call referring to an     *)
-(* undeclared id is a parse error.                               *)
+(* The id in any directive MUST correspond to a requirement       *)
+(* declared in the same source (via macro call or seed row). A    *)
+(* directive for an unknown id is a parse error.                  *)
 
-meta_call        = meta_macro_name , "(" , arg , [ "," , arg ] , ")" ;
+review_state_comment
+                 = "'" , whitespace , "@modellogue" , whitespace ,
+                   ( "hide" | "deleted" | "note" | "deleted-side" ) ,
+                   { whitespace , '"' , arg_text , '"' } ;
 
-meta_macro_name  = "$hide"
-                 | "$deleted"
-                 | "$note" ;
+commented_declaration
+                 = "'" , whitespace , ( requirement_call | relation_call ) ,
+                   [ whitespace , "'" , whitespace , "@modellogue" ,
+                     whitespace , "deleted-side" , whitespace ,
+                     '"' , arg_text , '"' ] ;
 
 (* ===== SEED form (friendly input for Requirements tab paste) ===== *)
 (*                                                                   *)

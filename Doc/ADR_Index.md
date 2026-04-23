@@ -20,7 +20,7 @@
 | ADR-011 | サービス間のフォーマットは厳密に定義し、機械的な変換は決定論的に実装する | 2026-04-08 | accepted | サービス間でやり取りするフォーマットはすべて厳密に定義する。機械的に決定可能な変換は決定論的アルゴリズムで実装し、LLMには委ねない。 |
 | ADR-012 | モデル型プラグインアーキテクチャ（ModelTypeDefinition） | 2026-04-22 | proposed | src/modelTypes/<type>/ 配下にモデル型ごとのパーサ・EBNF・解析タブ仕様・補助サービスクライアントを閉じ込め、ModelTypeDefinition インターフェースの registry で束ねる |
 | ADR-013 | 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う | 2026-04-22 | accepted | v7.5 の要求図サポートは要求 ↔ 要求の関係（derive / contain / refine / copy）に限定し、要求 ↔ 外部（satisfy / verify / trace）は別フェーズの別機能として後日設計する |
-| ADR-014 | レビュー過程の削除は soft-delete + reason 必須でエビデンスとして残す | 2026-04-22 | accepted | レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする |
+| ADR-014 | レビュー過程の削除は soft-delete + reason 必須でエビデンスとして残す | 2026-04-22 | accepted | レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする。表現形式は PlantUML コメント（`' @modellogue ...`）にして、source を直接 PlantUML に送っても妥当なまま保つ |
 
 ---
 
@@ -1122,7 +1122,7 @@ ModelLogue の核心原則は ADR-001 の "Volatile Canvas" と
 
 ### 決定 / Decision
 
-**Summary**: レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする
+**Summary**: レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする。表現形式は PlantUML コメント（`' @modellogue ...`）にして、source を直接 PlantUML に送っても妥当なまま保つ
 
 レビューの成果物としてのモデル（要求リスト、状態遷移モデル、
 etc.）において、「削除」と決まった要素は以下の方針で扱う：
@@ -1131,14 +1131,53 @@ etc.）において、「削除」と決まった要素は以下の方針で扱�
    フラグ（`deleted: boolean`）を true に設定するのみ
 2. **Reason 必須**: `deleted=true` にする際は、削除理由を
    `note`（備考）フィールドに記録することを必須化する
-3. **全ての永続形式で round-trip**: DSL（macro 形）、CSV
-   （table 形）、Save & finish の JSON のいずれでも deleted
-   + reason は保存される
+3. **全ての永続形式で round-trip**: DSL（PlantUML サブセット）、
+   CSV、Save & finish の JSON のいずれでも deleted + reason は
+   保存される
 4. **可視化**: リストビューでは打ち消し線＋薄灰で常時表示
-   （見える = エビデンス）、図（PlantUML）では renderer が
-   送信前に除外するので描画されない
+   （見える = エビデンス）、図（PlantUML）では該当行が
+   コメントアウトされているので描画されない
 5. **復元可能**: deleted フラグを false に戻せば元に戻る（
    削除は取り消し可能な状態遷移）
+
+### 表現形式の制約（2026-04-23 追補）
+
+review-state（hide / deleted / note）の表現は **PlantUML コメント**
+に限る。理由：
+
+- DSL は PlantUML のサブセットでなくてはならない（本ツールを
+  通さず、source を直接 PlantUML に送っても有効）
+- ModelLogue が独自に `$hide` / `$deleted` / `$note` のような
+  macros を導入すると「勝手に作った DSL」になり、上の原則に違反
+- コメント（`'` で始まる行）は PlantUML が完全に無視するので、
+  任意のメタデータを埋め込んでも source の妥当性は崩れない
+
+したがって以下の形式を採る：
+
+    ' @modellogue hide "R1"
+    ' @modellogue deleted "R2" "out of scope"
+    ' @modellogue note "R3" "needs review"
+
+削除ブロックは marker に加えて、対象の宣言行そのものを
+コメントアウトし、触れる関係行には `deleted-side` タグを付ける：
+
+    ' @modellogue deleted "R2" "out of scope"
+    ' $fReq("R2", "old requirement")
+    ' $derive("R1", "R2") ' @modellogue deleted-side "R2"
+
+これで source を PlantUML に直接送った場合も R2 は描画されない
+（全てコメント）。ModelLogue を通すと parser が marker を読み取り、
+R2 を `deleted=true` として model に載せ、リストタブで打ち消し線
+表示 + note 欄に理由を表示する。
+
+### 非表示との違い（2026-04-23 ユーザー確認）
+
+- **Delete**: source 自体でコメントアウト済み。どこに送っても
+  現れない。ブロック全体がエビデンスとして残る
+- **Hide**: source では宣言を残す（コメントアウトしない）。
+  source を直接 PlantUML に送ると描画される。ModelLogue を
+  通したときだけ、renderer が送信前に該当行をコメントアウト
+  してフィルタする（SR-114）
 
 note フィールドは削除理由専用ではなく、**任意の要素に付けられ
 る自由メモ欄**として設計する。削除時には非空必須という制約が

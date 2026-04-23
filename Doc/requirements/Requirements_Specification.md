@@ -425,13 +425,17 @@ R11 --> R111
 
 **グルーピング**: `package "…" <<Frame>> { … }` で要求を階層的にまとめる。
 
-**レビュー状態メタ（ADR-014）**: 下記 3 マクロは描画上は何も出力せず、要求の review state を表す。DSL / CSV / JSON 全てで round-trip する：
+**レビュー状態は PlantUML コメントで表現（ADR-014、2026-04-23 再設計）**: 独自マクロを作らず、PlantUML が完全に無視するコメントでメタデータを運ぶ。source を本ツール経由せず PlantUML に直接送っても valid なまま：
 
-| マクロ | 意味 |
+| 記法 | 意味 |
 |---|---|
-| `$hide(id)` | 該当要求を**図から除外**、リストには表示（「今は関心がない」） |
-| `$deleted(id, reason)` | 該当要求を**レビュー判断で削除**。図から除外、リストでは打ち消し線で残存（エビデンス）。reason は必須 |
-| `$note(id, text)` | 該当要求に自由メモを付ける（「曖昧、要確認」等） |
+| `' @modellogue hide "id"` | 該当要求を**ModelLogue 表示上だけ図から除外**（source を直接 PlantUML に送れば描画される）。リストにはチェック外し状態で残る |
+| `' @modellogue deleted "id" "reason"` + 直後にコメントアウトされた宣言行と、`' @modellogue deleted-side "id"` タグ付きの関連関係行 | 該当要求を**レビュー判断で削除**。source 自体がコメントアウトされているので、本ツールの有無に関係なく図から消える。リストでは打ち消し線で残る（エビデンス）。reason は必須 |
+| `' @modellogue note "id" "text"` | 該当要求に自由メモを付ける（「曖昧、要確認」等）|
+
+Hide と Delete の違い：
+- **Hide**: source 上は宣言を残す。PlantUML 直送で描画される。ModelLogue は SR-114 render フィルタで送信前に該当行をコメントアウト。
+- **Delete**: source 上で宣言ごとコメントアウト済み。どこに送っても出ない。取り消し操作では marker 除去と commented lines の uncomment を行う。
 
 #### 3.13.4 サポートしない構文
 
@@ -441,9 +445,16 @@ R11 --> R111
 - `requirement` や `interface` などの PlantUML キーワード
 - entry/exit point、orthogonal region 等の他モデル型の構文
 
-#### 3.13.5 preamble の自動注入（SR-115）
+#### 3.13.5 preamble は buffer の一部（SR-115）
 
-PlantUML Server でそのまま描画するためには `!procedure $fReq …` 等の定義が必要。ModelLogue は編集バッファには本質部分（`$fReq(…)` 呼び出しと関係）だけを見せ、**描画時に preamble を自動注入**する。Save `.puml` 時は preamble を付けた自己完結形式で書き出し、Open 時に preamble が含まれていれば尊重しつつ本質部分だけ抽出してバッファに展開する。
+PlantUML Server でそのまま描画するためには `!procedure $fReq …` 等の定義が必要。これは **ModelLogue が渡しているマクロ定義ではなく、source 自体に含まれる PlantUML preprocessor の `!procedure` 宣言**であり、素の PlantUML 機能の範囲内。
+
+**2026-04-23 方針変更**: 旧設計では preamble を render 時に auto-inject して buffer からは隠していましたが、それだと「buffer をそのまま PlantUML に送っても有効」の原則に反する（preamble が欠落する）ので廃止。現設計：
+
+- 要求図セッションの **buffer にははじめから preamble が含まれる**（`ModelTypeDefinition.defaultSeedSource` 経由で seed）
+- Source タブには preamble も含めた source がそのまま見える
+- Save `.puml` / Save & finish は buffer をそのまま書き出す（自己完結）
+- Open / paste で preamble がある source を読み込んでも特別な strip は不要（parser は `!procedure` ブロックを tolerate するので、あってもなくても model 生成結果は同じ）
 
 #### 3.13.6 要求型セッションの解析タブ（SR-071）
 
@@ -467,8 +478,8 @@ PlantUML Server でそのまま描画するためには `!procedure $fReq …` �
 | SR-111 | Traceability matrix (requirement × requirement by kind) / トレーサビリティマトリクス（要求 × 要求、関係種別） **(v7.5 planned)** | UR-014 |
 | SR-112 | Orphan requirements list (no incoming / no outgoing r-to-r relation) / 孤立要求リスト **(v7.5 planned)** | UR-014 |
 | SR-113 | Requirement list table with visibility checkbox, inline notes, delete-with-reason action, and Copy / Save .csv / 要求リスト表、表示切替・備考編集・理由付き削除・Copy / Save .csv **(v7.5 planned, ADR-014)** | UR-014 |
-| SR-114 | Renderer filter — exclude hidden and deleted requirements (and touching relations) before PlantUML Server / hidden・deleted な要求とそれに触れる関係を描画から除外 **(v7.5 planned, ADR-014)** | UR-014 |
-| SR-115 | Auto-inject `!procedure` preamble when rendering / 描画時に preamble を自動注入、表示時は除去、保存時は往復 **(v7.5 planned)** | UR-014 |
+| SR-114 | Renderer filter — comment out hidden requirements (and touching relations) before PlantUML Server / hidden な要求とそれに触れる関係を送信前にコメントアウト（deleted は source 側で既にコメント済み） **(v7.5 planned, ADR-014)** | UR-014 |
+| SR-115 | Seed new requirement sessions with the `!procedure` preamble so the edit buffer is always a valid PlantUML source / 新規 requirement セッションの buffer を preamble 同梱で seed、PlantUML 直送で有効 **(v7.5 planned)** | UR-014 |
 
 #### 3.13.8 既存 SR への影響
 

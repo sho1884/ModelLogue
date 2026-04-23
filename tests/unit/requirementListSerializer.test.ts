@@ -64,10 +64,10 @@ $derive("B", "C")
     const m = parse(`@startuml
 $fReq("R1", "keep")
 $fReq("R2", "parked")
-$fReq("R3", "gone")
-$hide("R2")
-$deleted("R3", "out of scope")
-$note("R1", "please review")
+' @modellogue hide "R2"
+' @modellogue deleted "R3" "out of scope"
+' $fReq("R3", "gone")
+' @modellogue note "R1" "please review"
 @enduml`).model!;
     const csv = modelToRequirementsCsv(m);
     const lines = csv.split('\n');
@@ -106,8 +106,8 @@ $fReq("R2", "bar")
 
   it('deleted rows carry a strikethrough style in HTML', () => {
     const m = parse(`@startuml
-$fReq("R1", "gone")
-$deleted("R1", "out")
+' @modellogue deleted "R1" "out"
+' $fReq("R1", "gone")
 @enduml`).model!;
     const html = modelToRequirementsHtml(m);
     expect(html).toContain('text-decoration:line-through');

@@ -8,9 +8,9 @@ describe('traceability matrix (SR-111)', () => {
     const m = parse(`@startuml
 $fReq("R1", "one")
 $fReq("R2", "two")
-$fReq("R3", "three")
-$hide("R2")
-$deleted("R3", "out")
+' @modellogue hide "R2"
+' @modellogue deleted "R3" "out"
+' $fReq("R3", "three")
 @enduml`).model!;
     const mx = buildTraceabilityMatrix(m);
     expect(mx.ids).toEqual(['R1']);
@@ -100,11 +100,11 @@ $contain("P", "C")
     const m = parse(`@startuml
 $fReq("R1", "keep")
 $fReq("R2", "hidden")
-$fReq("R3", "gone")
 $derive("R1", "R2")
-$derive("R1", "R3")
-$hide("R2")
-$deleted("R3", "out")
+' @modellogue hide "R2"
+' @modellogue deleted "R3" "out"
+' $fReq("R3", "gone")
+' $derive("R1", "R3") ' @modellogue deleted-side "R3"
 @enduml`).model!;
     const o = findOrphans(m);
     // R1 is left alone (R2/R3 are filtered out of the analysis).
