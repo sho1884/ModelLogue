@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { useModelStore } from '../../stores/modelStore';
+import { stashAutoMarkerBeforeIfApplicable } from '../../stores/autoMarkerApply';
 import {
   getDefaultModelTypeDefinition,
   getModelTypeDefinition,
 } from '../../modelTypes/registry';
-import type { RequirementModel } from '../../modelTypes/requirement/model';
 
 function parseForActiveType(source: string) {
   const id = useSessionStore.getState().modelTypeId;
@@ -119,27 +118,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     // image because PlantUML Server renders are debounced.)
     const beforeSource = useSessionStore.getState().currentSource;
 
-    // v7.5: stash the pre-apply requirement model so the next
-    // fetchCoordinates call can diff and draw added/changed auto-
-    // markers on the refreshed diagram. State-machine sessions don't
-    // use auto-markers (ProposalView's overlay handles before/after
-    // comparison for them), so the stash is a no-op there.
-    const beforeModel = useModelStore.getState().model;
-    const isRequirementSession =
-      useSessionStore.getState().modelTypeId === 'requirement';
-    const isRequirementModelShape =
-      beforeModel && 'requirements' in (beforeModel as object);
-    if (
-      isRequirementSession &&
-      isRequirementModelShape &&
-      beforeSource.trim() !== ''
-    ) {
-      useModelStore
-        .getState()
-        .setPendingAutoMarkerBefore(beforeModel as RequirementModel);
-    } else {
-      useModelStore.getState().setPendingAutoMarkerBefore(null);
-    }
+    // v7.5: for requirement-type sessions, stash the pre-apply model so
+    // the next fetchCoordinates can diff and draw added/changed auto-
+    // markers. Initial generation (zero-requirement before) is skipped
+    // inside the helper so the first apply doesn't splatter the whole
+    // diagram in green.
+    stashAutoMarkerBeforeIfApplicable();
 
     applyProposal(message.id, message.suggestedSource);
     markApplied(message.id, { beforeSource });

@@ -3,9 +3,11 @@ import { useChatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useRequirementsStore } from '../stores/requirementsStore';
 import { useModelStore } from '../stores/modelStore';
+import { stashAutoMarkerBeforeIfApplicable } from '../stores/autoMarkerApply';
 import { enqueueMockResponses, clearMockQueue } from '../services/mockAi';
 import { diffModels } from '../engines/modelDiff';
 import { parse } from '../parsers/stateMachineParser';
+import { getModelTypeDefinition } from '../modelTypes/registry';
 import { SCENARIOS, type Scenario } from './scenarios';
 
 // Debug-only runner. Mounted from MainLayout only when the harness flag
@@ -28,7 +30,10 @@ function sleep(ms: number, cancelRef: { cancelled: boolean }): Promise<void> {
 // Mirror of ChatPanel.MessageBubble.handleApply for programmatic apply.
 // The runner has to simulate the reviewer clicking Apply on each step's
 // proposal; otherwise currentSource stays frozen at the initial model
-// and subsequent proposals compare against the wrong baseline.
+// and subsequent proposals compare against the wrong baseline. Must
+// mirror the full handleApply sequence — including the v7.5
+// stashAutoMarkerBeforeIfApplicable stash — so requirement scenarios
+// render the same auto-markers the live app would.
 function autoApplyLatestProposal(): void {
   const messages = useChatStore.getState().messages;
   const last = messages[messages.length - 1];
@@ -36,6 +41,7 @@ function autoApplyLatestProposal(): void {
   if (last.applied) return; // initial-gen auto-apply already handled it
 
   const beforeSource = useSessionStore.getState().currentSource;
+  stashAutoMarkerBeforeIfApplicable();
   useSessionStore.getState().applyProposal(last.id, last.suggestedSource);
   useChatStore.getState().markApplied(last.id, { beforeSource });
 }
@@ -59,8 +65,18 @@ export function ScenarioRunner() {
     clearMockQueue();
     useChatStore.getState().clear();
     useRequirementsStore.setState({ requirementsText: '' });
+
+    // v7.5: seed the source with the target type's default template
+    // (requirement sessions need the !procedure preamble in the buffer
+    // from the first keystroke so PlantUML Server can render the
+    // initial — empty — model without erroring). hasEstablishedModel
+    // has to reset BEFORE the modelTypeId setter so the switch isn't
+    // locked out.
+    const targetType = sc.modelTypeId ?? 'state-machine';
+    const targetDef = getModelTypeDefinition(targetType);
     useSessionStore.setState({
-      currentSource: '',
+      modelTypeId: targetType,
+      currentSource: targetDef?.defaultSeedSource ?? '',
       sourceHistory: [],
       redoStack: [],
       hasEstablishedModel: false,

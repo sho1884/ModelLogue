@@ -6,12 +6,16 @@ import nswitchLevels from './04-nswitch-levels';
 import unreachableWithinCap from './05-unreachable-within-cap';
 import compositeLayers from './06-composite-layers';
 import mainloopCycleClosure from './07-mainloop-cycle-closure';
+import requirementAddAndModify from './08-requirement-add-and-modify';
+import requirementDecomposeAndMerge from './09-requirement-decompose-and-merge';
 
 // Registry ordered for the runner dropdown. Add new scenario files
 // here (and create one file per scenario under this folder).
 //
-// 01-03: UX verification (diagram / proposal / reask).
-// 04-07: nswitch / Test cases tab exploration (SR-102 / SR-103).
+// 01-03: state-machine UX verification (diagram / proposal / reask).
+// 04-07: state-machine nswitch / Test cases tab (SR-102 / SR-103).
+// 08+  : requirement-diagram apply path (CSV → PlantUML regen + auto-
+//        markers, v7.5).
 export const SCENARIOS: Scenario[] = [
   sizeAspect,
   addRemoveChange,
@@ -20,6 +24,8 @@ export const SCENARIOS: Scenario[] = [
   unreachableWithinCap,
   compositeLayers,
   mainloopCycleClosure,
+  requirementAddAndModify,
+  requirementDecomposeAndMerge,
 ];
 
 export type { Scenario, ScenarioStep } from './types';

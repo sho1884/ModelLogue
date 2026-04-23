@@ -19,6 +19,14 @@ export interface Scenario {
   id: string;
   label: string;
   description: string;
+  /**
+   * v7.5: model type the scenario runs under. Defaults to
+   * 'state-machine' so the existing state-machine scenarios keep
+   * working without edits. Set to 'requirement' for scenarios that
+   * exercise the requirement apply path (mock CSV replies → generator
+   * → diagram + auto-markers).
+   */
+  modelTypeId?: 'state-machine' | 'requirement';
   requirementsText?: string;
   steps: ScenarioStep[];
 }
