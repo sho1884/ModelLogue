@@ -129,10 +129,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     markApplied(message.id, { beforeSource });
   };
 
-  // SR-034 (v7.2): auto-apply the very first proposal when the session
-  // source is still empty — there's nothing to compare against, so
-  // requiring a user click is noise. Gated on parse success so an
-  // unparseable first proposal does NOT poison the session.
+  // Auto-apply cases:
+  // - SR-034 (v7.2): state-machine only, and only when the session
+  //   source is still empty — nothing to compare against, so requiring
+  //   a user click would be noise.
+  // - v7.5: requirement sessions always auto-apply. Per user direction
+  //   ("diffのapplyなんて要らなくて、直接描き直した図に枠をつけちゃって")
+  //   the before/after modal is replaced by live-diagram auto-markers;
+  //   there's no Apply button to show, so don't require one.
+  // Gated on parse success in both cases so an unparseable proposal
+  // does NOT poison the session.
   useEffect(() => {
     if (
       message.role !== 'assistant' ||
@@ -141,7 +147,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     ) {
       return;
     }
-    if (useSessionStore.getState().currentSource.trim() !== '') return;
+    const sessionModelTypeId = useSessionStore.getState().modelTypeId;
+    const liveSourceEmpty =
+      useSessionStore.getState().currentSource.trim() === '';
+    const shouldAutoApply =
+      sessionModelTypeId === 'requirement' || liveSourceEmpty;
+    if (!shouldAutoApply) return;
     const { model, errors } = parseForActiveType(message.suggestedSource);
     if (!model || errors.length > 0) return;
     handleApply();
@@ -184,6 +195,7 @@ function AssistantContent({
   onApply: () => void;
 }) {
   const liveSource = useSessionStore((s) => s.currentSource);
+  const modelTypeId = useSessionStore((s) => s.modelTypeId);
 
   // For an applied message: use the source snapshotted at apply time so
   // the diff stays anchored to "what THIS proposal actually changed".
@@ -214,8 +226,19 @@ function AssistantContent({
     liveSource,
   ]);
 
+  // v7.5: requirement sessions don't use the before/after ProposalView
+  // at all. Changes are shown as green/amber auto-markers on the live
+  // diagram, apply is automatic, and the diff-free ProposalView would
+  // otherwise render without an Apply button (state-machine diff shape
+  // is empty for requirement models) — which looks to the user like a
+  // dialog they can't dismiss.
+  const showProposalView = modelTypeId !== 'requirement';
+
   const displayText = message.suggestedSource
-    ? message.content.replace(/```plantuml\s*\n[\s\S]*?```/, '').trim()
+    ? message.content
+        .replace(/```plantuml\s*\n[\s\S]*?```/, '')
+        .replace(/```csv\s*\n[\s\S]*?```/i, '')
+        .trim()
     : message.content;
 
   return (
@@ -225,7 +248,7 @@ function AssistantContent({
           {displayText}
         </div>
       )}
-      {message.suggestedSource && !isInitialGen && (
+      {showProposalView && message.suggestedSource && !isInitialGen && (
         <ProposalView
           currentSource={beforeSource}
           suggestedSource={message.suggestedSource}
