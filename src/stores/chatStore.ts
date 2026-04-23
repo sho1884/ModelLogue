@@ -13,13 +13,16 @@ import {
 } from '../modelTypes/registry';
 import type { StateMachineModel } from '../modelTypes/state-machine/model';
 
+function activeTypeDefinition() {
+  const id = useSessionStore.getState().modelTypeId;
+  return getModelTypeDefinition(id) ?? getDefaultModelTypeDefinition();
+}
+
 function parseForActiveType(source: string): {
   model: unknown | null;
   errors: { line: number; message: string }[];
 } {
-  const id = useSessionStore.getState().modelTypeId;
-  const def = getModelTypeDefinition(id) ?? getDefaultModelTypeDefinition();
-  return def.parse(source);
+  return activeTypeDefinition().parse(source);
 }
 
 // SR-030 (v7.2): cap the auto-reask loop so a misbehaving AI can't spin
@@ -121,12 +124,20 @@ async function sendAndAutoReask(
     responseLanguage,
   });
 
+  // v7.5: let the active model-type definition own extraction. For
+  // state-machine this is extractPlantUmlBlock (the same behavior as
+  // the transport-layer fallback); for requirement it extracts a
+  // ```csv block, parses it, and regenerates PlantUML from the model.
+  const def = activeTypeDefinition();
+  const typedSuggestedSource =
+    def.extractSuggestedSource(response.text, currentSource) ?? undefined;
+
   const assistantMessage: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
     content: response.text,
     timestamp: now(),
-    suggestedSource: response.suggestedSource,
+    suggestedSource: typedSuggestedSource ?? response.suggestedSource,
   };
 
   set({

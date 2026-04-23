@@ -7,7 +7,14 @@ import { requirementAnalysisTabs } from './analysisTabs';
 import { parse as parseRequirement } from './parser';
 import { renderPlantUml as renderFromSource } from './renderer';
 import { DEFAULT_REQUIREMENT_SEED_SOURCE } from './preamble';
+import { parseRequirementsCsv } from './csvParser';
+import { modelToPlantUml } from './plantUmlGenerator';
 import type { RequirementModel } from './model';
+
+function extractCsvBlock(text: string): string | null {
+  const match = text.match(/```csv\s*\n([\s\S]*?)```/i);
+  return match ? match[1].trim() : null;
+}
 
 export const requirementDefinition: ModelTypeDefinition = {
   id: 'requirement',
@@ -31,5 +38,17 @@ export const requirementDefinition: ModelTypeDefinition = {
   // commented-out in the source — no renderer action needed.
   renderPlantUml(source: string, model: unknown | null): string {
     return renderFromSource(source, (model as RequirementModel | null) ?? null);
+  },
+
+  // v7.5: AI exchanges requirements as CSV (the list is canonical; the
+  // diagram is a visualization derived mechanically from the list).
+  // Extract the ```csv block, parse into a model, regenerate canonical
+  // PlantUML (preamble + macros + review-state comments).
+  extractSuggestedSource(aiText: string): string | null {
+    const csv = extractCsvBlock(aiText);
+    if (!csv) return null;
+    const parsed = parseRequirementsCsv(csv);
+    if (!parsed.model || parsed.errors.length > 0) return null;
+    return modelToPlantUml(parsed.model);
   },
 };

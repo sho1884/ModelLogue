@@ -8,6 +8,7 @@ import { stateMachineAnalysisTabs } from './analysisTabs';
 import { parse as parseStateMachine } from './parser';
 import { diffModels } from './diff';
 import type { StateMachineModel } from './model';
+import { extractPlantUmlBlock } from '../../services/n8nService';
 
 export const stateMachineDefinition: ModelTypeDefinition = {
   id: 'state-machine',
@@ -34,5 +35,11 @@ export const stateMachineDefinition: ModelTypeDefinition = {
       before as StateMachineModel,
       after as StateMachineModel
     );
+  },
+
+  // AI replies for state-machine sessions carry a ```plantuml block that
+  // IS the canonical source — just unwrap it.
+  extractSuggestedSource(aiText: string): string | null {
+    return extractPlantUmlBlock(aiText) ?? null;
   },
 };

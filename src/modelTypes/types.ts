@@ -95,4 +95,28 @@ export interface ModelTypeDefinition {
    * PlantUML.
    */
   defaultSeedSource?: string;
+
+  /**
+   * Extract and transform an AI chat reply into the canonical PlantUML
+   * source for this model type (v7.5). The return value, if any, is
+   * stored as ChatMessage.suggestedSource and becomes the new session
+   * source on apply.
+   *
+   * - state-machine: finds a ```plantuml code block and returns its
+   *   contents verbatim (PlantUML IS the canonical form).
+   * - requirement: finds a ```csv code block, parses SR-113 CSV, and
+   *   regenerates the canonical PlantUML (preamble + macro calls +
+   *   review-state comments). The AI works in CSV space so we can feed
+   *   it the list directly (the list is the canonical data; the diagram
+   *   is a visualization) and regenerate PlantUML mechanically.
+   *
+   * `currentSource` is passed for future type-specific merging (e.g.
+   * preserving a custom preamble); current implementations ignore it.
+   *
+   * Returns null if no usable payload is present.
+   */
+  extractSuggestedSource: (
+    aiText: string,
+    currentSource: string
+  ) => string | null;
 }
