@@ -14,6 +14,7 @@ import type {
   MarkerGeometry,
   MarkerType,
 } from '../../types/marker';
+import { AUTO_MARKER_STROKE } from '../../types/marker';
 
 interface SvgInfo {
   url: string;
@@ -140,6 +141,7 @@ function DiagramCanvas({ svgInfo }: { svgInfo: SvgInfo }) {
   const transformRef = useRef<ReactZoomPanPinchRef | null>(null);
   const activeTool = useMarkerStore((s) => s.activeTool);
   const markers = useMarkerStore((s) => s.markers);
+  const autoMarkers = useMarkerStore((s) => s.autoMarkers);
   const addMarker = useMarkerStore((s) => s.addMarker);
   const updateMarker = useMarkerStore((s) => s.updateMarker);
   const deleteMarker = useMarkerStore((s) => s.deleteMarker);
@@ -510,6 +512,25 @@ function DiagramCanvas({ svgInfo }: { svgInfo: SvgInfo }) {
                     onPointerUp={handlePointerUp}
                     onPointerCancel={handlePointerUp}
                   >
+                    {/* v7.5 auto-markers: added/changed indicators from
+                        the last apply. Drawn BEFORE user markers so the
+                        user layer sits on top, and with pointer-events
+                        off so clicks still hit user markers or the
+                        background. */}
+                    {autoMarkers.map((m) => (
+                      <rect
+                        key={m.id}
+                        x={m.rect.x}
+                        y={m.rect.y}
+                        width={m.rect.width}
+                        height={m.rect.height}
+                        fill="none"
+                        stroke={AUTO_MARKER_STROKE[m.kind]}
+                        strokeWidth={3}
+                        strokeDasharray={m.kind === 'added' ? undefined : '6 4'}
+                        pointerEvents="none"
+                      />
+                    ))}
                     {markers.map((marker) => (
                       <MarkerShape
                         key={marker.id}

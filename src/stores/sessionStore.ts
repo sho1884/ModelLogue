@@ -90,7 +90,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // Resetting the session is necessary so seed-phase input that was
     // shaped for the previous type doesn't leak into the new one.
     useChatStore.getState().clear();
-    useMarkerStore.setState({ markers: [] });
+    useMarkerStore.setState({ markers: [], autoMarkers: [] });
     useRequirementsStore.setState({ requirementsText: '' });
     // The active analysis tab for the previous type may not exist in
     // the new type's analysisTabs (e.g. 'state-event' → requirement).

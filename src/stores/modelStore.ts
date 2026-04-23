@@ -9,6 +9,7 @@ import {
 } from '../engines/matrixGenerator';
 import { fetchSvg } from '../services/plantUmlService';
 import { useSessionStore } from './sessionStore';
+import { useMarkerStore } from './markerStore';
 import { getModelTypeDefinition } from '../modelTypes/registry';
 import type { RequirementModel } from '../modelTypes/requirement/model';
 import {
@@ -17,6 +18,8 @@ import {
   removeHideMarker,
   unmarkDeleted,
 } from '../modelTypes/requirement/sourceEdit';
+import { diffRequirementModelsVisible } from '../modelTypes/requirement/diff';
+import { placeAutoMarkers } from '../modelTypes/requirement/autoMarkerPlacement';
 
 // v7.5 step 5: `model` is typed as a union so stores and components
 // can discriminate via sessionStore.modelTypeId. State-machine-specific
@@ -33,9 +36,16 @@ interface ModelStore {
   coordinates: CoordinateMap | null;
   svgString: string | null;
   svgFetchError: string | null;
+  // v7.5: requirement-type sessions stash the pre-apply model here so
+  // the next coordinate refresh can compute added/changed diffs and
+  // place auto-markers on the diagram. Consumed and cleared inside
+  // fetchCoordinates. Null on plain edits / undo / redo — those just
+  // clear any existing auto-markers.
+  pendingAutoMarkerBefore: RequirementModel | null;
 
   parseSource: (source: string) => void;
   fetchCoordinates: (source: string) => Promise<void>;
+  setPendingAutoMarkerBefore: (model: RequirementModel | null) => void;
 
   // ADR-014 review-state mutators (requirement model only). Applied
   // after parse, before Save. No-op when the active model is not a
@@ -57,6 +67,10 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   coordinates: null,
   svgString: null,
   svgFetchError: null,
+  pendingAutoMarkerBefore: null,
+
+  setPendingAutoMarkerBefore: (model) =>
+    set({ pendingAutoMarkerBefore: model }),
 
   parseSource: (source: string) => {
     const modelTypeId = useSessionStore.getState().modelTypeId;
@@ -119,6 +133,25 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       const extracted = def?.extractCoordinates(svgString, model);
       const coords = extracted && extracted.size > 0 ? extracted : null;
       set({ coordinates: coords, svgString, svgFetchError: null });
+
+      // Auto-marker refresh for requirement-type sessions. If the apply
+      // pipeline stashed a before-model via setPendingAutoMarkerBefore,
+      // diff it against the just-parsed after-model and draw green /
+      // amber rectangles at the extracted positions. Plain edits (no
+      // pending) just clear any stale auto-markers so the diagram stays
+      // clean between applies.
+      if (modelTypeId === 'requirement') {
+        const before = get().pendingAutoMarkerBefore;
+        const after = isRequirementModel(model) ? model : null;
+        if (before && after && coords) {
+          const diff = diffRequirementModelsVisible(before, after);
+          const markers = placeAutoMarkers(diff, coords);
+          useMarkerStore.getState().replaceAutoMarkers(markers);
+        } else {
+          useMarkerStore.getState().clearAutoMarkers();
+        }
+        if (before) set({ pendingAutoMarkerBefore: null });
+      }
     } catch (e) {
       set({
         svgFetchError: e instanceof Error ? e.message : 'SVG fetch failed',

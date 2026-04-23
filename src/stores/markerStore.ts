@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  type AutoMarker,
   type Marker,
   type MarkerColor,
   type MarkerGeometry,
@@ -9,6 +10,11 @@ import {
 
 interface MarkerStore {
   markers: Marker[];
+  // v7.5: auto-placed added/changed indicators populated by the apply
+  // pipeline in requirement-diagram sessions. Kept separate from
+  // `markers` so user-drawn markers aren't clobbered when the auto set
+  // is refreshed, and so the 4-color palette allocation is unaffected.
+  autoMarkers: AutoMarker[];
   activeTool: DiagramTool;
   selectedMarkerId: string | null;
   toastMessage: string | null;
@@ -20,6 +26,8 @@ interface MarkerStore {
   deleteMarker: (id: string) => void;
   selectMarker: (id: string | null) => void;
   clearToast: () => void;
+  replaceAutoMarkers: (markers: AutoMarker[]) => void;
+  clearAutoMarkers: () => void;
 }
 
 function pickAvailableColor(used: Set<MarkerColor>): MarkerColor | null {
@@ -31,6 +39,7 @@ function pickAvailableColor(used: Set<MarkerColor>): MarkerColor | null {
 
 export const useMarkerStore = create<MarkerStore>((set, get) => ({
   markers: [],
+  autoMarkers: [],
   // SR-012 (v7.1): pan is the default. At session start there are no
   // markers to select, so pan gives the user a useful first action
   // (drag the canvas) instead of an inert select mode.
@@ -79,4 +88,10 @@ export const useMarkerStore = create<MarkerStore>((set, get) => ({
   selectMarker: (id) => set({ selectedMarkerId: id }),
 
   clearToast: () => set({ toastMessage: null }),
+
+  replaceAutoMarkers: (next) => set({ autoMarkers: next }),
+  clearAutoMarkers: () => {
+    if (get().autoMarkers.length === 0) return;
+    set({ autoMarkers: [] });
+  },
 }));

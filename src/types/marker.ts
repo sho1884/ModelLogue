@@ -58,3 +58,27 @@ export interface Marker {
   color: MarkerColor;
   geometry: MarkerGeometry;
 }
+
+// v7.5: auto-placed markers drawn by the apply pipeline on
+// requirement-diagram sessions. Distinct from user markers:
+// - colors are fixed per kind (added=green, changed=amber) so the
+//   semantics match the ProposalView overlay in state-machine sessions;
+// - cleared on each source change and re-placed after an AI apply (per
+//   user direction — "図を更新したら消していい、新たに枠を描く");
+// - not selectable / not in the 4-color palette, so they don't interfere
+//   with the user's manual markers.
+export type AutoMarkerKind = 'added' | 'changed';
+
+export const AUTO_MARKER_STROKE: Record<AutoMarkerKind, string> = {
+  added: '#16a34a', // green-600 — matches COLOR_ADDED in ProposalView
+  changed: '#f59e0b', // amber-500 — matches COLOR_CHANGED in ProposalView
+};
+
+export interface AutoMarker {
+  id: string;
+  kind: AutoMarkerKind;
+  // The diagram-coordinate rectangle tracing the element's bounding box.
+  rect: { x: number; y: number; width: number; height: number };
+  // The model-element this marker annotates (requirement id today).
+  elementId: string;
+}
