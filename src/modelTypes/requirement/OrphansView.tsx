@@ -15,7 +15,7 @@ function Row({ r }: { r: Requirement }) {
   return (
     <li className="flex items-baseline gap-2 py-0.5">
       <span className="font-mono text-gray-700">{r.id}</span>
-      <span className="text-gray-500">{r.name}</span>
+      <span className="text-gray-500">{r.statement}</span>
       <span className="text-xs text-gray-400">({r.type})</span>
     </li>
   );

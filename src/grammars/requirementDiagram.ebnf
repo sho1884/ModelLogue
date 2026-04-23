@@ -208,7 +208,7 @@ commented_declaration
 (* macro-form output deterministically.                              *)
 (*                                                                   *)
 (* Requirement row:                                                  *)
-(*   id, name [, type [, text]]                                      *)
+(*   id, statement [, type [, text]]                                 *)
 (*                                                                   *)
 (* `type` is one of: func, functional, nfunc, nonfunc, non-func,     *)
 (*                   non-functional, constraint, c, req              *)
@@ -230,7 +230,7 @@ commented_declaration
 
 seed_requirement_line
                  = seed_id , "," , whitespace_opt ,
-                   seed_name ,
+                   seed_statement ,
                    [ "," , whitespace_opt , seed_type ] ,
                    [ "," , whitespace_opt , seed_text ] ,
                    [ "," , whitespace_opt , seed_hidden ] ,
@@ -244,7 +244,7 @@ seed_requirement_line
 (* empty (enforced by the parser, not the grammar).              *)
 
 seed_id          = identifier ;
-seed_name        = { any_char_except_comma_or_quote } | '"' , arg_text , '"' ;
+seed_statement   = { any_char_except_comma_or_quote } | '"' , arg_text , '"' ;
 seed_type        = "func" | "functional"
                  | "nfunc" | "nonfunc" | "non-func" | "non-functional"
                  | "constraint" | "c"

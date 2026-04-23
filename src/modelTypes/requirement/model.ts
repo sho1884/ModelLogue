@@ -13,8 +13,14 @@ export type RequirementType =
 export interface Requirement {
   /** Stable identifier, unique within the model. */
   id: string;
-  /** Short display name (the second macro argument). */
-  name: string;
+  /**
+   * The requirement statement — the short form of what is required
+   * (or, for designConstraint type, the constraint itself). Maps to
+   * the second macro argument (`$name` in preamble procedure
+   * parameters; the DSL parameter name is kept as SysML convention).
+   * For long-form prose, use `text`.
+   */
+  statement: string;
   /** Optional long-form text (the third argument). May contain \n. */
   text: string | null;
   /** Which macro / seed-type produced this entry. */

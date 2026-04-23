@@ -15,7 +15,7 @@ import type { Requirement, RequirementModel } from './model';
 
 const CSV_HEADER = [
   'id',
-  'name',
+  'statement',
   'type',
   'text',
   'contained_in',
@@ -52,7 +52,7 @@ export function modelToRequirementsCsv(model: RequirementModel): string {
     const derivesFrom = deriveSources(model, r.id).join('; ');
     const row = [
       r.id,
-      r.name,
+      r.statement,
       TYPE_TO_SEED[r.type],
       r.text ?? '',
       containedIn,
@@ -91,7 +91,7 @@ export function modelToRequirementsHtml(model: RequirementModel): string {
         return (
           `<tr style="${deletedStyle}">` +
           `<th scope="row" style="font-weight:normal;text-align:left;">${htmlEscape(r.id)}</th>` +
-          `<td>${htmlEscape(r.name)}</td>` +
+          `<td>${htmlEscape(r.statement)}</td>` +
           `<td>${htmlEscape(TYPE_TO_SEED[r.type])}</td>` +
           `<td>${htmlEscape(r.text ?? '')}</td>` +
           `<td>${htmlEscape(containedIn)}</td>` +

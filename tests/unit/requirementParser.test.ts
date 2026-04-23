@@ -13,7 +13,7 @@ $dConstraint("C1", "雨天でも使える")
       expect(r.model?.requirements).toHaveLength(3);
       expect(r.model?.requirements[0]).toMatchObject({
         id: 'R1',
-        name: '光を出す',
+        statement: '光を出す',
         type: 'functionalRequirement',
       });
       expect(r.model?.requirements[1].type).toBe('nonFunctionalRequirement');
@@ -154,7 +154,7 @@ $fReq("R1", "foo")
   });
 
   describe('seed form', () => {
-    it('parses requirement rows with id, name, type', () => {
+    it('parses requirement rows with id, statement, type', () => {
       const r = parse(`@startuml
 R1, 周囲を明るくする, functional
 R11, 光を出す, functional
@@ -166,7 +166,7 @@ C1, 使用環境, constraint
       expect(reqs).toHaveLength(4);
       expect(reqs[0]).toMatchObject({
         id: 'R1',
-        name: '周囲を明るくする',
+        statement: '周囲を明るくする',
         type: 'functionalRequirement',
       });
       expect(reqs[2].type).toBe('nonFunctionalRequirement');

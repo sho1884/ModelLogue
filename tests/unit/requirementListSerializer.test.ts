@@ -13,7 +13,7 @@ $fReq("R1", "foo")
     const csv = modelToRequirementsCsv(m);
     const header = csv.split('\n')[0];
     expect(header).toBe(
-      'id,name,type,text,contained_in,derives_from,hidden,deleted,note'
+      'id,statement,type,text,contained_in,derives_from,hidden,deleted,note'
     );
   });
 

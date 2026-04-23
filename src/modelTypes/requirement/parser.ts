@@ -420,7 +420,7 @@ export function parse(source: string): RequirementParseResult {
       addRequirement(
         {
           id,
-          name: displayName,
+          statement: displayName,
           text: text ?? null,
           type: REQUIREMENT_MACRO_TO_TYPE[name],
           parentId:
@@ -542,7 +542,7 @@ export function parse(source: string): RequirementParseResult {
         addRequirement(
           {
             id,
-            name: displayName,
+            statement: displayName,
             text: text ?? null,
             type: REQUIREMENT_MACRO_TO_TYPE[name],
             parentId: currentParent,
@@ -639,7 +639,7 @@ export function parse(source: string): RequirementParseResult {
           addRequirement(
             {
               id,
-              name: displayName || id,
+              statement: displayName || id,
               text: text && text.trim() !== '' ? text : null,
               type,
               parentId: currentParent,

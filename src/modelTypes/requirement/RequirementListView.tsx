@@ -106,7 +106,7 @@ export function RequirementListView() {
               {[
                 '',
                 'id',
-                'name',
+                'statement',
                 'type',
                 'text',
                 'contained_in',
@@ -151,7 +151,7 @@ export function RequirementListView() {
                     {r.id}
                   </td>
                   <td className="border border-gray-300 px-2 py-1">
-                    {r.name}
+                    {r.statement}
                   </td>
                   <td className="border border-gray-300 px-2 py-1 text-gray-600 whitespace-nowrap">
                     {TYPE_LABEL[r.type]}

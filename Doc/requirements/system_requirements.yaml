@@ -37,7 +37,7 @@ last_updated: "2026-04-22"
 #   - SR-112 (new): orphan requirements list (no incoming / no
 #     outgoing requirement-to-requirement relation).
 #   - SR-113 (new): requirement list table with Copy / Save .csv
-#     following the SR-101 pattern. Columns: id, name, type, text,
+#     following the SR-101 pattern. Columns: id, statement, type, text,
 #     contained_in, derives_from, hidden, deleted, note.
 #     Visibility checkbox, inline note editing, soft-delete dialog
 #     per ADR-014.
@@ -928,7 +928,7 @@ requirement_diagram:
          user's source carries. No ModelLogue-invented macros.
 
       2. Seed form (friendly paste into the Requirements tab):
-         - `id, name[, type[, text[, hidden[, deleted[, note]]]]]`
+         - `id, statement[, type[, text[, hidden[, deleted[, note]]]]]`
            requirement rows (columns 5-7 match SR-113's CSV for
            round-trip with Save .csv)
          - `source_id --> target_id[: kind]` relation arrows
@@ -962,11 +962,11 @@ requirement_diagram:
       non-empty reason. Empty reason is a parse error.
     acceptance_criteria:
       - "Accepts every construct listed in src/grammars/requirementDiagram.ebnf v2.0"
-      - "Produces RequirementModel { requirements, relations } with id / name / type / text / parentId / hidden / deleted / note / relation.kind per the data model section"
+      - "Produces RequirementModel { requirements, relations } with id / statement / type / text / parentId / hidden / deleted / note / relation.kind per the data model section"
       - "Default type when the seed form omits the type column is `functional`"
       - "Default relation kind when a seed-form arrow has no `: kind` suffix is `derive`"
       - "Recognizes `' @modellogue hide / deleted / note` comment directives and applies them to the named requirement; unknown id is a parse error"
-      - "A delete marker (`' @modellogue deleted ...`) is paired with the next commented-out requirement declaration to populate the deleted requirement's id / name / type / text / note"
+      - "A delete marker (`' @modellogue deleted ...`) is paired with the next commented-out requirement declaration to populate the deleted requirement's id / statement / type / text / note"
       - "Rejects `deleted=Y` rows in seed form with empty note; rejects `' @modellogue deleted` directives with empty reason (ADR-014)"
       - "Rejects unknown seed-form relation kinds (e.g. `satisfy`) with a clear message pointing at the macro form — seed form stays within ADR-013's requirement-to-requirement scope"
       - "Reports a clear line-numbered error for any construct outside the EBNF"
@@ -1008,7 +1008,7 @@ requirement_diagram:
     acceptance_criteria:
       - "Lists requirements with no incoming requirement-to-requirement relation (likely top-level or dangling)"
       - "Lists requirements with no outgoing requirement-to-requirement relation (likely un-decomposed leaf)"
-      - "Each entry shows the requirement id, type, and name, and links to the corresponding row in the Requirement list tab (SR-113)"
+      - "Each entry shows the requirement id, type, and statement, and links to the corresponding row in the Requirement list tab (SR-113)"
       - "When a package contains a requirement but no relation enters or leaves, the package itself is flagged too"
 
   SR-113:
@@ -1039,7 +1039,7 @@ requirement_diagram:
 
       CSV format:
 
-        id, name, type, text, contained_in, derives_from,
+        id, statement, type, text, contained_in, derives_from,
         hidden, deleted, note
 
       `contained_in` and `derives_from` are semicolon-separated for
@@ -1049,7 +1049,7 @@ requirement_diagram:
       LF line endings.
     acceptance_criteria:
       - "A Requirement list tab exists in the Analysis panel for requirement-type sessions (order per SR-071)"
-      - "Columns in display order: visibility checkbox (reflects !hidden), id, name, type, text, contained_in, derives_from, note, delete-action icon"
+      - "Columns in display order: visibility checkbox (reflects !hidden), id, statement, type, text, contained_in, derives_from, note, delete-action icon"
       - "`contained_in` is empty for top-level requirements; otherwise the container (package or parent requirement) id; multi-valued with ; separator when a requirement is contained in several places"
       - "`derives_from` is empty if the requirement has no derive-source; otherwise semicolon-separated source ids"
       - "Toggling the visibility checkbox flips the requirement's `hidden` flag; change takes effect immediately (diagram re-renders, CSV export reflects new state)"
@@ -1187,9 +1187,9 @@ data_model:
       - name: id
         type: string
         description: "Unique identifier (the first argument of $req / $fReq / $nfReq / $dConstraint)"
-      - name: name
+      - name: statement
         type: string
-        description: "Short display name (the second argument). Used as the class header when rendered."
+        description: "The requirement statement — short form of what is required (or, for designConstraint, the constraint itself). Maps to the second macro argument (the DSL parameter keeps the SysML spelling `$name`). Used as the class header when rendered."
       - name: text
         type: "string | null"
         description: "Long-form requirement text (optional third argument). May contain newlines escaped as \\n."

@@ -399,7 +399,7 @@ R1 --> R11: Containment
 R11 --> R111
 ```
 
-- リスト行: `id, name[, type[, text[, hidden[, deleted[, note]]]]]`。type 省略時は `functional`。列 5-7 は SR-113 の Save .csv 出力形と同じで、往復可能。
+- リスト行: `id, statement[, type[, text[, hidden[, deleted[, note]]]]]`。type 省略時は `functional`。列 5-7 は SR-113 の Save .csv 出力形と同じで、往復可能。
 - 関係矢印行: `source --> target[: kind]`。kind 省略時は `derive`。kind は v7.5 では `derive / Containment / Refine / Copy` のみ受け付ける（ADR-013）。
 - `satisfy / verify / trace` は**半構造形では書けない**。必要なら macro 形（`$satisfy(…)` 等）を混ぜる。
 - 空行・コメント行（`'` 開始）は無視。
@@ -462,7 +462,7 @@ PlantUML Server でそのまま描画するためには `!procedure $fReq …` �
 |---|---|---|
 | Requirements（共通） | 自然言語 + 半構造の要求仕様。seed 中は編集可、以降 read-only | SR-080 |
 | Source（共通） | Canonical DSL（要求図の場合は macro 形）。read-only、preamble は非表示。canonical 形には `$hide` / `$deleted` / `$note` のメタ行もエビデンスとして含まれる | SR-001 |
-| Requirement list | `id, name, type, text, contained_in, derives_from, note` の表 + 先頭の visibility チェックボックス + 末尾の delete アイコン。削除済み行は打ち消し線＋薄灰で常時表示（ADR-014）。Copy / Save .csv で `hidden / deleted` 列付きで書き出し（CSV は SR-110 の seed 形と round-trip） | SR-113 |
+| Requirement list | `id, statement, type, text, contained_in, derives_from, note` の表 + 先頭の visibility チェックボックス + 末尾の delete アイコン。削除済み行は打ち消し線＋薄灰で常時表示（ADR-014）。Copy / Save .csv で `hidden / deleted` 列付きで書き出し（CSV は SR-110 の seed 形と round-trip） | SR-113 |
 | Traceability | 要求 × 要求のマトリクス。derive / contain / refine / copy の kind をセルに表示。hidden / deleted 要求は含めない | SR-111 |
 | Orphans | 要求 ↔ 要求の incoming / outgoing が欠けている要求を列挙。deleted 要求は除外、hidden 要求も除外（ADR-014） | SR-112 |
 
