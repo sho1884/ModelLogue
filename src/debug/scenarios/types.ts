@@ -26,7 +26,7 @@ export interface Scenario {
    * exercise the requirement apply path (mock CSV replies → generator
    * → diagram + auto-markers).
    */
-  modelTypeId?: 'state-machine' | 'requirement';
+  modelTypeId?: 'state-machine' | 'requirement' | 'process';
   requirementsText?: string;
   steps: ScenarioStep[];
 }

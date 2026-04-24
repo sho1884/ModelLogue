@@ -23,7 +23,7 @@ export interface ChatRequest {
    * requirement path feeds the AI the requirement-list CSV and expects
    * a CSV reply (ADR-012).
    */
-  modelTypeId: 'state-machine' | 'requirement';
+  modelTypeId: 'state-machine' | 'requirement' | 'process';
   /** The current PlantUML source (context for the AI). */
   currentSource: string;
   /**

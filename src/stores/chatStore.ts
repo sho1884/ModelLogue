@@ -93,7 +93,8 @@ async function sendAndAutoReask(
   const currentSource = useSessionStore.getState().currentSource;
   const modelTypeId = useSessionStore.getState().modelTypeId as
     | 'state-machine'
-    | 'requirement';
+    | 'requirement'
+    | 'process';
   const { model, coordinates } = useModelStore.getState();
   const { markers } = useMarkerStore.getState();
   // markerContext's position lookup only knows state-machine shape today;
