@@ -150,8 +150,15 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     const sessionModelTypeId = useSessionStore.getState().modelTypeId;
     const liveSourceEmpty =
       useSessionStore.getState().currentSource.trim() === '';
+    // v7.5/v7.6: requirement and process sessions both auto-apply
+    // every proposal because their ProposalView (state-machine-shaped
+    // diff) would otherwise hide its Apply button for lack of a diff.
+    // Review happens against the live diagram, not a before/after
+    // modal, for these types.
     const shouldAutoApply =
-      sessionModelTypeId === 'requirement' || liveSourceEmpty;
+      sessionModelTypeId === 'requirement' ||
+      sessionModelTypeId === 'process' ||
+      liveSourceEmpty;
     if (!shouldAutoApply) return;
     const { model, errors } = parseForActiveType(message.suggestedSource);
     if (!model || errors.length > 0) return;
@@ -232,7 +239,8 @@ function AssistantContent({
   // otherwise render without an Apply button (state-machine diff shape
   // is empty for requirement models) — which looks to the user like a
   // dialog they can't dismiss.
-  const showProposalView = modelTypeId !== 'requirement';
+  const showProposalView =
+    modelTypeId !== 'requirement' && modelTypeId !== 'process';
 
   const displayText = message.suggestedSource
     ? message.content
