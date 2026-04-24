@@ -1,0 +1,214 @@
+(* ModelLogue PlantUML Process Diagram Subset Grammar *)
+(* Version: 1.0                                         *)
+(* Reference: ADR-009 (minimal-subset guardrails),       *)
+(*            ADR-012 (model-type plugin architecture),  *)
+(*            §3.15 Requirements_Specification.md        *)
+(*                                                       *)
+(* Purpose: Define the ONLY syntax ModelLogue accepts    *)
+(* for the `process` model type (UR-015, v7.6). Any      *)
+(* construct not listed here is rejected with a line-    *)
+(* numbered syntax error.                                *)
+(*                                                       *)
+(* Design principle: This is a REVIEW-ORIENTED SUBSET of *)
+(* PlantUML's "beta" activity-diagram syntax. We do NOT  *)
+(* aim for formal BPMN / UML Activity compliance; we     *)
+(* include only what reviewers need to agree on an E2E / *)
+(* UAT / system-test plan. Added back later if the need  *)
+(* actually surfaces.                                    *)
+
+(* ===== Top-level structure ===== *)
+
+diagram          = "@startuml" , newline ,
+                   { line , newline } ,
+                   "@enduml" ;
+
+line             = empty_line
+                 | comment
+                 | title
+                 | lane_declaration
+                 | partition_open
+                 | partition_close
+                 | start_node
+                 | stop_node
+                 | task
+                 | arrow_label
+                 | if_construct
+                 | fork_construct ;
+
+empty_line       = { whitespace } ;
+comment          = "'" , { any_char } ;
+title            = "title" , whitespace , { any_char } ;
+
+(* ===== Nodes ===== *)
+
+(*                                                       *)
+(*  start                                                *)
+(*  stop                                                 *)
+(*  end                                                  *)
+(*                                                       *)
+(*  :申込書を受付;                                         *)
+(*  :タイムアウト;<<error>>                                *)
+(*                                                       *)
+(*  Recognised stereotypes for event semantics:          *)
+(*    timer / message / error                            *)
+(*                                                       *)
+(*  Other stereotypes are preserved as free labels but   *)
+(*  are not surfaced in the Events tab (SR-121).         *)
+
+start_node       = "start" ;
+stop_node        = "stop" | "end" ;
+task             = ":" , task_label , ";" ,
+                   [ stereotype ] ;
+
+task_label       = { any_char_except_semicolon } ;
+stereotype       = "<<" , stereotype_name , ">>" ;
+stereotype_name  = identifier ;
+
+(* ===== Arrow labels (artifact / 伝票 names) ===== *)
+
+(*                                                       *)
+(*  :task1;                                               *)
+(*  -> 申込書;                                             *)
+(*  :task2;                                               *)
+(*                                                       *)
+(*  The label applies to the implicit arrow between the  *)
+(*  preceding node and the following node. The label is  *)
+(*  optional; plain sequence (no `->` line) also works.  *)
+
+arrow_label      = "->" , whitespace ,
+                   artifact_label , ";" ;
+
+artifact_label   = { any_char_except_semicolon } ;
+
+(* ===== Branches ===== *)
+
+(*                                                       *)
+(*  if (条件) then (yes)                                   *)
+(*    :task-in-yes;                                       *)
+(*  else (no)                                             *)
+(*    :task-in-no;                                        *)
+(*  endif                                                 *)
+(*                                                       *)
+(*  The `then (yes)` and `else (no)` branch-label         *)
+(*  annotations are optional in PlantUML, but ModelLogue  *)
+(*  REQUIRES both so Scenarios rows carry a readable      *)
+(*  branch-taken value.                                   *)
+
+if_construct     = if_head , newline ,
+                   { line , newline } ,
+                   else_clause , newline ,
+                   { line , newline } ,
+                   "endif" ;
+
+if_head          = "if" , whitespace ,
+                   "(" , condition , ")" , whitespace ,
+                   "then" , whitespace ,
+                   "(" , branch_label , ")" ;
+
+else_clause      = "else" , whitespace ,
+                   "(" , branch_label , ")" ;
+
+condition        = { any_char_except_close_paren } ;
+branch_label     = { any_char_except_close_paren } ;
+
+(* ===== Parallel regions (fork / join) ===== *)
+
+(*                                                       *)
+(*  fork                                                  *)
+(*    :branch-a-task;                                     *)
+(*  fork again                                            *)
+(*    :branch-b-task;                                     *)
+(*  end fork                                              *)
+(*                                                       *)
+(*  Nested `fork` inside `fork` is REJECTED (§3.15.3).    *)
+
+fork_construct   = "fork" , newline ,
+                   fork_branch ,
+                   { "fork again" , newline ,
+                     fork_branch } ,
+                   "end fork" ;
+
+fork_branch      = { fork_branch_line , newline } ;
+
+(*                                                       *)
+(*  Inside a fork branch, `fork` is NOT allowed          *)
+(*  (parser enforces, EBNF uses a restricted line set).  *)
+
+fork_branch_line = empty_line
+                 | comment
+                 | start_node       (* redeclared start is a parse error *)
+                 | stop_node
+                 | task
+                 | arrow_label
+                 | if_construct
+                 | lane_declaration
+                 | partition_open
+                 | partition_close ;
+
+(* ===== Swim lanes ===== *)
+
+(*                                                       *)
+(*  |Actor Name|                                          *)
+(*                                                       *)
+(*  Applies to every subsequent node until the next      *)
+(*  `|...|` or end of buffer. Lane "(default)" is used   *)
+(*  for nodes that appear before any declaration.        *)
+
+lane_declaration = "|" , lane_name , "|" ;
+lane_name        = { any_char_except_pipe } ;
+
+(* ===== Partitions (sub-process grouping, 1 level only) ===== *)
+
+(*                                                       *)
+(*  partition "与信チェック" {                            *)
+(*    :スコア算出;                                         *)
+(*    :ブラックリスト照会;                                 *)
+(*    :与信判定;                                           *)
+(*  }                                                     *)
+(*                                                       *)
+(*  Optional color tag:                                  *)
+(*    partition #LightGray "名前" { ... }                *)
+(*                                                       *)
+(*  Nested partitions are REJECTED (§3.15.3).            *)
+
+partition_open   = "partition" , whitespace ,
+                   [ color_tag , whitespace ] ,
+                   '"' , partition_name , '"' ,
+                   whitespace , "{" ;
+
+partition_close  = "}" ;
+
+color_tag        = "#" , color_name ;
+color_name       = identifier ;
+partition_name   = { any_char_except_quote } ;
+
+(* ===== Terminals ===== *)
+
+identifier       = letter , { letter | digit | "_" | "-" } ;
+letter           = "a" | "b" | "..." | "z" | "A" | "..." | "Z" ;
+digit            = "0" | "1" | "..." | "9" ;
+
+whitespace       = " " | "\t" ;
+newline          = ?NEWLINE? ;
+
+any_char                     = ?any Unicode scalar except newline? ;
+any_char_except_semicolon    = ?any Unicode scalar except ";" or newline? ;
+any_char_except_close_paren  = ?any Unicode scalar except ")" or newline? ;
+any_char_except_pipe         = ?any Unicode scalar except "|" or newline? ;
+any_char_except_quote        = ?any Unicode scalar except "\"" or newline? ;
+
+(* ===== NOT SUPPORTED (rejected as parse errors) ===== *)
+(*                                                       *)
+(*   - Nested `fork` inside `fork`                       *)
+(*   - `partition` nested deeper than 1 level            *)
+(*   - `while` / `repeat` loops                          *)
+(*   - `detach` / `kill`                                 *)
+(*   - Dot-notation entry / exit points                  *)
+(*   - PlantUML "legacy" activity syntax (`(*)` start,    *)
+(*     `-->` rectangle arrows, etc.)                     *)
+(*   - BPMN collaboration / pool-to-pool message flow    *)
+(*   - `if (…) then (…) elseif (…) then (…) else (…)`    *)
+(*     multi-way branching (rewrite as nested if)        *)
+(*   - `<<stereotype>>` names other than timer / message *)
+(*     / error are accepted as labels but ignored by     *)
+(*     Events tab (SR-121)                               *)

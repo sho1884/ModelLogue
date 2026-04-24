@@ -1238,6 +1238,125 @@ requirement_diagram:
       - "Placement is deterministic for a given (before, after, coords) triple; unit test fixture confirms green/amber kinds and rect geometry"
 
 # =============================================================================
+# Process Diagram (v7.6)
+# =============================================================================
+
+process_diagram:
+  SR-120:
+    function: "Scenarios tab — enumerate every start→end path in the process diagram, one row per path"
+    parent: [UR-015]
+    component: src/modelTypes/process/paths.ts + ScenariosView tab
+    status: planned
+    notes: |
+      The path-enumeration table is the primary review artifact for a
+      process diagram session — each row is a candidate E2E / UAT /
+      system-test case. Mirrors UR-013 / SR-103's role for the
+      state-machine type.
+
+      Path = ordered list of tasks from `start` to `stop` / `end`,
+      expanded through `if/else` branches and `fork/end fork` parallel
+      regions. For parallel regions, each possible interleaving is
+      NOT enumerated (that would blow up); instead the parallel
+      branch set is treated as "all of these must occur" and listed
+      as such in the row.
+
+      Columns: path_id, tasks (ordered), branches_taken, lanes
+      traversed, events encountered, artifacts referenced.
+
+      Initial implementation is in-SPA (pure TS, same shape as
+      requirement orphans / traceability). If large real-world
+      processes cause the enumeration to slow down, promote to an
+      auxiliary service `tools/pathgen` per ADR-010.
+    acceptance_criteria:
+      - "Every maximal path from a `start` node to a `stop` / `end` node is emitted as one row"
+      - "Branch conditions encountered along the path appear in the `branches_taken` column (e.g. `審査結果 == 承認 → 承認`)"
+      - "Lane transitions are listed in order in the `lanes` column"
+      - "Events (`<<timer>>` / `<<message>>` / `<<error>>`) on the path are listed in `events`"
+      - "Artifact labels (`-> name;`) encountered are listed in `artifacts`"
+      - "Parallel regions (`fork` / `end fork`) contribute a single `fork(...)` token to the path rather than exponential interleavings"
+      - "Copy / Save .csv actions emit the canonical CSV with the above columns, LF line endings, RFC 4180 quoting"
+
+  SR-121:
+    function: "Events tab — list every `<<timer>>` / `<<message>>` / `<<error>>` event with the paths that contain it"
+    parent: [UR-015]
+    component: src/modelTypes/process/events.ts + EventsView tab
+    status: planned
+    notes: |
+      Exception / external-trigger inventory. Lets reviewers confirm
+      that every externally-initiated event has a defined handler and
+      that the handler's downstream paths are sensible.
+    acceptance_criteria:
+      - "One row per (task, stereotype) pair where the stereotype is timer / message / error"
+      - "Each row shows the task label, event kind, the number of paths containing it (from SR-120), and the immediate next branches / stop nodes"
+      - "Tasks without one of the 3 recognised stereotypes do NOT appear"
+
+  SR-122:
+    function: "Roles tab — list every swim lane with its tasks and the hand-off points to other lanes"
+    parent: [UR-015]
+    component: src/modelTypes/process/roles.ts + RolesView tab
+    status: planned
+    notes: |
+      UAT reviewer's "who does what" inventory. Hand-off points are
+      the directed arrows that cross a lane boundary — they are the
+      places where the process relies on someone handing over an
+      artifact to someone else, and are therefore high-value review
+      material.
+    acceptance_criteria:
+      - "One row per swim lane (`|Actor|` declaration)"
+      - "Each row lists the tasks executed in that lane"
+      - "Hand-off points (arrows crossing lane boundaries) are listed with source task, target task, and the artifact label if present"
+      - "A process diagram with no `|...|` declarations yields a single unnamed `(default)` lane row"
+
+  SR-123:
+    function: "Artifacts tab (optional) — list every `-> 伝票名;` arrow label with the tasks that produce / consume it"
+    parent: [UR-015]
+    component: src/modelTypes/process/artifacts.ts + ArtifactsView tab
+    status: planned
+    notes: |
+      Maps the flow of tokens / paper slips / digital artifacts
+      between tasks. Optional in the sense that the process diagram
+      works without any `->` labels; reviewers who want artifact
+      traceability add them, and the tab populates.
+    acceptance_criteria:
+      - "One row per distinct artifact label (case-sensitive, trimmed)"
+      - "Each row shows the task whose outgoing arrow first carries the label (producer) and every task whose incoming arrow carries the label (consumer)"
+      - "A diagram with no `-> name;` labels yields an empty artifact list; the tab still renders with a hint explaining the `->` syntax"
+      - "If the same label is produced by more than one task, all producers are listed"
+
+  SR-124:
+    function: "Parse process-diagram source (PlantUML activity subset, §3.15.3) into ProcessModel"
+    parent: [UR-015]
+    component: src/modelTypes/process/parser.ts
+    status: planned
+    notes: |
+      Accepts the PlantUML activity-diagram subset defined in
+      `src/grammars/processDiagram.ebnf`:
+
+      - Nodes: `start` / `stop` / `end`, `:task;`, `:task;<<stereotype>>`
+      - Branches: `if (cond) then (yes) ... else (no) ... endif`
+      - Parallel: `fork` / `fork again` / `end fork`
+      - Lanes: `|Actor|` declarations (lane applies to subsequent
+        nodes until the next `|...|` or end of buffer)
+      - Arrow labels: `-> label;` lines between nodes
+      - Grouping: `partition "Name" { ... }`
+      - Stereotypes recognised for event semantics: `timer` / `message` / `error`;
+        other stereotypes are preserved as free labels but not
+        surfaced in the Events tab
+
+      Rejects (ADR-009-style guardrails to keep the subset small):
+      - Nested `fork` inside `fork`
+      - `partition` nested deeper than 1 level
+      - `while` / `repeat` loops (not in the v7.6 subset)
+      - `detach` / `kill` / dot-notation
+      - PlantUML activity "beta" legacy syntax (`(*)` start nodes etc.)
+    acceptance_criteria:
+      - "Accepts every construct listed in src/grammars/processDiagram.ebnf"
+      - "Produces ProcessModel { nodes, edges, lanes, stereotypes, partitions } per the data model section"
+      - "Reports a clear line-numbered error for any rejected construct"
+      - "Default lane when a node appears before any `|...|` is the literal `(default)`"
+      - "Parse completes within the NFR-001 Parse < 100 ms budget for review-scale diagrams (~40 tasks)"
+
+# =============================================================================
 # Data Model
 # =============================================================================
 

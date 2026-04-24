@@ -2,8 +2,8 @@
 # Format: Task expression (Value Engineering)
 # Writing convention: Short verb phrase describing user task
 
-version: "7.2"
-last_updated: "2026-04-15"
+version: "7.6"
+last_updated: "2026-04-24"
 
 # Version 7.0 highlights:
 #   - Reframed as a review tool where PlantUML source and requirements text
@@ -212,6 +212,28 @@ requirements:
       PlantUML has no native requirement diagram; the community uses
       `!procedure` macros over class diagram syntax to approximate
       SysML, and ModelLogue adopts this as its requirement DSL.
+    priority: high
+
+  UR-015:
+    task: "Review a business process / workflow diagram"
+    background: >
+      Reviewers agree on end-to-end business processes — who does
+      what, in what order, with which branches and events — as the
+      basis for E2E / UAT / system-test case design. ModelLogue is
+      NOT a formal BPMN or Activity Diagram authoring tool; those
+      notations' full feature sets are overkill for review, and
+      stakeholders rarely distinguish between them. Instead this
+      model type provides the minimum expressive subset that covers
+      tasks, branches, start/end, parallel fork/join, swim lanes
+      (who), events (triggers, timers, errors), and an optional
+      "伝票" (artifact / token) label on the flow arrow between
+      tasks — borrowing from traditional paper-based business flow
+      diagrams. The subset targets PlantUML activity-diagram native
+      syntax so the buffer renders standalone without a macro DSL.
+      The primary review artifact is a path-enumeration table
+      (start → end scenarios) that feeds directly into E2E / UAT
+      test case design, in the same spirit as UR-013's N-switch
+      coverage for state machines.
     priority: high
 
   UR-013:

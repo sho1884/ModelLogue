@@ -508,6 +508,218 @@ v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contai
 
 ---
 
+### 3.15 Process Diagram Support / プロセス図対応 (v7.6)
+
+ModelLogue の 3 型目は **業務プロセス図 (Process Diagram)**。BPMN とアクティビティ図を別々の型にはせず、両者の共通部分に絞った **レビュー向けサブセット** を 1 つの型として扱う（UR-015）。正式な BPMN / UML Activity の準拠は目指さない。
+
+この型の**目的**: 関係者間で E2E / UAT / システムテストの材料となる業務フローを合意すること。レビューの成果物は
+
+- **Scenarios タブ**の経路一覧 = テストケースの粒
+- **Events タブ**の外部イベント一覧 = 例外系の抜け漏れチェック
+- **Roles タブ**のレーン別担当一覧 = UAT の担当割当の根拠
+
+です。状態遷移図における UR-013 (N-switch) と同じく、**図そのものよりも付随する表こそが最終的な合意物**。
+
+#### 3.15.1 対象とする表記と採用しない表記
+
+**採用する要素（レビュー必要十分）**:
+
+| 要素 | PlantUML サブセット | 用途 |
+|---|---|---|
+| タスク | `:action;` | 何をするか |
+| 開始 / 終了 | `start` / `stop` / `end` | どこから始まり終わるか。end に種別を付けたいときはステレオタイプ（`:ok;<<success>>` 等）で代用 |
+| 分岐 | `if (cond) then (yes) ... else (no) ... endif` | 条件別の経路 = テストケース分岐 |
+| 並行・合流 | `fork / fork again / end fork` | 非同期後処理（必要なときだけ） |
+| レーン | `|Actor|` スイムレーン | 誰がやるか。UAT の担当割当の基礎 |
+| イベント | ステレオタイプ（`:wait timer;<<timer>>` / `:receive msg;<<message>>` / `:timeout;<<error>>`） | 外部トリガー・例外分岐 |
+| 伝票 | 矢印ラベル構文 `-> 伝票名;` | タスク間で回る伝票・成果物の名前（UR-015 背景参照） |
+| サブプロセス枠 | `partition "Name" { ... }` または色付きグループ | 粒度を粗くしたい箇所。中身は別セッションで詳細化 |
+
+**採用しない**（BPMN / Activity の仕様には存在するがレビュー目的では過剰）:
+
+- BPMN の message flow（pool 間の通信）
+- BPMN の Exclusive 以外のゲートウェイ（Inclusive / Complex / Event-based）
+- UML Activity の object node / pin / signal
+- Boundary event の詳細分類（cancel / compensation / link / …）
+- Interrupt / non-interrupt sub-event の区別
+
+これらは必要になったら後で足せばよい。
+
+#### 3.15.2 典型ワークフロー — 表と図の情報流
+
+```mermaid
+flowchart LR
+    A[自然言語でフロー草案<br/>Requirements タブ] -->|Generate model| B[AI CSV reply の代わりに PlantUML reply]
+    B -->|CSV ではなく PlantUML を直接 apply| C[PlantUML subset 源]
+    C -->|parser| D[ProcessModel]
+    D --> E[Source タブ<br/>正規形 PlantUML 表示]
+    D --> F[Scenarios タブ<br/>start→end 全経路]
+    D --> G[Events タブ<br/>イベント一覧]
+    D --> H[Roles タブ<br/>レーン別担当]
+    D --> I[Artifacts タブ（任意）<br/>伝票一覧]
+    C -->|PlantUML Server| J[モデル図 SVG<br/>プライマリビュー]
+```
+
+要求図（v7.5）との違い: **AI 交換形式が PlantUML そのまま**（CSV ではない）。プロセス図の canonical form は PlantUML でちょうど良く、フラットな表に落とす自然な形がないため、状態遷移図と同じく PlantUML を canonical に据える。
+
+#### 3.15.3 サポートする DSL 構文
+
+PlantUML activity ネイティブ構文のサブセット。SysML 風の macro DSL は使わない（ADR-012 の「マクロ DSL を使うのは PlantUML native がない場合のみ」方針）。
+
+##### 基本形
+
+```plantuml
+@startuml
+start
+:申込書を受付;
+-> 申込書;
+:内容を審査;
+-> 審査票;
+if (審査結果 == 承認) then (承認)
+  :契約書を発行;
+  -> 契約書;
+  stop
+else (却下)
+  :却下通知を送付;
+  stop
+endif
+@enduml
+```
+
+##### レーン
+
+```plantuml
+@startuml
+|受付係|
+start
+:申込書を受付;
+-> 申込書;
+|審査員|
+:内容を審査;
+-> 審査票;
+if (承認？) then (yes)
+  |発行係|
+  :契約書を発行;
+  stop
+else (no)
+  :却下通知;
+  stop
+endif
+@enduml
+```
+
+`|Actor|` 行で以降のタスクのレーンが切り替わる。1 セッションで登場するレーン集合が Roles タブのキー。
+
+##### イベント
+
+```plantuml
+:承認待ち;<<timer>>
+:督促メール受信;<<message>>
+:タイムアウト;<<error>>
+```
+
+PlantUML のステレオタイプ構文に対応。ステレオタイプ名として **`timer` / `message` / `error`** の 3 種を認識。それ以外はレビュー向けに無視（自由ラベル扱い）。
+
+##### サブプロセス
+
+```plantuml
+partition "与信チェック" {
+  :スコア算出;
+  :ブラックリスト照会;
+  :与信判定;
+}
+```
+
+`partition` はレーンとは別の構文。分類色を変えたいときは `partition #LightGray "名前" { ... }` も可。
+
+##### 意図的な制約
+
+- **ゴトウ / detach / kill は受け付けない**（レビュー可読性を下げるだけ）
+- **`while` / `repeat` は初期サブセット外**（条件ループが必要なケースはまれ、かつ分岐+矢印で等価に表現可能）。必要性が出たら追加する。
+- **入れ子の `fork` や 3 階以上の `partition` ネスト は受け付けない**（ADR-009 と同様の「1 階層制限」方針）
+
+文法定義は [src/grammars/processDiagram.ebnf](../../src/grammars/processDiagram.ebnf) 参照。
+
+#### 3.15.4 プロセス型セッションの解析タブ（SR-071 拡張）
+
+| タブ | 内容 | 対応 SR |
+|---|---|---|
+| Requirements（共通） | 自然言語のプロセス仕様。seed 中は編集可、以降 read-only | SR-080 |
+| Source（共通） | 正規 PlantUML（activity native）。read-only | SR-001 |
+| Scenarios | `start` から `stop / end` までの全経路列挙。各行に「経路上のタスク列」「レーン遷移」「参照イベント」「参照伝票」列 | SR-120 |
+| Events | ステレオタイプ付きタスク（`<<timer>>` / `<<message>>` / `<<error>>`）の一覧。各行に「登場経路数」「直後の分岐」列 | SR-121 |
+| Roles | `|...|` で登場したレーンの一覧。各行に「このレーンで実行されるタスク」「他レーンからの受取点」「他レーンへの引渡点」列 | SR-122 |
+| Artifacts（任意） | `->` 矢印ラベルで登場した伝票名の一覧。各行に「生成するタスク」「受け取るタスク」列 | SR-123 |
+
+**Scenarios タブ が主力**。UR-013 の N-switch と同じ役目: 図を見て当てずっぽうに書きがちなテストケースを、網羅的・機械的に列挙する。初期版は SPA 内計算で良い（経路数が爆発する巨大プロセスは補助サービス `tools/pathgen` を別途 ADR-010 準拠で立てる、という段階的拡張を許す）。
+
+**Artifacts タブ** は必須ではない。`->` を書かない図でも Scenarios / Events / Roles は動く。伝票追跡の価値が欲しいときだけ書く、という段階的な入口として機能する。
+
+**Traceability / Orphans は用意しない**。プロセス図では要求図のような関係種別 (derive / refine) がそもそも存在しないため。
+
+#### 3.15.5 AI 交換形式
+
+- **ソース形式**: PlantUML (activity native)、``` ```plantuml ``` コードブロック
+- **CSV は使わない**: プロセス図の canonical な表現は経路ではなく**図の構造そのもの**。無理に表に落とすより、PlantUML 本体で AI とやり取りしたほうが情報の欠落がない
+- **伝票 / イベント / レーン も PlantUML 内のラベル**として AI に伝わる
+- **自動マーカー** (SR-117 相当): 追加タスク = 緑、変更タスク / レーン移動 / 分岐条件変更 = オレンジ。要求図と同じセマンティクス
+
+n8n プロンプトの `modelTypeId === 'process'` 分岐では、AI に以下を伝える:
+
+- 使用可能な PlantUML activity サブセット（§3.15.3 の構文）
+- ステレオタイプ `<<timer>>` / `<<message>>` / `<<error>>` の意味と用法
+- 矢印ラベル `-> 伝票名;` の意味
+- レーン `|Actor|` の用法
+
+システムプロンプトは `n8n/workflows/modellogue-chat.json` の既存 `state-machine` 分岐と同じく「Session type: PROCESS DIAGRAM」のヘッダーを見て切り替える三者分岐にする。
+
+#### 3.15.6 新設 SR
+
+| ID | Function / 機能 | Parent / 親 |
+|----|----------|--------|
+| SR-120 | Scenarios tab — enumerate start→end paths with referenced events and artifacts per path | UR-015 |
+| SR-121 | Events tab — list timer/message/error events with their containing paths | UR-015 |
+| SR-122 | Roles tab — list swim lanes with per-lane tasks and hand-off points | UR-015 |
+| SR-123 | Artifacts tab (optional) — list `-> 伝票` labels with producing / consuming tasks | UR-015 |
+| SR-124 | Parse process diagram input (PlantUML activity subset, §3.15.3) into ProcessModel | UR-015 |
+
+既存 SR への影響:
+
+- **SR-071**: `process` タブセット（Requirements / Source / Scenarios / Events / Roles / Artifacts）を追加。要求図と同じ拡張形でカバーできる
+- **SR-073**: モデル型セレクタに `process` 追加
+- **SR-115 相当**: プロセス図はマクロ DSL / preamble を使わないため `defaultSeedSource` は最小（`@startuml\nstart\n\n@enduml\n` など）
+- **SR-116 相当**: 要求図の CSV 特殊 apply は不要。状態遷移図と同じ PlantUML 直接 apply で済む
+- **SR-117 相当**: 自動マーカー機構（green=added / amber=changed）は要求図から流用。座標抽出は PlantUML activity SVG 構造に合わせた抽出器を新設
+
+#### 3.15.7 スコープ境界
+
+v7.6 で**扱う**:
+
+- 単一プロセス図のレビュー
+- E2E / UAT テストケース一覧生成
+- 伝票・レーン・イベントのインベントリ
+
+v7.6 で**扱わない**（将来拡張、必要が出たときに検討）:
+
+- プロセス間連携（BPMN の collaboration / choreography）
+- プロセス実行エンジン連携（Camunda / Flowable の実行可能 BPMN）
+- データスキーマ定義（伝票の中身のフィールド定義）
+- タイミングチャート / ガントチャートとの相互変換
+- シーケンス図との相互変換（別モデル型として別途検討）
+
+#### 3.15.8 コア・コンセプトとの整合
+
+[§1.3](#13-core-concepts--コアコンセプト) で宣言した 4 原則との対応:
+
+1. **Volatile Canvas**: プロセス図も `Apply` で上書き、中間版は残さない。履歴は対話ログのみ
+2. **Dialogue as Asset**: レビュー過程で生じた「このタスクは誰がやるか」「この分岐は本当に必要か」等の議論はチャットログに記録される
+3. **Text-first**: 図の実体は PlantUML テキスト、図は表示
+4. **Markers as Ephemeral**: 自動マーカーも手動マーカーも、次の apply で消える
+
+BPMN / Activity の形式仕様から派生した「レビュー目的では必須でない」要素を落として、この 4 原則を通すのが v7.6 のコア設計判断。
+
+---
+
 ## 4. Non-Functional Requirements / 非機能要件
 
 > Source / 出典: [nonfunctional_requirements.yaml](./nonfunctional_requirements.yaml)
