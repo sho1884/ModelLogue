@@ -1,13 +1,13 @@
 id: ADR-012
 title: "モデル型プラグインアーキテクチャ（ModelTypeDefinition）"
 date: "2026-04-22"
-status: proposed
+status: accepted
 superseded_by: null
 
 participants:
   author: ""
   approver: ""
-  last_updated: "2026-04-22"
+  last_updated: "2026-04-24"  # v7.5 で実装完了 → accepted へ昇格
 
 context:
   problem: |

@@ -634,7 +634,7 @@ ui_layout:
     function: "Render resizable analysis panel with tabs built dynamically from ModelTypeDefinition.analysisTabs"
     parent: [UR-002, UR-003, UR-012, UR-013, UR-014]
     component: AnalysisPanel (with ResizeHandle) + ModelTypeDefinition registry (ADR-012)
-    status: planned  # v7.5 redefinition of the v7.1 tab-set
+    status: implemented  # v7.5: tabs are driven by the active ModelTypeDefinition
     notes: |
       v7.1 had a fixed tab set assuming state-machine models. v7.5
       generalizes this: the tab set is the concatenation of
@@ -677,7 +677,7 @@ ui_layout:
     function: "Select the model type at session seed (one-way, fixed for the session lifetime)"
     parent: [UR-009, UR-014]
     component: Header (ModelTypeSelector) + SessionStore.modelTypeId + ModelTypeDefinition registry
-    status: planned
+    status: implemented  # v7.5
     notes: |
       ModelLogue hosts multiple model types via the plug-in architecture
       in ADR-012. Each session is about ONE model type; switching mid-
@@ -914,7 +914,7 @@ requirement_diagram:
     function: "Parse requirement-diagram input (macro DSL form and semi-structured seed form) into RequirementModel"
     parent: [UR-014]
     component: src/modelTypes/requirement/parser.ts
-    status: planned
+    status: implemented  # v7.5
     notes: |
       Accepts two coexisting input forms defined in
       `src/grammars/requirementDiagram.ebnf` v2.0:
@@ -975,8 +975,8 @@ requirement_diagram:
   SR-111:
     function: "Generate traceability matrix (requirement × requirement, cells marking relation kind)"
     parent: [UR-014]
-    component: src/modelTypes/requirement/traceabilityMatrix.ts
-    status: planned
+    component: src/modelTypes/requirement/traceability.ts + TraceabilityView tab
+    status: implemented  # v7.5
     notes: |
       Displayed in a dedicated Traceability tab (part of the
       requirement-type tab set per SR-071). Rows and columns are
@@ -993,7 +993,7 @@ requirement_diagram:
     function: "Identify orphan requirements (no incoming requirement-to-requirement relation, no outgoing, or both)"
     parent: [UR-014]
     component: src/modelTypes/requirement/orphans.ts + OrphansView tab
-    status: planned
+    status: implemented  # v7.5
     notes: |
       Common review finding: a requirement that is not derived from
       anything (dangling child, possibly missing rationale) or has
@@ -1014,8 +1014,8 @@ requirement_diagram:
   SR-113:
     function: "Display requirement list as a table with checkboxes, inline notes, and Copy / Save .csv — derive and contain only, per ADR-013, with soft-delete + reason per ADR-014"
     parent: [UR-014]
-    component: RequirementListView tab + src/modelTypes/requirement/listSerializer.ts
-    status: planned
+    component: RequirementListView tab + src/modelTypes/requirement/listSerializer.ts + src/modelTypes/requirement/csvParser.ts
+    status: implemented  # v7.5 (csvParser.ts added for AI reply ingestion, SR-116)
     notes: |
       Mirrors SR-101's Copy / Save pattern for state-machine
       transition tables, applied to the requirement list. The CSV is
@@ -1065,7 +1065,7 @@ requirement_diagram:
     function: "Render-pipeline filter: comment out hidden-requirement declarations and their relations before sending the PlantUML source to PlantUML Server"
     parent: [UR-014]
     component: src/modelTypes/requirement/renderer.ts
-    status: planned
+    status: implemented  # v7.5
     notes: |
       The edit buffer IS the canonical source and stays a valid
       PlantUML subset. Delete is already baked into the buffer
@@ -1099,7 +1099,7 @@ requirement_diagram:
     function: "Seed new requirement-diagram sessions with the !procedure preamble so the edit buffer is a valid PlantUML source from the first keystroke"
     parent: [UR-014]
     component: src/modelTypes/requirement/preamble.ts + ModelTypeDefinition.defaultSeedSource + sessionStore.setModelTypeId
-    status: planned
+    status: implemented  # v7.5
     notes: |
       Per the 2026-04-23 principle, the source buffer in a
       requirement session must be a valid PlantUML subset that renders
@@ -1125,6 +1125,117 @@ requirement_diagram:
       - "The source tab in a requirement session shows the preamble — users see and can (during SEED) edit everything that will be sent to PlantUML Server"
       - "Save .puml writes currentSource unchanged — no magic injection at save time"
       - "PlantUML Server can render the saved file directly with no ModelLogue pre-processing"
+
+  SR-116:
+    function: "Apply an AI chat reply to a requirement-diagram session: extract the ```csv block, regenerate canonical PlantUML mechanically, auto-apply without a before/after modal"
+    parent: [UR-006, UR-014]
+    component: |
+      ModelTypeDefinition.extractSuggestedSource (src/modelTypes/types.ts)
+      + src/modelTypes/requirement/csvParser.ts
+      + src/modelTypes/requirement/plantUmlGenerator.ts
+      + src/stores/chatStore.ts (sendAndAutoReask)
+      + src/components/ChatPanel/ChatPanel.tsx (auto-apply effect,
+        ProposalView gate)
+    status: implemented  # v7.5
+    notes: |
+      Per user direction (2026-04-23): the Requirement list (CSV) is the
+      canonical data for a requirement-diagram session, and the diagram
+      is a visualization ModelLogue regenerates mechanically. The AI
+      therefore works in CSV space; the before/after modal that state-
+      machine sessions use (SR-033) would add nothing — instead the
+      reviewer reviews the LIVE diagram with green/amber auto-markers
+      (SR-117).
+
+      Flow:
+        1. AI reply arrives with a ```csv block. extractSuggestedSource
+           for the requirement ModelTypeDefinition finds it, parses it
+           via csvParser.ts, regenerates canonical PlantUML via
+           plantUmlGenerator.ts (preamble + macro calls + review-state
+           comments per ADR-014), and returns that as the proposal.
+        2. ChatPanel's auto-apply effect fires UNCONDITIONALLY for
+           requirement sessions (state-machine still auto-applies only
+           the initial proposal when the source is empty, per SR-034).
+        3. If the CSV failed to parse, extractSuggestedSource returns
+           null; sendAndAutoReask retries with a follow-up prompt that
+           asks for a ```csv code block (type-aware retry).
+        4. The ProposalView component is NOT rendered for requirement
+           sessions (its diff shape is state-machine-specific and would
+           otherwise show an empty-looking dialog with no Apply button).
+
+      Auto-apply is gated on successful parse of the regenerated
+      PlantUML — an unparseable proposal will not poison the session.
+    acceptance_criteria:
+      - "A ```csv code block in the AI reply is transformed to a PlantUML source via csvParser + plantUmlGenerator; the result parses back to the same RequirementModel (byte-stable generator, ADR-011)"
+      - "If the CSV block fails to parse or validation (ADR-014 soft-delete reason, etc.), extractSuggestedSource returns null and no proposal is offered; chatStore.sendAndAutoReask re-asks with a type-specific ```csv retry prompt"
+      - "ChatPanel auto-applies every successfully-extracted proposal in a requirement session (no Apply button shown, no before/after modal)"
+      - "State-machine sessions are unaffected: SR-034 initial auto-apply + SR-033 ProposalView still apply for them"
+      - "displayText strips both ```plantuml and ```csv blocks so the chat bubble shows only the AI's explanation prose"
+
+  SR-117:
+    function: "Auto-place green/amber added/changed markers on the requirement diagram after an AI apply, cleared on every source change"
+    parent: [UR-004, UR-006, UR-014]
+    component: |
+      src/modelTypes/requirement/diff.ts
+        (diffRequirementModelsVisible — added / removed / changed)
+      + src/modelTypes/requirement/svgCoordinates.ts
+        (extractRequirementCoordinates — PlantUML class-diagram <g class="entity" …>)
+      + src/modelTypes/requirement/autoMarkerPlacement.ts
+        (placeAutoMarkers — (diff, coords) → AutoMarker[])
+      + src/stores/autoMarkerApply.ts
+        (stashAutoMarkerBeforeIfApplicable — gates the pre-apply snapshot)
+      + src/stores/markerStore.ts (autoMarkers state)
+      + src/stores/modelStore.ts (pendingAutoMarkerBefore +
+        fetchCoordinates auto-marker step)
+      + src/components/DiagramView/DiagramView.tsx
+        (non-interactive <rect> overlay using AUTO_MARKER_STROKE)
+    status: implemented  # v7.5
+    notes: |
+      Per user direction: "diff の apply なんて要らなくて、直接描き直した
+      図に枠をつけちゃって、枠が不要になったら人が消せばいい". Review is
+      on the live diagram, not in a modal.
+
+      Semantics (diffRequirementModelsVisible):
+        - added   : requirement visible in after, NOT visible in before →
+                    solid green rectangle (#16a34a, matches COLOR_ADDED in
+                    ProposalView)
+        - changed : visible in both, but statement / text / type /
+                    parentId differ OR the set of incident relations
+                    changed → dashed amber rectangle (#f59e0b, matches
+                    COLOR_CHANGED)
+        - removed : visible in before, not visible in after → NO marker
+                    (ADR-014 — the evidence lives in the Requirement list
+                    tab as a strikethrough row; a marker for a position
+                    that no longer exists on the diagram would mislead
+                    the reviewer)
+
+      Visibility = !hidden && !deleted. A hide/unhide or
+      delete/undelete flip counts as added / removed for marker purposes.
+
+      Relation changes aggregate to the incident nodes: adding or
+      removing an edge between R1 and R2 promotes BOTH R1 and R2 to
+      "changed". The v7.5 diagram does not carry per-edge markers, so
+      node-level aggregation gives the reviewer a single point to
+      inspect.
+
+      Pre-apply snapshot gating (stashAutoMarkerBeforeIfApplicable): only
+      stash the before-model when the session is requirement-type AND
+      the before-model already has requirements. Initial generation
+      (zero requirements before → N after) therefore emits no markers —
+      otherwise the first apply would paint every new box green.
+
+      Auto-markers are cleared on every source change that is NOT a
+      stashed apply (plain edits, undo/redo, model-type switch). They
+      are also cleared when the session is bootstrapped from a saved
+      review bundle.
+    acceptance_criteria:
+      - "After an AI apply in a requirement session, every requirement visible in the new model but not in the previous model gets a solid green rectangle around its class box on the live diagram"
+      - "Every requirement visible in both models whose fields or incident relations changed gets a dashed amber rectangle"
+      - "Removed / deleted requirements do NOT get a diagram marker (verified against the Requirement list strikethrough row per SR-113)"
+      - "Markers are placed at the class-box bounding rect (data-qualified-name match) with a 4 px outward inset; they are drawn below user markers so clicks still select user annotations"
+      - "First-generation apply (empty before-model) emits no markers; subsequent applies emit markers driven by the diff"
+      - "Source changes that are not part of an apply clear auto-markers (markerStore.clearAutoMarkers); user-drawn markers are untouched"
+      - "State-machine sessions never populate autoMarkers — the overlay in ProposalView (SR-033) handles that case"
+      - "Placement is deterministic for a given (before, after, coords) triple; unit test fixture confirms green/amber kinds and rect geometry"
 
 # =============================================================================
 # Data Model

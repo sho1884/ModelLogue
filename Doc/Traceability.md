@@ -80,12 +80,14 @@ flowchart LR
 
     subgraph RD["Requirement Diagram / 要求図 (v7.5)"]
         SR073["SR-073<br/>Select model type at seed (v7.5)<br/>セッションseed時にモデル型を選択"]
-        SR110["SR-110<br/>Parse requirement-diagram input (v7.5)<br/>macro DSL + 半構造 seed 形を解析"]
-        SR111["SR-111<br/>Traceability matrix (v7.5)<br/>トレーサビリティマトリクスを生成"]
-        SR112["SR-112<br/>Orphan requirements (v7.5)<br/>孤立要求を抽出する"]
-        SR113["SR-113<br/>Requirement list table (v7.5)<br/>要求リスト表 + Copy/Save .csv + soft-delete UI"]
-        SR114["SR-114<br/>Renderer filter (v7.5 ADR-014)<br/>hidden/deleted を描画から除外"]
-        SR115["SR-115<br/>Auto-inject preamble (v7.5)<br/>!procedure preamble を描画時に自動注入"]
+        SR110["SR-110<br/>Parse requirement-diagram input (v7.5)<br/>macro DSL + 半構造 seed 形を解析<br/>parser.ts + csvParser.ts"]
+        SR111["SR-111<br/>Traceability matrix (v7.5)<br/>トレーサビリティマトリクスを生成<br/>traceability.ts + TraceabilityView"]
+        SR112["SR-112<br/>Orphan requirements (v7.5)<br/>孤立要求を抽出する<br/>orphans.ts + OrphansView"]
+        SR113["SR-113<br/>Requirement list table (v7.5)<br/>要求リスト表 + Copy/Save .csv + soft-delete UI<br/>RequirementListView + listSerializer.ts"]
+        SR114["SR-114<br/>Renderer filter (v7.5 ADR-014)<br/>hidden を描画から除外<br/>renderer.ts"]
+        SR115["SR-115<br/>Seed preamble in buffer (v7.5)<br/>!procedure preamble を buffer に同梱<br/>preamble.ts"]
+        SR116["SR-116<br/>Apply CSV AI reply (v7.5)<br/>CSV→PlantUML regen + auto-apply + no modal<br/>extractSuggestedSource + csvParser + plantUmlGenerator"]
+        SR117["SR-117<br/>Auto-markers on live diagram (v7.5)<br/>added=green / changed=amber<br/>diff.ts + svgCoordinates.ts + autoMarkerPlacement.ts"]
     end
 
     subgraph IN["Infrastructure / インフラ"]
@@ -143,6 +145,8 @@ flowchart LR
     UR006 --> SR035
     UR006 --> SR072
     UR006 --> SR090
+    UR006 --> SR116
+    UR006 --> SR117
 
     %% UR-007: Save review evidence + lift individual artifacts (v7.2)
     UR007 --> SR040
@@ -182,8 +186,13 @@ flowchart LR
     UR014 --> SR113
     UR014 --> SR114
     UR014 --> SR115
+    UR014 --> SR116
+    UR014 --> SR117
     UR014 --> SR070
     UR014 --> SR071
+
+    %% UR-004: Place markers on the diagram (v7.5: + auto-markers for requirement)
+    UR004 --> SR117
 ```
 
 ## 2. Traceability Matrix / トレーサビリティマトリクス
@@ -246,7 +255,9 @@ flowchart LR
 | SR-112 孤立要求を抽出 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-113 要求リスト表 + soft-delete UI + Copy/Save .csv (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-114 Renderer filter: hidden/deleted を描画から除外 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-115 !procedure preamble 自動注入／除去／round-trip (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-115 `!procedure` preamble を edit buffer に同梱 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-116 CSV AI 応答を apply（regen + auto-apply、モーダル無し） (v7.5) |  |  |  |  |  | x |  |  |  |  |  |  |  | x |
+| SR-117 自動マーカー（added=緑 / changed=オレンジ） (v7.5) |  |  |  | x |  | x |  |  |  |  |  |  |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 
@@ -265,7 +276,7 @@ pie title System Requirements by Category (v7.5) / システム要件カテゴ�
     "Model Diff (v7.1)" : 1
     "Artifact Export (v7.2–v7.4)" : 3
     "Test Case Display (v7.4)" : 1
-    "Requirement Diagram (v7.5)" : 6
+    "Requirement Diagram (v7.5)" : 8
 ```
 
 > SR-003（Serialize model）は removed、SR-050（EBNF tab）も v7.1 で removed のため件数から除外。SR-050 の役割は SR-081（ダウンロード）に置き換えた。
