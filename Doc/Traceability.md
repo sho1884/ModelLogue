@@ -97,6 +97,7 @@ flowchart LR
         SR122["SR-122<br/>Roles tab (v7.6)<br/>レーン別タスク + 引渡点を整理<br/>roles.ts + RolesView"]
         SR123["SR-123<br/>Artifacts tab (v7.6, 任意)<br/>矢印ラベル(伝票)のインベントリ<br/>artifacts.ts + ArtifactsView"]
         SR124["SR-124<br/>Parse process-diagram input (v7.6)<br/>PlantUML activity サブセットを解析<br/>parser.ts"]
+        SR125["SR-125<br/>Externals tab (v7.6, 任意)<br/>note 内 **外部:** 注釈から外部 IT システムを抽出<br/>externals.ts + ExternalsView"]
     end
 
     subgraph IN["Infrastructure / インフラ"]
@@ -210,6 +211,7 @@ flowchart LR
     UR015 --> SR122
     UR015 --> SR123
     UR015 --> SR124
+    UR015 --> SR125
     UR015 --> SR070
     UR015 --> SR071
     UR015 --> SR117
@@ -284,6 +286,7 @@ flowchart LR
 | SR-122 Roles タブ (レーン別タスク + 引渡点) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-123 Artifacts タブ (矢印ラベル伝票インベントリ, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-124 プロセス図入力 (PlantUML activity サブセット) を解析 (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-125 Externals タブ (note 内 **外部:** から外部 IT システム抽出, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 
@@ -303,7 +306,7 @@ pie title System Requirements by Category (v7.6) / システム要件カテゴ�
     "Artifact Export (v7.2–v7.4)" : 3
     "Test Case Display (v7.4)" : 1
     "Requirement Diagram (v7.5)" : 8
-    "Process Diagram (v7.6)" : 5
+    "Process Diagram (v7.6)" : 6
 ```
 
 > SR-003（Serialize model）は removed、SR-050（EBNF tab）も v7.1 で removed のため件数から除外。SR-050 の役割は SR-081（ダウンロード）に置き換えた。

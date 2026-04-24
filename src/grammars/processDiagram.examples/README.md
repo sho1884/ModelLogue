@@ -38,6 +38,7 @@ done
 | 08 | [08-artifacts.puml](./08-artifacts.puml) | 伝票トレース | `-> 伝票名;` を分岐の yes / no 両方に配置、複数レーン |
 | 09 | [09-events.puml](./09-events.puml) | タイムアウト／督促／エラー | `<<timer>>` / `<<message>>` / `<<error>>` ステレオタイプ、ネスト if |
 | 10 | [10-complex-realistic.puml](./10-complex-realistic.puml) | E2E 想定フル盛り | 上記全要素の組合せ（20 ノード級）— レーン 5、partition + 内部レーン切替、ネスト if、fork + 内部レーン、伝票、message イベント |
+| 11 | [11-external-references.puml](./11-external-references.puml) | 外部 IT システム / リポジトリの付箋注釈 | `note right ... **外部:** 名前 ... end note` パターン。人・組織は通常レーン、外部 IT 要素は付箋で表し、IT 要素間の順序関係を持たせない（SR-125 規約） |
 
 ## EBNF カバレッジ
 
@@ -56,12 +57,13 @@ done
 - [x] partition 内レーン切替（多人数協働サブプロセス）
 - [x] `-> 伝票名;` 矢印ラベル（通常位置／分岐 yes 側／分岐 no 側）
 - [x] `title`
+- [x] `note right ... end note` / 単一行 note — 11 で本格使用、01-10 の accept-and-ignore 確認は parser unit test で
+- [x] `**外部:** 名前` note 内規約（SR-125）— 11 で demonstrate
 
 **未カバー（意図的 / 要検討）**:
 
 - [ ] マルチライン `:task\n続き;` ラベル — EBNF では許可したが実例なし。実装時に parser unit test で別途担保予定
-- [ ] `note right of ...` — accept-and-ignore 系、実装時に別途テスト
-- [ ] `skinparam` / `header` / `footer` / `legend` / `!procedure` — 同上
+- [ ] `skinparam` / `header` / `footer` / `legend` / `!procedure` — accept-and-ignore の確認、実装時に別途テスト
 - [ ] 拒否すべきパターン（`while`、`elseif`、`detach`、`(*)` 等）— 別ディレクトリ `rejected/` に分離する予定、本ディレクトリはあくまで「受理されるべきコーパス」
 
 ## 実装時の利用想定

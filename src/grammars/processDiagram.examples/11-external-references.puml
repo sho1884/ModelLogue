@@ -1,0 +1,53 @@
+@startuml
+title 申込処理 — 外部システム・リポジトリ注釈
+
+|顧客|
+start
+:申込フォームに記入;
+-> 申込データ;
+
+|受付係|
+:入力値をチェック;
+note right
+**外部:** 申込マスタDB
+end note
+if (必須項目OK?) then (yes)
+  :受付を完了;
+  note right
+  **外部:** 申込マスタDB
+  **外部:** 通知メール配信API
+  end note
+else (no)
+  :不備を顧客に返送;
+  stop
+endif
+
+|審査員|
+:内容を審査;
+note right
+**外部:** 申込マスタDB
+**外部:** 与信照会API
+**外部:** ブラックリスト照会サービス
+end note
+
+if (承認?) then (承認)
+  |発行係|
+  :契約書を発行;
+  note right
+  **外部:** 契約管理システム
+  end note
+  |通知係|
+  :承認通知を送信;
+  note right
+  **外部:** 通知メール配信API
+  end note
+  stop
+else (却下)
+  |通知係|
+  :却下通知を送信;
+  note right
+  **外部:** 通知メール配信API
+  end note
+  stop
+endif
+@enduml

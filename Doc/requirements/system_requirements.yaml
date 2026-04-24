@@ -1261,7 +1261,8 @@ process_diagram:
       as such in the row.
 
       Columns: path_id, tasks (ordered), branches_taken, lanes
-      traversed, events encountered, artifacts referenced.
+      traversed, events encountered, artifacts referenced,
+      externals_touched.
 
       Initial implementation is in-SPA (pure TS, same shape as
       requirement orphans / traceability). If large real-world
@@ -1273,6 +1274,7 @@ process_diagram:
       - "Lane transitions are listed in order in the `lanes` column"
       - "Events (`<<timer>>` / `<<message>>` / `<<error>>`) on the path are listed in `events`"
       - "Artifact labels (`-> name;`) encountered are listed in `artifacts`"
+      - "External IT systems / repositories referenced along the path (extracted from `**外部:** …` lines in note blocks, per SR-125) are deduplicated and listed in `externals_touched`"
       - "Parallel regions (`fork` / `end fork`) contribute a single `fork(...)` token to the path rather than exponential interleavings"
       - "Copy / Save .csv actions emit the canonical CSV with the above columns, LF line endings, RFC 4180 quoting"
 
@@ -1351,10 +1353,55 @@ process_diagram:
       - PlantUML activity "beta" legacy syntax (`(*)` start nodes etc.)
     acceptance_criteria:
       - "Accepts every construct listed in src/grammars/processDiagram.ebnf"
-      - "Produces ProcessModel { nodes, edges, lanes, stereotypes, partitions } per the data model section"
+      - "Produces ProcessModel { nodes, edges, lanes, stereotypes, partitions, externalReferences } per the data model section"
       - "Reports a clear line-numbered error for any rejected construct"
       - "Default lane when a node appears before any `|...|` is the literal `(default)`"
       - "Parse completes within the NFR-001 Parse < 100 ms budget for review-scale diagrams (~40 tasks)"
+
+  SR-125:
+    function: "Externals tab — list external IT systems / repositories referenced from task notes, with their touching tasks"
+    parent: [UR-015]
+    component: src/modelTypes/process/externals.ts + ExternalsView tab
+    status: planned
+    notes: |
+      Reviewers distinguish between HUMAN / ORGANIZATIONAL roles
+      (captured as swim lanes per SR-122) and EXTERNAL IT SYSTEMS /
+      REPOSITORIES (payment gateways, DBs, legacy backend services).
+      PlantUML activity has no freely-placed object outside the flow,
+      so external IT elements are expressed as sticky-note-shaped
+      annotations attached to the task that touches them — notes are
+      visually distinct from tasks (yellow, dog-eared corner) and
+      semantically correct (they carry no inter-note ordering).
+
+      Convention: a `note right`, `note left`, or multi-line
+      `note right\n ... \nend note` block attached to a task may
+      contain lines of the form `**外部:** 名前` (or its half-width
+      equivalent `**External:** name`). Each such line registers a
+      reference from the attached task to the named external. The
+      rest of the note content is treated as free annotation.
+
+      Multiple externals per note are allowed (one per line). The
+      same external may be referenced from multiple tasks — the
+      Externals tab aggregates and lists each external once with
+      the full list of touching tasks.
+
+      No graph is drawn between the external and the task; notes
+      are annotations only. This matches the reviewer's intuition
+      that external IT elements have no flow order between them
+      (e.g. "payment API and customer DB" are both touched at some
+      point, but they are not sequenced relative to one another).
+
+      The tab is OPTIONAL: a process diagram with no `**外部:**`
+      lines in any note yields an empty list; the tab still
+      renders with a short usage hint so reviewers know how to
+      add them.
+    acceptance_criteria:
+      - "One row per distinct external name (trimmed, case-sensitive)"
+      - "Each row shows the list of tasks that have a `**外部:** name` line in an attached note"
+      - "Lines starting with `**外部:**` or `**External:**` are recognised; both prefixes extract the same external reference"
+      - "Non-matching note content is ignored (not surfaced in this tab), but is preserved in the source for diagram rendering"
+      - "A diagram with no matching notes yields an empty list and a hint explaining the `note right\\n**外部:** …\\nend note` syntax"
+      - "Copy / Save .csv emits the canonical CSV with columns external, touching_tasks (semicolon-separated, task-label order preserved)"
 
 # =============================================================================
 # Data Model

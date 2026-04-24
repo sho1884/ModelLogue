@@ -632,6 +632,41 @@ partition "与信チェック" {
 
 `partition` はレーンとは別の構文。分類色を変えたいときは `partition #LightGray "名前" { ... }` も可。
 
+##### 外部 IT システム・リポジトリの表現（note 規約）
+
+**人・組織の役割** は通常のレーン（`|顧客|` / `|受付係|` / `|審査員|`）で表す。
+
+**外部 IT システム / リポジトリ**（決済代行 API、申込 DB、社内基幹システム…）は **タスクへの付箋 (note)** で表す。
+
+```plantuml
+:内容を審査;
+note right
+**外部:** 申込マスタDB
+**外部:** 与信照会API
+end note
+```
+
+単一行形式も可：
+
+```plantuml
+:承認通知を送信;
+note right: **外部:** 通知メール配信API
+```
+
+この規約の意図と非意図：
+
+- **意図**: 外部 IT 要素はタスクからの「参照」でしかなく、**IT 要素同士の間に順序関係は無い**。付箋は順序を持たない注釈なので意味論が正しい
+- **意図**: 付箋は PlantUML native、角が折れた黄色い箱として描画され、タスク（角丸矩形）と視覚的に区別できる
+- **非意図**: PlantUML activity はフロー駆動レイアウト専用で自由配置オブジェクトが無い。DB シリンダーのアイコン等は使えない。割り切って付箋で表す
+- **非意図**: AI 生成時に特別な構文は不要。`note right` ブロックに `**外部:** 名前` と書くだけ
+
+**Parser の扱い**: note ブロック全体は EBNF 上 accept-and-ignore 扱いのまま（描画装飾）。解析層が post-processing として「`**外部:**` で始まる行」を拾い上げ、紐付けタスクに `externalReferences: string[]` を足して ProcessModel に記録する。
+
+**解析タブでの利用**:
+
+- **Externals タブ**（SR-125）: 登場する外部 IT 要素の一覧と、各要素を呼び出すタスク一覧
+- **Scenarios タブ**（SR-120）: 各経路行に「この経路で触られる外部 IT 要素」列を追加
+
 ##### 意図的な制約
 
 - **ゴトウ / detach / kill は受け付けない**（レビュー可読性を下げるだけ）
@@ -650,10 +685,11 @@ partition "与信チェック" {
 | Events | ステレオタイプ付きタスク（`<<timer>>` / `<<message>>` / `<<error>>`）の一覧。各行に「登場経路数」「直後の分岐」列 | SR-121 |
 | Roles | `|...|` で登場したレーンの一覧。各行に「このレーンで実行されるタスク」「他レーンからの受取点」「他レーンへの引渡点」列 | SR-122 |
 | Artifacts（任意） | `->` 矢印ラベルで登場した伝票名の一覧。各行に「生成するタスク」「受け取るタスク」列 | SR-123 |
+| Externals（任意） | `note` 内の `**外部:**` 注釈で登場した外部 IT システム / リポジトリの一覧。各行に「呼び出すタスク」列 | SR-125 |
 
-**Scenarios タブ が主力**。UR-013 の N-switch と同じ役目: 図を見て当てずっぽうに書きがちなテストケースを、網羅的・機械的に列挙する。初期版は SPA 内計算で良い（経路数が爆発する巨大プロセスは補助サービス `tools/pathgen` を別途 ADR-010 準拠で立てる、という段階的拡張を許す）。
+**Scenarios タブ が主力**。UR-013 の N-switch と同じ役目: 図を見て当てずっぽうに書きがちなテストケースを、網羅的・機械的に列挙する。初期版は SPA 内計算で良い（経路数が爆発する巨大プロセスは補助サービス `tools/pathgen` を別途 ADR-010 準拠で立てる、という段階的拡張を許す）。**各経路行に「touched externals」列（その経路上のタスクから触られる外部 IT 要素の一意集合）を追加** — UAT 設計で「このシナリオは決済代行 API とブラックリスト照会サービスに依存する」と即座に読める。
 
-**Artifacts タブ** は必須ではない。`->` を書かない図でも Scenarios / Events / Roles は動く。伝票追跡の価値が欲しいときだけ書く、という段階的な入口として機能する。
+**Artifacts / Externals タブ** はどちらも必須ではない。`->` 矢印ラベルも `note right ... **外部:** ...` も書かない図でも Scenarios / Events / Roles は動く。追跡の価値が欲しいときだけ書く、という段階的な入口。
 
 **Traceability / Orphans は用意しない**。プロセス図では要求図のような関係種別 (derive / refine) がそもそも存在しないため。
 
@@ -669,7 +705,8 @@ n8n プロンプトの `modelTypeId === 'process'` 分岐では、AI に以下�
 - 使用可能な PlantUML activity サブセット（§3.15.3 の構文）
 - ステレオタイプ `<<timer>>` / `<<message>>` / `<<error>>` の意味と用法
 - 矢印ラベル `-> 伝票名;` の意味
-- レーン `|Actor|` の用法
+- レーン `|Actor|` の用法（人・組織の役割用）
+- note の `**外部:** 名前` 規約（外部 IT システム / リポジトリ用、順序関係を持たせないため note で表現）
 
 システムプロンプトは `n8n/workflows/modellogue-chat.json` の既存 `state-machine` 分岐と同じく「Session type: PROCESS DIAGRAM」のヘッダーを見て切り替える三者分岐にする。
 
@@ -682,6 +719,7 @@ n8n プロンプトの `modelTypeId === 'process'` 分岐では、AI に以下�
 | SR-122 | Roles tab — list swim lanes with per-lane tasks and hand-off points | UR-015 |
 | SR-123 | Artifacts tab (optional) — list `-> 伝票` labels with producing / consuming tasks | UR-015 |
 | SR-124 | Parse process diagram input (PlantUML activity subset, §3.15.3) into ProcessModel | UR-015 |
+| SR-125 | Externals tab — extract `**外部:** 名前` lines from note blocks, list external IT systems / repositories with touching tasks | UR-015 |
 
 既存 SR への影響:
 

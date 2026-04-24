@@ -110,6 +110,34 @@ note_multi       = whitespace , note_position , [ " of " , identifier ] ,
                    newline , block_body , "end note" ;
 note_position    = "left" | "right" | "top" | "bottom" ;
 
+(* ===== Note-embedded external references (SR-125) ===== *)
+(*                                                       *)
+(*  Notes are accepted and ignored at parse time (above) *)
+(*  for the purpose of graph construction. A post-parse  *)
+(*  pass extracts external IT system / repository        *)
+(*  references from note content matching this pattern:  *)
+(*                                                       *)
+(*    ^(\*\*外部:\*\*|\*\*External:\*\*) \s* <name>       *)
+(*                                                       *)
+(*  e.g.                                                  *)
+(*    :内容を審査;                                         *)
+(*    note right                                          *)
+(*    **外部:** 申込マスタDB                                *)
+(*    **外部:** 与信照会API                                 *)
+(*    end note                                            *)
+(*                                                       *)
+(*  The matched lines register (task → external) tuples  *)
+(*  that drive the Externals tab (SR-125). Non-matching  *)
+(*  lines remain as free annotation and are visible in   *)
+(*  the rendered SVG but do not appear in the tab.       *)
+(*                                                       *)
+(*  PlantUML has no freely-placed inline object; notes   *)
+(*  are used because they are visually distinct (yellow  *)
+(*  dog-eared box) from tasks AND carry no inter-note    *)
+(*  ordering, matching the semantics of "this task       *)
+(*  touches these externals, which have no order amongst *)
+(*  themselves".                                          *)
+
 hide_directive   = "hide" , whitespace , { any_char } ;
 include_directive= ( "!include" | "!import" ) , whitespace , { any_char } ;
 
