@@ -5,7 +5,7 @@
 | Document / 文書 | Requirements Specification — N-switch coverage test case generator |
 | Version | 0.6 |
 | Created | 2026-04-21 |
-| Status / 状態 | CLI implemented (v0.1.0) at `tools/nswitch/src/modellogue_nswitch/`. HTTP API (`serve` subcommand) planned for v0.2.0 to enable reactive integration with the ModelLogue GUI (SR-103). |
+| Status / 状態 | Implemented in v0.1.0 at `tools/nswitch/src/modellogue_nswitch/` — batch CLI **and** HTTP API (`serve` subcommand, §9.2) both shipped. The HTTP mode is what ModelLogue's Test cases tab (SR-103) calls for reactive N-switch regeneration. |
 | Language / 実装言語 | **Python** (3.10+) |
 | Related ADR | ADR-009 (one-level composite states), ADR-010 (auxiliary services in the same repo), ADR-011 (strict formats and deterministic conversion) |
 | Canonical CSV | §4.2 defines the **project-wide canonical state-transition-table CSV**. ModelLogue's SR-101 export is required to emit this same format so artifacts round-trip between the GUI, this CLI, and version control. |
