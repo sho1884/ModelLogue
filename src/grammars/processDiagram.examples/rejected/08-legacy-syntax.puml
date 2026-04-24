@@ -1,0 +1,12 @@
+' Rejected: legacy PlantUML activity syntax.
+' The pre-beta "(*) --> :task; --> (*)" form with `-->` arrows and
+' `(*)` start/end circles still renders in PlantUML but is
+' deprecated. We accept only the current "start / stop / :task;"
+' subset so our parser has one target, not two.
+' Rewrite: see 01-linear.puml for the modern equivalent.
+@startuml
+(*) --> :申込を受付;
+--> :内容を審査;
+--> :結果を通知;
+--> (*)
+@enduml

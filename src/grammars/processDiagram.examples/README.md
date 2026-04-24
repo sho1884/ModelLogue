@@ -64,7 +64,7 @@ done
 
 - [ ] マルチライン `:task\n続き;` ラベル — EBNF では許可したが実例なし。実装時に parser unit test で別途担保予定
 - [ ] `skinparam` / `header` / `footer` / `legend` / `!procedure` — accept-and-ignore の確認、実装時に別途テスト
-- [ ] 拒否すべきパターン（`while`、`elseif`、`detach`、`(*)` 等）— 別ディレクトリ `rejected/` に分離する予定、本ディレクトリはあくまで「受理されるべきコーパス」
+- [x] 拒否すべきパターン（`while`、`elseif`、`detach`、`(*)` 等）— [`./rejected/`](./rejected/) に 11 件分離済み
 
 ## 実装時の利用想定
 

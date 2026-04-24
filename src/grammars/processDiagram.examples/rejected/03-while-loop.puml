@@ -1,0 +1,16 @@
+' Rejected: `while` / `endwhile` loops.
+' Loops complicate Scenarios-tab path enumeration (infinite paths
+' under naive traversal) and rarely appear at the review abstraction
+' level we target. If a process genuinely loops until done, express
+' the essential iteration state as a branch with clear exit.
+' Rewrite: if (まだやることある?) then (yes) :next item; else (no) stop endif
+' — or describe the loop in a free-text note attached to the task.
+@startuml
+start
+:初期処理;
+while (まだ未処理あり?) is (yes)
+  :1 件処理;
+endwhile (no)
+:完了処理;
+stop
+@enduml

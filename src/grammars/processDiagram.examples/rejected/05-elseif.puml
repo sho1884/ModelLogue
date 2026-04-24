@@ -1,0 +1,25 @@
+' Rejected: `elseif` / `else if` multi-way branching.
+' Multi-way branches obscure the condition tree at review time.
+' Rewrite as explicit nested `if`s so reviewers can see the exact
+' decision order and independently agree on each branch.
+' Rewrite:
+'   if (A?) then (yes)
+'     :do-A;
+'   else (no)
+'     if (B?) then (yes)
+'       :do-B;
+'     else (no)
+'       :do-C;
+'     endif
+'   endif
+@startuml
+start
+if (A?) then (yes)
+  :do-A;
+elseif (B?) then (yes)
+  :do-B;
+else (no)
+  :do-C;
+endif
+stop
+@enduml

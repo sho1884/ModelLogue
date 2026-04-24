@@ -1,0 +1,19 @@
+' Rejected: fork inside fork.
+' Our parser rejects nested forks to keep path enumeration tractable
+' and visual complexity manageable (ADR-009-style guardrail).
+' Rewrite: flatten to a single fork with more branches, or separate
+' the inner parallelism into a sub-process.
+@startuml
+start
+fork
+  :task A1;
+  fork
+    :task A1a;
+  fork again
+    :task A1b;
+  end fork
+fork again
+  :task B1;
+end fork
+stop
+@enduml

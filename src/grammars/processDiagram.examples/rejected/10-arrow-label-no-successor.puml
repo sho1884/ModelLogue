@@ -1,0 +1,14 @@
+' Rejected: `-> label;` with no successor node.
+' An arrow label must point to an actual next edge. Here the label
+' sits after `stop` (nothing follows) and before `endif` (the branch
+' has already terminated), leaving the label dangling.
+' Rewrite: move the label to a position where a subsequent node
+' exists, or delete it if the edge it was meant to annotate no
+' longer exists.
+@startuml
+start
+:task1;
+-> 申込書;
+stop
+-> obsolete label;
+@enduml

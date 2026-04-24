@@ -1,0 +1,18 @@
+' Rejected: partition inside partition.
+' Sub-process grouping is 1 level only. A partition stands for "this
+' is one logical sub-process"; nested sub-processes imply hierarchy
+' we do not model (break them into separate partitions at the same
+' level, or represent the inner one as a separate diagram).
+' Rewrite: flatten (use two sibling partitions).
+@startuml
+start
+partition "審査" {
+  :書類確認;
+  partition "与信チェック" {
+    :スコア算出;
+    :ブラックリスト照会;
+  }
+  :最終判定;
+}
+stop
+@enduml

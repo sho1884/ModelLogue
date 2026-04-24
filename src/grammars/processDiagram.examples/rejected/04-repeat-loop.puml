@@ -1,0 +1,13 @@
+' Rejected: `repeat` / `repeat while` loops.
+' Same reason as 03-while-loop: loops break path enumeration and are
+' above the review abstraction level.
+' Rewrite: same as while — use a branch with explicit exit, or note.
+@startuml
+start
+repeat
+  :レコードを取得;
+  :処理;
+repeat while (次のレコードあり?) is (yes) not (no)
+:完了;
+stop
+@enduml

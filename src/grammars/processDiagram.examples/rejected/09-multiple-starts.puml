@@ -1,0 +1,16 @@
+' Rejected: more than one `start` in a diagram.
+' A process diagram has exactly one entry point. Multiple starts
+' break the Scenarios tab (which path is "the" first?) and suggest
+' two processes that should be separate diagrams.
+' Rewrite: keep one `start`. If the process legitimately begins in
+' different ways depending on trigger, encode that as the first
+' branch after `start`.
+@startuml
+start
+:第 1 プロセス;
+stop
+
+start
+:第 2 プロセス;
+stop
+@enduml

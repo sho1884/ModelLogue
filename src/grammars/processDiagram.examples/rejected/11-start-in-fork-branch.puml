@@ -1,0 +1,18 @@
+' Rejected: `start` inside a fork branch.
+' `start` is the diagram-level entry point, unique and top-level.
+' Putting it inside a fork branch is semantically meaningless (the
+' branch is already entered when fork runs).
+' Rewrite: remove the inner `start`. If the branch represents a
+' sub-process with its own entry, make it a partition, or extract
+' it into a separate diagram.
+@startuml
+start
+:主処理;
+fork
+  start
+  :並行処理 A;
+fork again
+  :並行処理 B;
+end fork
+stop
+@enduml

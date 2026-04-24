@@ -1,0 +1,16 @@
+' Rejected: `detach` — "disconnect this branch from the flow".
+' detach creates a dangling branch with no join point, which the
+' Scenarios tab cannot express as "a path from start to stop".
+' Rewrite: the detached work is either its own process (model it as
+' a separate diagram / session), OR it ends in an explicit stop/end
+' so Scenarios can close the path.
+@startuml
+start
+:主処理;
+if (通知不要?) then (yes)
+  detach
+else (no)
+  :通知を送信;
+endif
+stop
+@enduml

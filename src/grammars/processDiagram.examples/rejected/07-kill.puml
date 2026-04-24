@@ -1,0 +1,16 @@
+' Rejected: `kill` — abort branch without a join.
+' Same problem as detach (see 06): leaves the branch without a clean
+' termination the Scenarios tab can enumerate.
+' Rewrite: explicit `stop` / `end` with an `<<error>>` stereotype if
+' it represents an abnormal termination — that surfaces in the
+' Events tab (SR-121) as an error endpoint.
+@startuml
+start
+:主処理;
+if (続行可?) then (yes)
+  :後処理;
+else (no)
+  kill
+endif
+stop
+@enduml
