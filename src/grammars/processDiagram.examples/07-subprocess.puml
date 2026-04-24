@@ -1,0 +1,14 @@
+@startuml
+title 契約処理サブプロセス（partition 色タグ）
+
+|担当|
+start
+:申込承認済みを受領;
+partition #LightYellow "契約処理" {
+  :契約書を作成;
+  :顧客に署名依頼;
+  :契約締結を記録;
+}
+:社内に完了通知;
+stop
+@enduml

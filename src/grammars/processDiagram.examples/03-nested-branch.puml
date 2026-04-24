@@ -1,0 +1,19 @@
+@startuml
+title 二段審査（ネスト分岐）
+
+|審査員|
+start
+:申込を受付;
+if (書類は完全?) then (yes)
+  if (金額 > 100万円?) then (yes)
+    :上長承認を仰ぐ;
+    stop
+  else (no)
+    :担当者承認;
+    stop
+  endif
+else (no)
+  :書類不備通知;
+  stop
+endif
+@enduml

@@ -1,0 +1,14 @@
+@startuml
+title 申込の承認／却下（単純分岐）
+
+|審査員|
+start
+:申込内容を確認;
+if (承認できる?) then (yes)
+  :承認通知を送付;
+  stop
+else (no)
+  :却下通知を送付;
+  stop
+endif
+@enduml

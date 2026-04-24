@@ -1,0 +1,16 @@
+@startuml
+title 承認後の通知と記録（並行処理）
+
+|担当|
+start
+:承認済申込を受領;
+fork
+  :申込者にメール通知;
+fork again
+  :履歴DBに記録;
+fork again
+  :監査ログに追記;
+end fork
+:後続処理を完了;
+stop
+@enduml

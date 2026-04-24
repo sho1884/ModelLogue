@@ -1,34 +1,66 @@
 (* ModelLogue PlantUML Process Diagram Subset Grammar *)
-(* Version: 1.0                                         *)
+(* Version: 1.1                                         *)
 (* Reference: ADR-009 (minimal-subset guardrails),       *)
 (*            ADR-012 (model-type plugin architecture),  *)
 (*            §3.15 Requirements_Specification.md        *)
 (*                                                       *)
+(* Changelog:                                            *)
+(*   1.0 (2026-04-24): initial draft                     *)
+(*   1.1 (2026-04-24): 9-point refinement                *)
+(*     - partition can contain lane declarations (multi- *)
+(*       actor sub-processes are realistic)              *)
+(*     - task labels may span multiple lines             *)
+(*     - partition accepts optional color tag            *)
+(*     - `elseif` / `else if` explicitly rejected        *)
+(*     - accept-and-ignore list codified: skinparam /    *)
+(*       header / footer / legend / note / hide-empty /  *)
+(*       !procedure / !include                           *)
+(*     - arrow label placement rules spelled out         *)
+(*     - start cardinality = exactly once; stop/end      *)
+(*       cardinality = one or more                       *)
+(*                                                       *)
 (* Purpose: Define the ONLY syntax ModelLogue accepts    *)
 (* for the `process` model type (UR-015, v7.6). Any      *)
 (* construct not listed here is rejected with a line-    *)
-(* numbered syntax error.                                *)
+(* numbered syntax error, EXCEPT the explicitly listed   *)
+(* accept-and-ignore decorators (§ "Ignored decorators") *)
+(* which are tolerated so pasted real-world PlantUML     *)
+(* does not fail the parser for purely cosmetic reasons. *)
 (*                                                       *)
 (* Design principle: This is a REVIEW-ORIENTED SUBSET of *)
 (* PlantUML's "beta" activity-diagram syntax. We do NOT  *)
 (* aim for formal BPMN / UML Activity compliance; we     *)
 (* include only what reviewers need to agree on an E2E / *)
-(* UAT / system-test plan. Added back later if the need  *)
-(* actually surfaces.                                    *)
+(* UAT / system-test plan.                               *)
 
 (* ===== Top-level structure ===== *)
 
 diagram          = "@startuml" , newline ,
-                   { line , newline } ,
+                   { prelude_line , newline } ,
+                   start_node , newline ,
+                   { body_line , newline } ,
                    "@enduml" ;
 
-line             = empty_line
+(* The prelude accepts decorative directives that come *)
+(* BEFORE `start`. Lane declarations may also appear   *)
+(* here — the lane active when `start` fires becomes   *)
+(* the default lane for subsequent nodes.              *)
+
+prelude_line     = empty_line
                  | comment
-                 | title
+                 | ignored_decorator
+                 | lane_declaration ;
+
+(* The body accepts all forms that can appear AFTER     *)
+(* `start`. Arrow labels are body-only (they cannot     *)
+(* appear before `start`).                              *)
+
+body_line        = empty_line
+                 | comment
+                 | ignored_decorator
                  | lane_declaration
                  | partition_open
                  | partition_close
-                 | start_node
                  | stop_node
                  | task
                  | arrow_label
@@ -37,30 +69,85 @@ line             = empty_line
 
 empty_line       = { whitespace } ;
 comment          = "'" , { any_char } ;
-title            = "title" , whitespace , { any_char } ;
+
+(* ===== Ignored decorators (accept-and-forget) ===== *)
+(*                                                       *)
+(* These carry no model information but are common in    *)
+(* pasted real-world PlantUML. Accept and skip during    *)
+(* parsing; they do NOT reject and do NOT contribute to  *)
+(* ProcessModel.                                         *)
+
+ignored_decorator
+                 = title_line
+                 | skinparam_line
+                 | header_block
+                 | footer_block
+                 | legend_block
+                 | note_block
+                 | hide_directive
+                 | include_directive
+                 | procedure_block ;
+
+title_line       = "title" , whitespace , { any_char } ;
+skinparam_line   = "skinparam" , whitespace , { any_char } ;
+
+(*                                                       *)
+(*  header / footer / legend / note come in both single- *)
+(*  line and block forms. Block forms consume lines up   *)
+(*  to their matching terminator.                        *)
+
+header_block     = "header" , ( single_line_tail
+                              | block_body , "endheader" ) ;
+footer_block     = "footer" , ( single_line_tail
+                              | block_body , "endfooter" ) ;
+legend_block     = "legend" , ( single_line_tail
+                              | block_body , "end legend" ) ;
+
+note_block       = "note" , ( note_single | note_multi ) ;
+note_single      = whitespace , note_position , [ " of " , identifier ] ,
+                   " : " , { any_char } ;
+note_multi       = whitespace , note_position , [ " of " , identifier ] ,
+                   newline , block_body , "end note" ;
+note_position    = "left" | "right" | "top" | "bottom" ;
+
+hide_directive   = "hide" , whitespace , { any_char } ;
+include_directive= ( "!include" | "!import" ) , whitespace , { any_char } ;
+
+procedure_block  = "!procedure" , block_body , "!endprocedure" ;
+
+single_line_tail = whitespace , { any_char } ;
+block_body       = { any_line , newline } ;
+any_line         = { any_char } ;
 
 (* ===== Nodes ===== *)
 
 (*                                                       *)
-(*  start                                                *)
-(*  stop                                                 *)
-(*  end                                                  *)
+(*  start       — exactly one per diagram                *)
+(*  stop / end  — one or more; `end` is a synonym        *)
 (*                                                       *)
-(*  :申込書を受付;                                         *)
-(*  :タイムアウト;<<error>>                                *)
+(*  :label;                                               *)
+(*  :label;<<stereotype>>                                *)
 (*                                                       *)
-(*  Recognised stereotypes for event semantics:          *)
-(*    timer / message / error                            *)
+(*  Recognised stereotypes (carry Events-tab semantics): *)
+(*    timer   / message   / error                        *)
+(*  Any other stereotype is accepted as a free label but *)
+(*  the task is treated as a plain task.                 *)
 (*                                                       *)
-(*  Other stereotypes are preserved as free labels but   *)
-(*  are not surfaced in the Events tab (SR-121).         *)
+(*  A task label may span multiple lines; parser         *)
+(*  concatenates the text up to the first `;` verbatim.  *)
 
 start_node       = "start" ;
 stop_node        = "stop" | "end" ;
+
 task             = ":" , task_label , ";" ,
                    [ stereotype ] ;
 
-task_label       = { any_char_except_semicolon } ;
+(*                                                       *)
+(*  task_label is any character sequence until the first *)
+(*  unescaped `;`. Newlines WITHIN the label are allowed *)
+(*  and preserved in the model as `\n`.                  *)
+
+task_label       = { any_char_except_semicolon | newline } ;
 stereotype       = "<<" , stereotype_name , ">>" ;
 stereotype_name  = identifier ;
 
@@ -71,9 +158,23 @@ stereotype_name  = identifier ;
 (*  -> 申込書;                                             *)
 (*  :task2;                                               *)
 (*                                                       *)
-(*  The label applies to the implicit arrow between the  *)
-(*  preceding node and the following node. The label is  *)
-(*  optional; plain sequence (no `->` line) also works.  *)
+(*  Semantics: `-> label;` labels the SUBSEQUENT edge —  *)
+(*  the arrow from the previous node to the next node.   *)
+(*                                                       *)
+(*  Valid placements (must have a successor node):       *)
+(*    - directly after `start`                           *)
+(*    - directly after a task                            *)
+(*    - directly after `endif` / `end fork`              *)
+(*    - inside an if / else branch, after `then (...)` / *)
+(*      `else (...)` and before the first task           *)
+(*    - inside a fork branch, after `fork` /             *)
+(*      `fork again` and before the first task           *)
+(*                                                       *)
+(*  Invalid placements (parse error):                    *)
+(*    - before `start` (no preceding node)               *)
+(*    - directly after `stop` / `end` (no successor)     *)
+(*    - immediately before `endif` / `else` /            *)
+(*      `end fork` (no successor before the closer)      *)
 
 arrow_label      = "->" , whitespace ,
                    artifact_label , ";" ;
@@ -93,11 +194,19 @@ artifact_label   = { any_char_except_semicolon } ;
 (*  annotations are optional in PlantUML, but ModelLogue  *)
 (*  REQUIRES both so Scenarios rows carry a readable      *)
 (*  branch-taken value.                                   *)
+(*                                                       *)
+(*  `elseif` / `else if` is REJECTED — the user should    *)
+(*  rewrite as nested if for review clarity.              *)
+(*                                                       *)
+(*  A branch body may contain any body_line (task,        *)
+(*  arrow label, comment, nested if, fork, partition,     *)
+(*  lane change, stop/end). Multiple `stop` in both       *)
+(*  branches is fine (no merge node required).            *)
 
 if_construct     = if_head , newline ,
-                   { line , newline } ,
+                   { body_line , newline } ,
                    else_clause , newline ,
-                   { line , newline } ,
+                   { body_line , newline } ,
                    "endif" ;
 
 if_head          = "if" , whitespace ,
@@ -120,7 +229,12 @@ branch_label     = { any_char_except_close_paren } ;
 (*    :branch-b-task;                                     *)
 (*  end fork                                              *)
 (*                                                       *)
-(*  Nested `fork` inside `fork` is REJECTED (§3.15.3).    *)
+(*  Rules:                                               *)
+(*    - nested fork inside fork is REJECTED              *)
+(*    - fork branches may contain if, partition, lane    *)
+(*      change, stop/end                                 *)
+(*    - `start` inside a fork branch is a parse error    *)
+(*      (only the top-level diagram has a start)         *)
 
 fork_construct   = "fork" , newline ,
                    fork_branch ,
@@ -130,29 +244,34 @@ fork_construct   = "fork" , newline ,
 
 fork_branch      = { fork_branch_line , newline } ;
 
-(*                                                       *)
-(*  Inside a fork branch, `fork` is NOT allowed          *)
-(*  (parser enforces, EBNF uses a restricted line set).  *)
-
 fork_branch_line = empty_line
                  | comment
-                 | start_node       (* redeclared start is a parse error *)
+                 | ignored_decorator
                  | stop_node
                  | task
                  | arrow_label
                  | if_construct
-                 | lane_declaration
                  | partition_open
-                 | partition_close ;
+                 | partition_close
+                 | lane_declaration ;
 
 (* ===== Swim lanes ===== *)
 
 (*                                                       *)
 (*  |Actor Name|                                          *)
 (*                                                       *)
-(*  Applies to every subsequent node until the next      *)
-(*  `|...|` or end of buffer. Lane "(default)" is used   *)
-(*  for nodes that appear before any declaration.        *)
+(*  Scope: stateful. A lane declaration sets the current *)
+(*  lane for every subsequent node until the next lane   *)
+(*  declaration. The setting persists across if / fork / *)
+(*  partition block boundaries, matching PlantUML.       *)
+(*                                                       *)
+(*  Default lane when no `|...|` precedes the first node: *)
+(*  the literal string `(default)`.                      *)
+(*                                                       *)
+(*  Lane declarations ARE allowed inside partition — a   *)
+(*  sub-process can legitimately be a multi-actor        *)
+(*  collaboration. The partition box will span multiple  *)
+(*  lane columns in the rendered SVG.                    *)
 
 lane_declaration = "|" , lane_name , "|" ;
 lane_name        = { any_char_except_pipe } ;
@@ -169,7 +288,9 @@ lane_name        = { any_char_except_pipe } ;
 (*  Optional color tag:                                  *)
 (*    partition #LightGray "名前" { ... }                *)
 (*                                                       *)
-(*  Nested partitions are REJECTED (§3.15.3).            *)
+(*  Nested partitions are REJECTED.                      *)
+(*                                                       *)
+(*  Lane declarations ARE allowed inside (see above).    *)
 
 partition_open   = "partition" , whitespace ,
                    [ color_tag , whitespace ] ,
@@ -200,15 +321,19 @@ any_char_except_quote        = ?any Unicode scalar except "\"" or newline? ;
 (* ===== NOT SUPPORTED (rejected as parse errors) ===== *)
 (*                                                       *)
 (*   - Nested `fork` inside `fork`                       *)
-(*   - `partition` nested deeper than 1 level            *)
-(*   - `while` / `repeat` loops                          *)
+(*   - Nested `partition` inside `partition`             *)
+(*   - `while` / `endwhile` / `repeat` / `repeat while`  *)
 (*   - `detach` / `kill`                                 *)
+(*   - `elseif` / `else if` (rewrite as nested if)       *)
 (*   - Dot-notation entry / exit points                  *)
-(*   - PlantUML "legacy" activity syntax (`(*)` start,    *)
-(*     `-->` rectangle arrows, etc.)                     *)
+(*   - Legacy activity syntax (`(*)` start, `-->` plain  *)
+(*     rectangle arrows)                                 *)
 (*   - BPMN collaboration / pool-to-pool message flow    *)
-(*   - `if (…) then (…) elseif (…) then (…) else (…)`    *)
-(*     multi-way branching (rewrite as nested if)        *)
-(*   - `<<stereotype>>` names other than timer / message *)
-(*     / error are accepted as labels but ignored by     *)
-(*     Events tab (SR-121)                               *)
+(*   - `start` appearing more than once, or inside any   *)
+(*     nested block                                      *)
+(*   - `arrow_label` with no successor node              *)
+(*                                                       *)
+(* Unrecognised `<<stereotype>>` names are NOT rejected; *)
+(* they are accepted as free labels but do not surface   *)
+(* in the Events tab (SR-121) — only timer / message /   *)
+(* error do.                                             *)

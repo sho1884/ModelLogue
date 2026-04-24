@@ -1,0 +1,23 @@
+@startuml
+title タイムアウトと督促付きフロー（3 イベント混在）
+
+|審査員|
+start
+:申込を受付;
+:承認依頼を送信;
+:承認待ち;<<timer>>
+if (期限内に応答あり?) then (yes)
+  :処理を続行;
+  stop
+else (no)
+  :督促メール送信;<<message>>
+  :再度承認待ち;<<timer>>
+  if (期限内に応答あり?) then (yes)
+    :処理を続行;
+    stop
+  else (no)
+    :タイムアウトとしてエスカレーション;<<error>>
+    stop
+  endif
+endif
+@enduml
