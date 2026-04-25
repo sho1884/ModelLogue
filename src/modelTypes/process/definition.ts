@@ -10,6 +10,8 @@ import { processAnalysisTabs } from './analysisTabs';
 import { parse as parseProcess } from './parser';
 import { DEFAULT_PROCESS_SEED_SOURCE } from './preamble';
 import { extractPlantUmlBlock } from '../../services/n8nService';
+import { extractProcessCoordinates } from './svgCoordinates';
+import type { ProcessModel } from './model';
 
 export const processDefinition: ModelTypeDefinition = {
   id: 'process',
@@ -37,11 +39,7 @@ export const processDefinition: ModelTypeDefinition = {
     return extractPlantUmlBlock(aiText) ?? null;
   },
 
-  // Coordinate extraction for auto-markers lands in v7.6 step 7 with
-  // PlantUML activity SVG-structure-aware matching. Until then, an
-  // empty map means "no marker placement for this session" — graceful
-  // degradation, not an error.
-  extractCoordinates() {
-    return new Map();
+  extractCoordinates(svgString: string, model: unknown) {
+    return extractProcessCoordinates(svgString, model as ProcessModel);
   },
 };

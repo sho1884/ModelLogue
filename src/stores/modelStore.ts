@@ -20,13 +20,20 @@ import {
 } from '../modelTypes/requirement/sourceEdit';
 import { diffRequirementModelsVisible } from '../modelTypes/requirement/diff';
 import { placeAutoMarkers } from '../modelTypes/requirement/autoMarkerPlacement';
+import type { ProcessModel } from '../modelTypes/process/model';
+import { diffProcessModels } from '../modelTypes/process/diff';
+import { placeProcessAutoMarkers } from '../modelTypes/process/autoMarkerPlacement';
 
 // v7.5 step 5: `model` is typed as a union so stores and components
 // can discriminate via sessionStore.modelTypeId. State-machine-specific
 // derived state (the two matrices) stays null for non-state-machine
 // sessions. Coordinates / SVG remain generic (any PlantUML source →
 // coordinates extraction is safe for any diagram the Server can render).
-export type ActiveModel = StateMachineModel | RequirementModel | null;
+export type ActiveModel =
+  | StateMachineModel
+  | RequirementModel
+  | ProcessModel
+  | null;
 
 interface ModelStore {
   model: ActiveModel;
@@ -36,16 +43,18 @@ interface ModelStore {
   coordinates: CoordinateMap | null;
   svgString: string | null;
   svgFetchError: string | null;
-  // v7.5: requirement-type sessions stash the pre-apply model here so
-  // the next coordinate refresh can compute added/changed diffs and
-  // place auto-markers on the diagram. Consumed and cleared inside
-  // fetchCoordinates. Null on plain edits / undo / redo — those just
-  // clear any existing auto-markers.
-  pendingAutoMarkerBefore: RequirementModel | null;
+  // v7.5 / v7.6: requirement- and process-type sessions stash the
+  // pre-apply model here so the next coordinate refresh can compute
+  // added/changed diffs and place auto-markers on the diagram.
+  // Consumed and cleared inside fetchCoordinates. Null on plain
+  // edits / undo / redo — those just clear any existing auto-markers.
+  pendingAutoMarkerBefore: RequirementModel | ProcessModel | null;
 
   parseSource: (source: string) => void;
   fetchCoordinates: (source: string) => Promise<void>;
-  setPendingAutoMarkerBefore: (model: RequirementModel | null) => void;
+  setPendingAutoMarkerBefore: (
+    model: RequirementModel | ProcessModel | null
+  ) => void;
 
   // ADR-014 review-state mutators (requirement model only). Applied
   // after parse, before Save. No-op when the active model is not a
@@ -57,6 +66,10 @@ interface ModelStore {
 
 function isRequirementModel(m: ActiveModel): m is RequirementModel {
   return !!(m && 'requirements' in (m as object));
+}
+
+function isProcessModel(m: ActiveModel): m is ProcessModel {
+  return !!(m && 'rootBody' in (m as object));
 }
 
 export const useModelStore = create<ModelStore>((set, get) => ({
@@ -134,18 +147,37 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       const coords = extracted && extracted.size > 0 ? extracted : null;
       set({ coordinates: coords, svgString, svgFetchError: null });
 
-      // Auto-marker refresh for requirement-type sessions. If the apply
-      // pipeline stashed a before-model via setPendingAutoMarkerBefore,
-      // diff it against the just-parsed after-model and draw green /
-      // amber rectangles at the extracted positions. Plain edits (no
-      // pending) just clear any stale auto-markers so the diagram stays
-      // clean between applies.
+      // Auto-marker refresh (v7.5 requirement + v7.6 process). If the
+      // apply pipeline stashed a before-model via
+      // setPendingAutoMarkerBefore, diff it against the just-parsed
+      // after-model and draw green / amber rectangles at the extracted
+      // positions. Plain edits (no pending) just clear any stale
+      // auto-markers so the diagram stays clean between applies.
       if (modelTypeId === 'requirement') {
         const before = get().pendingAutoMarkerBefore;
         const after = isRequirementModel(model) ? model : null;
-        if (before && after && coords) {
-          const diff = diffRequirementModelsVisible(before, after);
+        if (
+          before &&
+          after &&
+          coords &&
+          'requirements' in (before as object)
+        ) {
+          const diff = diffRequirementModelsVisible(
+            before as RequirementModel,
+            after
+          );
           const markers = placeAutoMarkers(diff, coords);
+          useMarkerStore.getState().replaceAutoMarkers(markers);
+        } else {
+          useMarkerStore.getState().clearAutoMarkers();
+        }
+        if (before) set({ pendingAutoMarkerBefore: null });
+      } else if (modelTypeId === 'process') {
+        const before = get().pendingAutoMarkerBefore;
+        const after = isProcessModel(model) ? model : null;
+        if (before && after && coords && 'rootBody' in (before as object)) {
+          const diff = diffProcessModels(before as ProcessModel, after);
+          const markers = placeProcessAutoMarkers(diff, coords);
           useMarkerStore.getState().replaceAutoMarkers(markers);
         } else {
           useMarkerStore.getState().clearAutoMarkers();
