@@ -6,7 +6,8 @@ import { useModelStore } from './modelStore';
 import { useMarkerStore } from './markerStore';
 import { useRequirementsStore } from './requirementsStore';
 import { buildMarkerContext } from '../services/markerContext';
-import grammarSpec from '../grammars/stateDiagram.ebnf?raw';
+import stateMachineGrammar from '../grammars/stateDiagram.ebnf?raw';
+import processGrammar from '../grammars/processDiagram.ebnf?raw';
 import {
   getDefaultModelTypeDefinition,
   getModelTypeDefinition,
@@ -128,6 +129,17 @@ async function sendAndAutoReask(
     history,
     userContent
   );
+
+  // v7.6: grammar spec switches per session type. state-machine keeps
+  // stateDiagram.ebnf, process uses processDiagram.ebnf, requirement
+  // sessions don't consult a grammar file (CSV exchange — rules live
+  // inline in the system prompt).
+  const grammarSpec =
+    modelTypeId === 'process'
+      ? processGrammar
+      : modelTypeId === 'requirement'
+        ? ''
+        : stateMachineGrammar;
 
   const response = await callChat({
     modelTypeId,
