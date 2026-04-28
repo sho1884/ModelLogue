@@ -174,21 +174,36 @@ async function sendAndAutoReask(
     isSending: false,
   });
 
-  // If the AI gave us a block we were able to turn into source, validate
-  // that source parses. Only retry when the result failed to produce a
-  // model at all; a model with warnings is fine.
+  // Auto-reask if the AI's reply is unusable. Two cases:
+  // (a) parse-failed: a code block exists but our parser rejects it.
+  //     Common for state-machine / process when the AI uses out-of-
+  //     subset constructs (elseif, while, etc).
+  // (b) no-code-block: the AI replied with prose only ("I will
+  //     create..." preamble) and forgot to actually emit the code.
+  //     Observed especially on initial generation after a brand-new
+  //     prompt; LLMs sometimes acknowledge intent without delivering.
+  // In both cases we still have retry budget available; ask for the
+  // right code-block kind for the active model type.
   const suggestedForRetry = typedSuggestedSource ?? response.suggestedSource;
-  if (suggestedForRetry && remainingRetries > 0) {
-    const parseResult = parseForActiveType(suggestedForRetry);
-    const parseFailed = !parseResult.model || parseResult.errors.length > 0;
-    if (parseFailed) {
-      const summary = summariseParseErrors(parseResult.errors);
-      // v7.5: the code-block kind differs per model type (```plantuml for
-      // state-machine, ```csv for requirement). Ask for the right one so
-      // the AI doesn't bounce between the two on the retry.
-      const retryBlockLabel =
-        modelTypeId === 'requirement' ? '```csv' : '```plantuml';
-      const retryContent =
+  const noCodeBlock = !suggestedForRetry;
+  const parseResult = suggestedForRetry
+    ? parseForActiveType(suggestedForRetry)
+    : null;
+  const parseFailed =
+    parseResult !== null &&
+    (!parseResult.model || parseResult.errors.length > 0);
+  if ((noCodeBlock || parseFailed) && remainingRetries > 0) {
+    const retryBlockLabel =
+      modelTypeId === 'requirement' ? '```csv' : '```plantuml';
+    let retryContent: string;
+    if (noCodeBlock) {
+      retryContent =
+        responseLanguage === 'ja'
+          ? `応答にコードブロックが含まれていませんでした。完全な ${retryBlockLabel} コードブロックひとつだけを返してください。前置きや「作成します」の宣言は不要です。`
+          : `Your reply did not contain a code block. Please respond with exactly one complete ${retryBlockLabel} code block — no preamble, no "I will create..." narration, just the code.`;
+    } else {
+      const summary = summariseParseErrors(parseResult!.errors);
+      retryContent =
         (responseLanguage === 'ja'
           ? 'その応答は ModelLogue のサブセット/形式ではパースできませんでした。エラー: '
           : "That reply did not parse under ModelLogue's supported subset/format. Errors: ") +
@@ -196,18 +211,18 @@ async function sendAndAutoReask(
         (responseLanguage === 'ja'
           ? `。定義に従って、もう一度だけ ${retryBlockLabel} コードブロックを出し直してください。`
           : `. Please regenerate — emit only one ${retryBlockLabel} code block that conforms to the spec you were given.`);
-      const retryUser: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: retryContent,
-        timestamp: now(),
-      };
-      set({
-        messages: [...get().messages, retryUser],
-        isSending: true,
-      });
-      await sendAndAutoReask(retryContent, remainingRetries - 1, set, get);
     }
+    const retryUser: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: retryContent,
+      timestamp: now(),
+    };
+    set({
+      messages: [...get().messages, retryUser],
+      isSending: true,
+    });
+    await sendAndAutoReask(retryContent, remainingRetries - 1, set, get);
   }
 }
 
