@@ -14,6 +14,8 @@ import {
 } from '../modelTypes/registry';
 import type { StateMachineModel } from '../modelTypes/state-machine/model';
 import type { RequirementModel } from '../modelTypes/requirement/model';
+import type { ProcessModel } from '../modelTypes/process/model';
+import { walkProcessNodes } from '../modelTypes/process/model';
 import { modelToRequirementsCsv } from '../modelTypes/requirement/listSerializer';
 
 function activeTypeDefinition() {
@@ -80,6 +82,34 @@ function summariseParseErrors(
     .slice(0, 5)
     .map((e) => `line ${e.line}: ${e.message}`)
     .join('; ');
+}
+
+// "Initial-generation context" detector. True when the session has no
+// real model content yet — the user just asked for a first diagram.
+// In that case we DO want to retry on a missing code block, because
+// LLMs frequently reply with "I will create..." preamble and then
+// stop. Outside this case (mid-conversation), prose-only replies are
+// normal dialog and we leave them alone (see
+// feedback_chat_must_allow_dialog memory).
+function isInitialGenerationContext(
+  modelTypeId: 'state-machine' | 'requirement' | 'process',
+  model: unknown
+): boolean {
+  if (model === null || model === undefined) return true;
+  if (modelTypeId === 'state-machine' && 'states' in (model as object)) {
+    return (model as StateMachineModel).states.length === 0;
+  }
+  if (modelTypeId === 'requirement' && 'requirements' in (model as object)) {
+    return (model as RequirementModel).requirements.length === 0;
+  }
+  if (modelTypeId === 'process' && 'rootBody' in (model as object)) {
+    let hasTask = false;
+    walkProcessNodes((model as ProcessModel).rootBody, (n) => {
+      if (n.kind === 'task') hasTask = true;
+    });
+    return !hasTask;
+  }
+  return false;
 }
 
 // Runs one user→assistant round-trip. If the response's suggestedSource
@@ -174,32 +204,46 @@ async function sendAndAutoReask(
     isSending: false,
   });
 
-  // Auto-reask is for ONE case only:
-  //   - the AI returned a code block AND our parser rejects it.
+  // Auto-reask covers two cases — but ONLY two, deliberately:
   //
-  // We deliberately do NOT auto-reask when the AI replied with prose
-  // only (no code block). Prose responses are a normal part of multi-
-  // turn chat — the AI may be asking a clarifying question, suggesting
-  // an approach for the user to agree with, or pointing out a trade-
-  // off. Forcing a code-block on every reply would turn ModelLogue
-  // into a one-shot edit conveyor belt and remove the reviewer's
-  // ability to discuss intent before committing changes.
+  // (1) parse-failed: the AI emitted a code block but our parser
+  //     rejected it (out-of-subset construct, broken syntax). Always
+  //     retried because there's clearly an intent to commit a
+  //     change; we just need the AI to fix the syntax.
   //
-  // When the user is ready for the AI to actually produce / revise
-  // the model, they say so in chat (e.g. "OK, apply that" or "Show
-  // me the PlantUML now"). The AI's next reply will then carry a
-  // code block, which apply / parse / auto-marker pipeline picks up
-  // normally.
+  // (2) initial-generation + no code block: the session has no real
+  //     model yet (user just hit Generate model / first chat turn)
+  //     and the AI replied with prose-only ("I will create..." /
+  //     "以下に示します"). Retry once asking for the actual code
+  //     because the dialog hasn't started yet — there's nothing to
+  //     discuss until a first diagram exists.
+  //
+  // Mid-conversation prose-only replies are NOT retried. Once a
+  // model exists, prose ("I suggest doing X" / "What about Y?") is
+  // a legitimate chat move and forcing code would kill the dialog.
+  // See memory feedback_chat_must_allow_dialog for the full reasoning.
+  //
+  // The "model is empty" check uses the BEFORE-call model from the
+  // store — the just-arrived AI reply hasn't applied anything yet.
   const suggestedForRetry = typedSuggestedSource ?? response.suggestedSource;
-  if (suggestedForRetry && remainingRetries > 0) {
-    const parseResult = parseForActiveType(suggestedForRetry);
-    const parseFailed =
-      !parseResult.model || parseResult.errors.length > 0;
+  const noCodeBlock = !suggestedForRetry;
+  const isInitialGen = isInitialGenerationContext(modelTypeId, model);
+  const parseResult = suggestedForRetry
+    ? parseForActiveType(suggestedForRetry)
+    : null;
+  const parseFailed =
+    parseResult !== null &&
+    (!parseResult.model || parseResult.errors.length > 0);
+  const shouldRetry =
+    remainingRetries > 0 &&
+    (parseFailed || (noCodeBlock && isInitialGen));
+  if (shouldRetry) {
+    const retryBlockLabel =
+      modelTypeId === 'requirement' ? '```csv' : '```plantuml';
+    let retryContent: string;
     if (parseFailed) {
-      const summary = summariseParseErrors(parseResult.errors);
-      const retryBlockLabel =
-        modelTypeId === 'requirement' ? '```csv' : '```plantuml';
-      const retryContent =
+      const summary = summariseParseErrors(parseResult!.errors);
+      retryContent =
         (responseLanguage === 'ja'
           ? 'その応答は ModelLogue のサブセット/形式ではパースできませんでした。エラー: '
           : "That reply did not parse under ModelLogue's supported subset/format. Errors: ") +
@@ -207,18 +251,24 @@ async function sendAndAutoReask(
         (responseLanguage === 'ja'
           ? `。定義に従って、もう一度だけ ${retryBlockLabel} コードブロックを出し直してください。`
           : `. Please regenerate — emit only one ${retryBlockLabel} code block that conforms to the spec you were given.`);
-      const retryUser: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: retryContent,
-        timestamp: now(),
-      };
-      set({
-        messages: [...get().messages, retryUser],
-        isSending: true,
-      });
-      await sendAndAutoReask(retryContent, remainingRetries - 1, set, get);
+    } else {
+      // initial-generation + no code block path
+      retryContent =
+        responseLanguage === 'ja'
+          ? `初回生成です。応答にコードブロックが含まれていませんでした。完全な ${retryBlockLabel} コードブロックひとつを返してください。前置きの宣言は不要です（説明はコードの後でも可）。`
+          : `This is the initial generation. Your reply contained no code block. Please respond with exactly one complete ${retryBlockLabel} code block (no "I will create..." preamble — explanation can come after the code if needed).`;
     }
+    const retryUser: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: retryContent,
+      timestamp: now(),
+    };
+    set({
+      messages: [...get().messages, retryUser],
+      isSending: true,
+    });
+    await sendAndAutoReask(retryContent, remainingRetries - 1, set, get);
   }
 }
 
