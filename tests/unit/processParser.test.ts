@@ -186,6 +186,143 @@ stop
     expect(withSpace.errors).toEqual([]);
     expect(withSpace.model).not.toBeNull();
   });
+
+  // ===== TOLERANCES (parser-only acceptance, not in spec) =====
+  // See processDiagram.ebnf §TOLERANCES.
+
+  describe('Tolerance T-1: arrow label before structural closer', () => {
+    it('drops a pending arrow label that lands right before `else`', () => {
+      const r = parse(`@startuml
+start
+:t1;
+if (cond?) then (yes)
+  :t2;
+  -> 中間ラベル;
+else (no)
+  :t3;
+endif
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+      // The dropped label must not surface anywhere — no node carries
+      // it as incomingLabel.
+      const carries = (lbl: string): boolean => {
+        let found = false;
+        const walk = (body: typeof r.model.rootBody): void => {
+          for (const n of body) {
+            if (n.incomingLabel === lbl) found = true;
+            if (n.kind === 'if') {
+              walk(n.thenBranch);
+              walk(n.elseBranch);
+            } else if (n.kind === 'fork') {
+              for (const b of n.branches) walk(b);
+            } else if (n.kind === 'partition') {
+              walk(n.body);
+            }
+          }
+        };
+        walk(r.model!.rootBody);
+        return found;
+      };
+      expect(carries('中間ラベル')).toBe(false);
+    });
+
+    it('drops a pending arrow label right before `endif`', () => {
+      const r = parse(`@startuml
+start
+:t1;
+if (cond?) then (yes)
+  :t2;
+else (no)
+  :t3;
+  -> 終端ラベル;
+endif
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+    });
+
+    it('drops a pending arrow label right before `fork again`', () => {
+      const r = parse(`@startuml
+start
+fork
+  :a1;
+  -> mid;
+fork again
+  :b1;
+end fork
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+    });
+
+    it('drops a pending arrow label right before `end fork`', () => {
+      const r = parse(`@startuml
+start
+fork
+  :a1;
+fork again
+  :b1;
+  -> last;
+end fork
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+    });
+
+    it('drops a pending arrow label right before partition `}`', () => {
+      const r = parse(`@startuml
+start
+partition "P" {
+  :p1;
+  -> last;
+}
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+    });
+
+    it('a label with a real successor is still attached normally', () => {
+      const r = parse(`@startuml
+start
+:t1;
+-> 通常ラベル;
+:t2;
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      const t2 = r.model!.rootBody.find(
+        (n) => n.kind === 'task' && n.label === 't2'
+      );
+      expect(t2?.incomingLabel).toBe('通常ラベル');
+    });
+
+    it('exact failure case from real-AI debug 2026-04-28 now parses', () => {
+      // Reduced from the live-AI debug capture: arrow label inside
+      // then-branch followed by `else (...)` then `endif` then a
+      // second arrow label and the next task.
+      const r = parse(`@startuml
+|行員|
+start
+:申込内容を確認;
+if (本人確認が必要か?) then (はい)
+  :本人確認を実施;
+  -> 本人確認結果;
+else (いいえ)
+endif
+-> 口座開設指示;
+:口座を開設;
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+    });
+  });
 });
 
 describe('processParser — rejected corpus', () => {

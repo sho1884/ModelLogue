@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:live": "playwright test tests/e2e-live"
+    "test:e2e:live": "playwright test --config playwright-live.config.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",

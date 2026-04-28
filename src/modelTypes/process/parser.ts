@@ -354,6 +354,11 @@ export function parse(source: string): ProcessParseResult {
         i++;
         continue;
       }
+      // Tolerance T-1 (see processDiagram.ebnf §TOLERANCES): a
+      // pending arrow label here was meant for the then-branch's
+      // terminal edge. We have no node in our model to attach it
+      // to, so silently drop. Spec rejects this; parser absorbs.
+      pendingIncomingLabel = null;
       const ifCtx = contextStack.pop()!;
       const ifNode = ifCtx.containerNode as ProcessIf;
       ifNode.elseLabel = elseMatch[1].trim();
@@ -381,6 +386,9 @@ export function parse(source: string): ProcessParseResult {
           '`endif` without an `else` clause — every if must include `else (...)` so Scenarios rows carry a readable branch-taken value (§3.15.3)'
         );
       }
+      // Tolerance T-1: drop a pending arrow label that arrived
+      // from the closing branch's terminal edge.
+      pendingIncomingLabel = null;
       contextStack.pop();
       i++;
       continue;
@@ -427,6 +435,9 @@ export function parse(source: string): ProcessParseResult {
         i++;
         continue;
       }
+      // Tolerance T-1: drop a pending label from the previous
+      // branch's terminal edge.
+      pendingIncomingLabel = null;
       const prevCtx = contextStack.pop()!;
       const forkNode = prevCtx.containerNode as ProcessFork;
       const newBranch: ProcessNode[] = [];
@@ -447,6 +458,9 @@ export function parse(source: string): ProcessParseResult {
         i++;
         continue;
       }
+      // Tolerance T-1: drop a pending label from the last
+      // branch's terminal edge.
+      pendingIncomingLabel = null;
       contextStack.pop();
       i++;
       continue;
@@ -488,6 +502,9 @@ export function parse(source: string): ProcessParseResult {
         i++;
         continue;
       }
+      // Tolerance T-1: drop a pending label that arrived from the
+      // partition body's terminal edge.
+      pendingIncomingLabel = null;
       contextStack.pop();
       i++;
       continue;
