@@ -27,3 +27,14 @@ n8n_data/
 
 # Logs
 *.log
+
+# Playwright artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Real-AI debug specs (cost real Gemini quota; manual / local only)
+tests/e2e-live/
+
+# Throwaway probes (pre-test environment validation, not committed)
+tests/_*.mjs
