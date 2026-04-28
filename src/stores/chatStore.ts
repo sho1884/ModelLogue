@@ -174,36 +174,32 @@ async function sendAndAutoReask(
     isSending: false,
   });
 
-  // Auto-reask if the AI's reply is unusable. Two cases:
-  // (a) parse-failed: a code block exists but our parser rejects it.
-  //     Common for state-machine / process when the AI uses out-of-
-  //     subset constructs (elseif, while, etc).
-  // (b) no-code-block: the AI replied with prose only ("I will
-  //     create..." preamble) and forgot to actually emit the code.
-  //     Observed especially on initial generation after a brand-new
-  //     prompt; LLMs sometimes acknowledge intent without delivering.
-  // In both cases we still have retry budget available; ask for the
-  // right code-block kind for the active model type.
+  // Auto-reask is for ONE case only:
+  //   - the AI returned a code block AND our parser rejects it.
+  //
+  // We deliberately do NOT auto-reask when the AI replied with prose
+  // only (no code block). Prose responses are a normal part of multi-
+  // turn chat — the AI may be asking a clarifying question, suggesting
+  // an approach for the user to agree with, or pointing out a trade-
+  // off. Forcing a code-block on every reply would turn ModelLogue
+  // into a one-shot edit conveyor belt and remove the reviewer's
+  // ability to discuss intent before committing changes.
+  //
+  // When the user is ready for the AI to actually produce / revise
+  // the model, they say so in chat (e.g. "OK, apply that" or "Show
+  // me the PlantUML now"). The AI's next reply will then carry a
+  // code block, which apply / parse / auto-marker pipeline picks up
+  // normally.
   const suggestedForRetry = typedSuggestedSource ?? response.suggestedSource;
-  const noCodeBlock = !suggestedForRetry;
-  const parseResult = suggestedForRetry
-    ? parseForActiveType(suggestedForRetry)
-    : null;
-  const parseFailed =
-    parseResult !== null &&
-    (!parseResult.model || parseResult.errors.length > 0);
-  if ((noCodeBlock || parseFailed) && remainingRetries > 0) {
-    const retryBlockLabel =
-      modelTypeId === 'requirement' ? '```csv' : '```plantuml';
-    let retryContent: string;
-    if (noCodeBlock) {
-      retryContent =
-        responseLanguage === 'ja'
-          ? `応答にコードブロックが含まれていませんでした。完全な ${retryBlockLabel} コードブロックひとつだけを返してください。前置きや「作成します」の宣言は不要です。`
-          : `Your reply did not contain a code block. Please respond with exactly one complete ${retryBlockLabel} code block — no preamble, no "I will create..." narration, just the code.`;
-    } else {
-      const summary = summariseParseErrors(parseResult!.errors);
-      retryContent =
+  if (suggestedForRetry && remainingRetries > 0) {
+    const parseResult = parseForActiveType(suggestedForRetry);
+    const parseFailed =
+      !parseResult.model || parseResult.errors.length > 0;
+    if (parseFailed) {
+      const summary = summariseParseErrors(parseResult.errors);
+      const retryBlockLabel =
+        modelTypeId === 'requirement' ? '```csv' : '```plantuml';
+      const retryContent =
         (responseLanguage === 'ja'
           ? 'その応答は ModelLogue のサブセット/形式ではパースできませんでした。エラー: '
           : "That reply did not parse under ModelLogue's supported subset/format. Errors: ") +
@@ -211,18 +207,18 @@ async function sendAndAutoReask(
         (responseLanguage === 'ja'
           ? `。定義に従って、もう一度だけ ${retryBlockLabel} コードブロックを出し直してください。`
           : `. Please regenerate — emit only one ${retryBlockLabel} code block that conforms to the spec you were given.`);
+      const retryUser: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: retryContent,
+        timestamp: now(),
+      };
+      set({
+        messages: [...get().messages, retryUser],
+        isSending: true,
+      });
+      await sendAndAutoReask(retryContent, remainingRetries - 1, set, get);
     }
-    const retryUser: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: retryContent,
-      timestamp: now(),
-    };
-    set({
-      messages: [...get().messages, retryUser],
-      isSending: true,
-    });
-    await sendAndAutoReask(retryContent, remainingRetries - 1, set, get);
   }
 }
 
