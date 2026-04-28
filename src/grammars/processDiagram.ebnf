@@ -1,5 +1,5 @@
 (* ModelLogue PlantUML Process Diagram Subset Grammar *)
-(* Version: 1.1                                         *)
+(* Version: 1.2                                         *)
 (* Reference: ADR-009 (minimal-subset guardrails),       *)
 (*            ADR-012 (model-type plugin architecture),  *)
 (*            §3.15 Requirements_Specification.md        *)
@@ -18,6 +18,15 @@
 (*     - arrow label placement rules spelled out         *)
 (*     - start cardinality = exactly once; stop/end      *)
 (*       cardinality = one or more                       *)
+(*   1.2 (2026-04-25): keyword spelling variants         *)
+(*     - `endif` and `end if` (with internal whitespace) *)
+(*       are both accepted forms — PlantUML treats them  *)
+(*       as synonyms and Gemini-class LLMs frequently    *)
+(*       generate the two-word form because that's what  *)
+(*       most public examples use                        *)
+(*     - `endwhile` and `end while` symmetrically both   *)
+(*       reject (loops still aren't in the subset, but   *)
+(*       both spellings are caught now)                  *)
 (*                                                       *)
 (* Purpose: Define the ONLY syntax ModelLogue accepts    *)
 (* for the `process` model type (UR-015, v7.6). Any      *)
@@ -246,7 +255,7 @@ if_construct     = if_head , newline ,
                    { body_line , newline } ,
                    else_clause , newline ,
                    { body_line , newline } ,
-                   "endif" ;
+                   endif_keyword ;
 
 if_head          = "if" , whitespace ,
                    "(" , condition , ")" , whitespace ,
@@ -255,6 +264,11 @@ if_head          = "if" , whitespace ,
 
 else_clause      = "else" , whitespace ,
                    "(" , branch_label , ")" ;
+
+(* PlantUML accepts both `endif` and `end if` as synonyms.       *)
+(* `end if` may have any whitespace between the two words        *)
+(* (single space is conventional; tab also works). v1.2.         *)
+endif_keyword    = "endif" | "end" , whitespace , "if" ;
 
 condition        = { any_char_except_close_paren } ;
 branch_label     = { any_char_except_close_paren } ;
@@ -361,7 +375,10 @@ any_char_except_quote        = ?any Unicode scalar except "\"" or newline? ;
 (*                                                       *)
 (*   - Nested `fork` inside `fork`                       *)
 (*   - Nested `partition` inside `partition`             *)
-(*   - `while` / `endwhile` / `repeat` / `repeat while`  *)
+(*   - `while` / `endwhile` / `end while` / `repeat` /   *)
+(*     `repeat while` (loops are out of scope; both      *)
+(*     spelling variants are rejected for symmetry with  *)
+(*     `endif` / `end if` acceptance)                    *)
 (*   - `detach` / `kill`                                 *)
 (*   - `elseif` / `else if` (rewrite as nested if)       *)
 (*   - Dot-notation entry / exit points                  *)
