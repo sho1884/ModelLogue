@@ -158,6 +158,34 @@ describe('processParser — accepted corpus', () => {
     expect(allExternals).toContain('ブラックリスト照会サービス');
     expect(allExternals).toContain('契約管理システム');
   });
+
+  it('accepts both `endif` and `end if` (PlantUML supports both spellings)', () => {
+    const noSpace = parse(`@startuml
+start
+:t1;
+if (cond?) then (yes)
+  :t2;
+else (no)
+  :t3;
+endif
+stop
+@enduml`);
+    expect(noSpace.errors).toEqual([]);
+    expect(noSpace.model).not.toBeNull();
+
+    const withSpace = parse(`@startuml
+start
+:t1;
+if (cond?) then (yes)
+  :t2;
+else (no)
+  :t3;
+end if
+stop
+@enduml`);
+    expect(withSpace.errors).toEqual([]);
+    expect(withSpace.model).not.toBeNull();
+  });
 });
 
 describe('processParser — rejected corpus', () => {

@@ -51,7 +51,11 @@ const STOP_RE = /^\s*(stop|end)\s*$/;
 const IF_OPEN_RE =
   /^\s*if\s*\(([^)]*)\)\s*then\s*\(([^)]*)\)\s*$/;
 const ELSE_RE = /^\s*else\s*\(([^)]*)\)\s*$/;
-const ENDIF_RE = /^\s*endif\s*$/;
+// PlantUML accepts both `endif` (one word) and `end if` (two words) —
+// the AI tends to produce the two-word form because that's what's
+// shown in most PlantUML examples on the internet. Reject only when
+// neither form appears.
+const ENDIF_RE = /^\s*end\s*if\s*$/;
 const FORK_RE = /^\s*fork\s*$/;
 const FORK_AGAIN_RE = /^\s*fork\s+again\s*$/;
 const END_FORK_RE = /^\s*end\s+fork\s*$/;
@@ -63,7 +67,8 @@ const STARTUML_RE = /^\s*@startuml\b/;
 const ENDUML_RE = /^\s*@enduml\s*$/;
 
 // Rejected-pattern detectors (ADR-009-style guardrails).
-const REJECT_WHILE_RE = /^\s*(while|endwhile|repeat|repeat\s+while)\b/i;
+const REJECT_WHILE_RE =
+  /^\s*(while|end\s*while|repeat\b)/i;
 const REJECT_DETACH_KILL_RE = /^\s*(detach|kill)\s*$/i;
 const REJECT_ELSEIF_RE = /^\s*(elseif|else\s+if)\b/i;
 const REJECT_LEGACY_START_RE = /^\s*\(\*\)\s*-->/;
