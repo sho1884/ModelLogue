@@ -1298,11 +1298,21 @@ process_diagram:
     component: src/modelTypes/process/roles.ts + RolesView tab
     status: planned
     notes: |
-      UAT reviewer's "who does what" inventory. Hand-off points are
-      the directed arrows that cross a lane boundary — they are the
-      places where the process relies on someone handing over an
-      artifact to someone else, and are therefore high-value review
-      material.
+      Reviewer's "who does what" inventory. Lanes participate as
+      actors regardless of whether they are humans, organisational
+      units, or systems — ModelLogue is a system-design review
+      tool, so the systems the project is designing / modifying
+      are first-class participants and appear as lanes too. Lanes
+      that should NOT be participants (third-party systems,
+      existing-and-untouched repositories) are expressed as
+      `**外部:**` notes per SR-125 instead.
+
+      Hand-off points are the directed arrows that cross a lane
+      boundary — the places where the flow relies on one
+      participant handing control / data to another. They are
+      high-value review material because they mark the
+      organisational and integration boundaries each test has to
+      coordinate across.
     acceptance_criteria:
       - "One row per swim lane (`|Actor|` declaration)"
       - "Each row lists the tasks executed in that lane"
@@ -1364,14 +1374,25 @@ process_diagram:
     component: src/modelTypes/process/externals.ts + ExternalsView tab
     status: planned
     notes: |
-      Reviewers distinguish between HUMAN / ORGANIZATIONAL roles
-      (captured as swim lanes per SR-122) and EXTERNAL IT SYSTEMS /
-      REPOSITORIES (payment gateways, DBs, legacy backend services).
-      PlantUML activity has no freely-placed object outside the flow,
-      so external IT elements are expressed as sticky-note-shaped
-      annotations attached to the task that touches them — notes are
-      visually distinct from tasks (yellow, dog-eared corner) and
-      semantically correct (they carry no inter-note ordering).
+      ModelLogue is a system-design review tool. The default
+      participation of any actor in a process diagram — human role,
+      organisational unit, or SYSTEM — is the swim lane (SR-122).
+      The `**外部:**` note pattern is reserved for systems and
+      repositories that are explicitly OUT OF the project's design
+      scope (third-party APIs, existing systems the project will
+      not modify, regulatory systems, etc.). The reviewer / AI
+      decides "external vs participant" by reading the requirements
+      text for explicit cues like 外部 / external / 他社の /
+      既存の-で-触らない; absent such cues, the system goes in a
+      lane.
+
+      PlantUML activity has no freely-placed object outside the
+      flow, so external systems are expressed as sticky-note-shaped
+      annotations attached to the task that touches them — notes
+      are visually distinct from tasks (yellow, dog-eared corner)
+      and semantically correct (they carry no inter-note ordering,
+      matching "this task touches these externals, which have no
+      order amongst themselves").
 
       Convention: a `note right`, `note left`, or multi-line
       `note right\n ... \nend note` block attached to a task may
@@ -1386,10 +1407,7 @@ process_diagram:
       the full list of touching tasks.
 
       No graph is drawn between the external and the task; notes
-      are annotations only. This matches the reviewer's intuition
-      that external IT elements have no flow order between them
-      (e.g. "payment API and customer DB" are both touched at some
-      point, but they are not sequenced relative to one another).
+      are annotations only.
 
       The tab is OPTIONAL: a process diagram with no `**外部:**`
       lines in any note yields an empty list; the tab still
