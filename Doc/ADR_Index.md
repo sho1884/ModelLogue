@@ -1294,7 +1294,7 @@ auto-layout が 2D 配置のアンカーを失って図がフラットに展開�
 具体的な変更:
 
 1. データモデル: `Requirement` 型に `level` と `group` を追加。
-2. CSV 形式（SR-113）: 末尾に 2 列を追加して 11 列にする。`id, statement, type, text, contained_in, derives_from, hidden, deleted, note, level, group` 空セルは null。既存 9 列形式の CSV も読み込み可能（後方互換）。
+2. CSV 形式（SR-113）: 末尾に 2 列を追加して 11 列で確定。`id, statement, type, text, contained_in, derives_from, hidden, deleted, note, level, group` 空セルは null。本プロジェクトは未公開のため後方互換は取らない — CSV は常に 11 列、列数が違うものはパースエラーで弾く。
 3. PlantUML 生成器: `groupingAxis` パラメータを受け取り、選ばれた軸で package ブロックを構築。冒頭に `top to bottom direction` を出して上下並びを安定化。
 4. AI プロンプト: level の値を埋めるべき場面を例示し、group は「このレビューで切りたい軸」を 1 種類だけ書くこと、複数軸を同時に埋めないことを明記する。
 5. 解析: 孤立要求検出 (SR-112) は level を考慮できるよう拡張可能。例：「system レベル要求は user レベル要求への derive を 1 つ以上持つべき」。これは別 SR で扱う。
@@ -1325,7 +1325,7 @@ auto-layout が 2D 配置のアンカーを失って図がフラットに展開�
 
 **受け入れる負債・制約:**
 
-- CSV 形式が 2 列増える（データモデル移行、AI プロンプト再学習、既存 CSV はそのまま読めるが round-trip では新列が空セルとして出る）
+- CSV 形式が 2 列増える（データモデル変更、AI プロンプト再学習、生成側／取り込み側ともに 11 列前提に書き直し）
 - 生成器 API に `groupingAxis` パラメータが増える。デフォルト挙動の決定が必要（推奨：level も group も全行 null なら type、それ以外は埋まっている軸）
 - 一図一軸はドキュメントと AI プロンプトでの規律であり、型システムでは強制されない。ユーザーが多軸 CSV を作ると不格好な出力になる余地がある
 
@@ -1333,6 +1333,6 @@ auto-layout が 2D 配置のアンカーを失って図がフラットに展開�
 
 - level の値域（user/system/design）が業種によっては足りない可能性（domain / hardware / interface 等）。最初は厳密に始めて、必要になれば別 ADR で拡張する
 - AI が level に書くべき内容を group 列に書く誤用が起きうる。プロンプトに明確な例示が必須
-- 既存 dogfood 図（Doc/requirements/diagrams/*.csv）は新列を使った形に再構成が必要。README.md の比較考察も書き直す
+- 現在の dogfood 図（Doc/requirements/diagrams/*.csv）は新列を使った 11 列形に書き直す必要がある。README.md の比較考察も合わせて更新する
 
 ---

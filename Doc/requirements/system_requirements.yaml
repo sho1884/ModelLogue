@@ -1267,22 +1267,18 @@ requirement_diagram:
       diagram is bad practice; if both axes need attention, split
       into separate review sessions.
 
-      CSV schema extension (SR-113 list shape):
-        Existing 9 columns — id, statement, type, text, contained_in,
-        derives_from, hidden, deleted, note — gain TWO trailing
-        columns:
-          ..., level, group
-        Empty cells mean null. Existing 9-column CSVs still parse
-        (parser tolerates a missing tail). Save .csv (listSerializer)
-        emits all 11 columns.
+      CSV schema (SR-113 list shape):
+        11 columns, fixed: id, statement, type, text, contained_in,
+        derives_from, hidden, deleted, note, level, group.
+        Empty cells mean null. The project is pre-public-release, so
+        no 9-column tolerance is provided — a CSV with a different
+        column count is a parse error. Save .csv (listSerializer)
+        always emits all 11 columns.
 
-      Backward compatibility:
-        - Sessions saved before this SR landed have null level / group
-          everywhere — they continue to render and analyze without
-          change.
-        - The default groupingAxis (SR-119) falls back to `type` when
-          both level and group are null for all rows, so the existing
-          flat / type-stereotype rendering remains the no-op default.
+      Default groupingAxis (SR-119) falls back to `type` when both
+      level and group are null for every row, so a CSV that uses
+      none of the new axes still renders sensibly via the existing
+      stereotype-based grouping.
 
       AI prompt (n8n) update:
         - Explain the three axes (type / level / group) and their
@@ -1293,10 +1289,9 @@ requirement_diagram:
           and area inventory (group=area-name).
     acceptance_criteria:
       - "Requirement model has level: 'user' | 'system' | 'design' | null and group: string | null fields"
-      - "csvParser accepts the 11-column form AND the legacy 9-column form (level / group default to null when columns are absent)"
+      - "csvParser accepts only the 11-column form; CSVs with a different column count produce a parse error"
       - "listSerializer (Save .csv) writes all 11 columns; round-trip CSV → model → CSV is byte-stable for the canonical column order"
       - "Unknown level values (anything other than user / system / design or empty) produce a parse error citing the offending row"
-      - "Sessions saved before this SR continue to load and render with null level / group everywhere (no schema migration needed)"
       - "n8n requirement-type system prompt teaches the 3-axis model and the one-axis-per-CSV rule with at least one cross-tier example and one area-inventory example"
 
   SR-119:

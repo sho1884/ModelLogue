@@ -533,13 +533,13 @@ v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contai
 
 `level` と `group` を同時に埋めて両軸でグルーピングすることは禁止する（ツール側では強制しないが、ドキュメント・AI プロンプト・CSV 例で**入力規律**として明示）。理由は実務観点：「複雑なものを一度にレビューで扱うのは筋が悪い」。同じデータでも軸を変えれば別の問いに答える別の図になるので、CSV を分けるか、軸を切り替える。
 
-**CSV 形式の拡張（SR-113 11 列形）**:
+**CSV 形式（SR-113、11 列で確定）**:
 
 ```
 id, statement, type, text, contained_in, derives_from, hidden, deleted, note, level, group
 ```
 
-末尾の `level, group` が新規。空セルは null。**既存 9 列形式の CSV も読み込み可能**（後方互換、新列は null 扱い）。Save .csv（[`listSerializer.ts`](../../src/modelTypes/requirement/listSerializer.ts)）は 11 列を出力。
+末尾の `level, group` が新規。空セルは null。本プロジェクトは未公開のため後方互換は取らず、**列数が違う CSV はパースエラーで弾く**。Save .csv（[`listSerializer.ts`](../../src/modelTypes/requirement/listSerializer.ts)）は常に 11 列を出力。
 
 **生成器のグルーピング軸選択（SR-119）**:
 
