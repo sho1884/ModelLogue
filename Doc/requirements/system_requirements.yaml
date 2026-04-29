@@ -1246,7 +1246,7 @@ process_diagram:
     function: "Scenarios tab — enumerate every start→end path in the process diagram, one row per path"
     parent: [UR-015]
     component: src/modelTypes/process/paths.ts + ScenariosView tab
-    status: planned
+    status: implemented  # v7.6
     notes: |
       The path-enumeration table is the primary review artifact for a
       process diagram session — each row is a candidate E2E / UAT /
@@ -1282,7 +1282,7 @@ process_diagram:
     function: "Events tab — list every `<<timer>>` / `<<message>>` / `<<error>>` event with the paths that contain it"
     parent: [UR-015]
     component: src/modelTypes/process/events.ts + EventsView tab
-    status: planned
+    status: implemented  # v7.6
     notes: |
       Exception / external-trigger inventory. Lets reviewers confirm
       that every externally-initiated event has a defined handler and
@@ -1296,7 +1296,7 @@ process_diagram:
     function: "Roles tab — list every swim lane with its tasks and the hand-off points to other lanes"
     parent: [UR-015]
     component: src/modelTypes/process/roles.ts + RolesView tab
-    status: planned
+    status: implemented  # v7.6
     notes: |
       Reviewer's "who does what" inventory. Lanes participate as
       actors regardless of whether they are humans, organisational
@@ -1323,7 +1323,7 @@ process_diagram:
     function: "Artifacts tab (optional) — list every `-> 伝票名;` arrow label with the tasks that produce / consume it"
     parent: [UR-015]
     component: src/modelTypes/process/artifacts.ts + ArtifactsView tab
-    status: planned
+    status: implemented  # v7.6
     notes: |
       Maps the flow of tokens / paper slips / digital artifacts
       between tasks. Optional in the sense that the process diagram
@@ -1339,7 +1339,7 @@ process_diagram:
     function: "Parse process-diagram source (PlantUML activity subset, §3.15.3) into ProcessModel"
     parent: [UR-015]
     component: src/modelTypes/process/parser.ts
-    status: planned
+    status: implemented  # v7.6 (EBNF v1.2.2 with T-1 tolerance)
     notes: |
       Accepts the PlantUML activity-diagram subset defined in
       `src/grammars/processDiagram.ebnf`:
@@ -1372,7 +1372,7 @@ process_diagram:
     function: "Externals tab — list external IT systems / repositories referenced from task notes, with their touching tasks"
     parent: [UR-015]
     component: src/modelTypes/process/externals.ts + ExternalsView tab
-    status: planned
+    status: implemented  # v7.6
     notes: |
       ModelLogue is a system-design review tool. The default
       participation of any actor in a process diagram — human role,
