@@ -90,4 +90,96 @@ Idle --> Active : start
     const r = diagnoseAlternativeTypes(stateSource, 'state-machine', 0);
     expect(r).toBeNull();
   });
+
+  it('returns the full ParseSuggestion shape (AC #2)', () => {
+    const reqSource = `@startuml
+$fReq("R1", "light up the room")
+$fReq("R2", "emit visible light")
+$contain("R1", "R2")
+@enduml`;
+    const r = diagnoseAlternativeTypes(reqSource, 'state-machine', 7);
+    expect(r).toEqual({
+      activeTypeId: 'state-machine',
+      activeErrorCount: 7,
+      suggestedTypeId: 'requirement',
+      suggestedErrorCount: 0,
+    });
+  });
+
+  it('stays silent when more than one alternative parses cleanly (AC #4 — ambiguous tie)', () => {
+    // Two real parsers won't both accept the same source non-trivially
+    // (each is strict on its own constructs), so we stub the registry
+    // with two pretend-parsers that both return clean non-empty
+    // models. The ambiguous-case branch should return null.
+    const stubRegistry = [
+      {
+        id: 'fake-active',
+        label: 'Fake active',
+        description: '',
+        analysisTabs: [],
+        parse: () => ({ model: null, errors: [{ line: 1, message: 'fail' }] }),
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+      {
+        id: 'fake-clean-A',
+        label: 'Fake A',
+        description: '',
+        analysisTabs: [],
+        parse: () => ({ model: { states: ['s'] }, errors: [] }),
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+      {
+        id: 'fake-clean-B',
+        label: 'Fake B',
+        description: '',
+        analysisTabs: [],
+        parse: () => ({ model: { requirements: ['r'] }, errors: [] }),
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+    ] as const;
+    // Source long enough to clear the trivial-floor.
+    const longEnough = 'x'.repeat(50);
+    const r = diagnoseAlternativeTypes(
+      longEnough,
+      'fake-active',
+      3,
+      stubRegistry
+    );
+    expect(r).toBeNull(); // 2 clean alternatives → ambiguous → null
+  });
+
+  it('returns null when an alternative parser throws (defensive)', () => {
+    const stubRegistry = [
+      {
+        id: 'active',
+        label: '',
+        description: '',
+        analysisTabs: [],
+        parse: () => ({ model: null, errors: [{ line: 1, message: 'fail' }] }),
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+      {
+        id: 'thrower',
+        label: '',
+        description: '',
+        analysisTabs: [],
+        parse: () => {
+          throw new Error('parser bug');
+        },
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+    ] as const;
+    const r = diagnoseAlternativeTypes(
+      'x'.repeat(50),
+      'active',
+      3,
+      stubRegistry
+    );
+    expect(r).toBeNull(); // thrower is skipped, no clean candidates → null
+  });
 });

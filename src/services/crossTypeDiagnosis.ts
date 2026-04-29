@@ -8,6 +8,7 @@
 // SR-126 for the precise discipline.
 
 import { MODEL_TYPE_REGISTRY } from '../modelTypes/registry';
+import type { ModelTypeDefinition } from '../modelTypes/types';
 
 /** Minimum trimmed source length before diagnosis runs. Avoids
  *  pestering the user with "switch?" hints on near-empty input
@@ -58,11 +59,17 @@ function modelHasContent(model: unknown): boolean {
  *
  * Caller is expected to provide the active parse result so we don't
  * re-run the active parser here.
+ *
+ * The registry is injectable for testability. Production callers
+ * pass nothing and get the live MODEL_TYPE_REGISTRY; tests pass a
+ * stub to exercise edge cases (ambiguous tie, parser-throws, etc.)
+ * that are hard to construct against the real parsers.
  */
 export function diagnoseAlternativeTypes(
   source: string,
   activeTypeId: string,
-  activeErrorCount: number
+  activeErrorCount: number,
+  registry: ReadonlyArray<ModelTypeDefinition> = MODEL_TYPE_REGISTRY
 ): ParseSuggestion | null {
   // Discipline #1: don't nudge when the active parser is happy.
   if (activeErrorCount === 0) return null;
@@ -72,7 +79,7 @@ export function diagnoseAlternativeTypes(
 
   // Run every other registered parser.
   const cleanCandidates: { typeId: string; errorCount: number }[] = [];
-  for (const def of MODEL_TYPE_REGISTRY) {
+  for (const def of registry) {
     if (def.id === activeTypeId) continue;
     let result;
     try {
