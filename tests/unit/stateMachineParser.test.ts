@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parse } from '../../src/parsers/stateMachineParser';
+import { parse } from '../../src/modelTypes/state-machine/parser';
 
 describe('StateMachineParser', () => {
   // GT-001: Simple two-state machine

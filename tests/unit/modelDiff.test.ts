@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { diffModels, isDiffEmpty } from '../../src/engines/modelDiff';
-import type { StateMachineModel } from '../../src/types/stateMachine';
+import { diffModels, isDiffEmpty } from '../../src/modelTypes/state-machine/diff';
+import type { StateMachineModel } from '../../src/modelTypes/state-machine/model';
 
 function model(
   states: StateMachineModel['states'],

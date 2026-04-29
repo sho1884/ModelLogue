@@ -5,8 +5,8 @@ import { useRequirementsStore } from '../stores/requirementsStore';
 import { useModelStore } from '../stores/modelStore';
 import { stashAutoMarkerBeforeIfApplicable } from '../stores/autoMarkerApply';
 import { enqueueMockResponses, clearMockQueue } from '../services/mockAi';
-import { diffModels } from '../engines/modelDiff';
-import { parse } from '../parsers/stateMachineParser';
+import { diffModels } from '../modelTypes/state-machine/diff';
+import { parse } from '../modelTypes/state-machine/parser';
 import { getModelTypeDefinition } from '../modelTypes/registry';
 import { SCENARIOS, type Scenario } from './scenarios';
 

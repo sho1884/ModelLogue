@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parse } from '../../src/parsers/stateMachineParser';
+import { parse } from '../../src/modelTypes/state-machine/parser';
 
 // Sanity check that the sample source shipped in sessionStore parses cleanly.
 // The sample uses one-level composite states per ADR-009.

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import { extractCoordinates } from '../../src/engines/svgCoordinateExtractor';
-import type { StateMachineModel } from '../../src/types/stateMachine';
+import type { StateMachineModel } from '../../src/modelTypes/state-machine/model';
 
 const model: StateMachineModel = {
   states: [

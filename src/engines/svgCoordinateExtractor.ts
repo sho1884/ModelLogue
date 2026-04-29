@@ -16,7 +16,7 @@
 //   - Final state [*]: two concentric <ellipse> elements
 //   - Links: <g class="link" ...>
 
-import type { StateMachineModel } from '../types/stateMachine';
+import type { StateMachineModel } from '../modelTypes/state-machine/model';
 
 export interface Coordinates {
   x: number;

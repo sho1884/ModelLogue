@@ -1,7 +1,7 @@
 // Tests for composite state support (ADR-009 + GT-020..GT-033)
 
 import { describe, it, expect } from 'vitest';
-import { parse } from '../../src/parsers/stateMachineParser';
+import { parse } from '../../src/modelTypes/state-machine/parser';
 
 describe('Composite state parsing', () => {
   // GT-020

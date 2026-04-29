@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parse } from '../../src/parsers/stateMachineParser';
+import { parse } from '../../src/modelTypes/state-machine/parser';
 import {
   generateStateEventMatrix,
   generateStateStateMatrix,
-} from '../../src/engines/matrixGenerator';
+} from '../../src/modelTypes/state-machine/matrixGenerator';
 import type { MatrixData } from '../../src/types/matrix';
 
 // GT-010 / GT-011: Matrix generation from test_strategy.yaml

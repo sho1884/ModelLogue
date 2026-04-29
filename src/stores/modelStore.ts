@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { StateMachineModel } from '../types/stateMachine';
+import type { StateMachineModel } from '../modelTypes/state-machine/model';
 import type { MatrixData } from '../types/matrix';
-import type { ParseError } from '../types/parser';
+import type { ParseError } from '../modelTypes/state-machine/parseResult';
 import type { CoordinateMap } from '../engines/svgCoordinateExtractor';
 import {
   generateStateEventMatrix,
   generateStateStateMatrix,
-} from '../engines/matrixGenerator';
+} from '../modelTypes/state-machine/matrixGenerator';
 import { fetchSvg } from '../services/plantUmlService';
 import { useSessionStore } from './sessionStore';
 import { useMarkerStore } from './markerStore';

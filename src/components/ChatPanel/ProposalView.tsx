@@ -4,8 +4,8 @@ import {
   extractCoordinates,
   type CoordinateMap,
 } from '../../engines/svgCoordinateExtractor';
-import { isDiffEmpty, type ModelDiff } from '../../engines/modelDiff';
-import type { StateMachineModel } from '../../types/stateMachine';
+import { isDiffEmpty, type ModelDiff } from '../../modelTypes/state-machine/diff';
+import type { StateMachineModel } from '../../modelTypes/state-machine/model';
 import { ProposalModal } from './ProposalModal';
 import {
   getDefaultModelTypeDefinition,

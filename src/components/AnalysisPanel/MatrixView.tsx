@@ -1,8 +1,8 @@
 import type { MatrixData } from '../../types/matrix';
-import type { StateMachineModel } from '../../types/stateMachine';
+import type { StateMachineModel } from '../../modelTypes/state-machine/model';
 import { ExportActions } from '../ExportActions';
 import { matrixToHtml } from '../../engines/matrixSerializer';
-import { modelToCanonicalCsv } from '../../engines/transitionTableSerializer';
+import { modelToCanonicalCsv } from '../../modelTypes/state-machine/transitionTableSerializer';
 import { copyHtmlAndText } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
 import { useSessionStore } from '../../stores/sessionStore';

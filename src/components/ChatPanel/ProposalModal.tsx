@@ -4,9 +4,9 @@ import {
   TransformComponent,
   type ReactZoomPanPinchRef,
 } from 'react-zoom-pan-pinch';
-import type { ModelDiff } from '../../engines/modelDiff';
+import type { ModelDiff } from '../../modelTypes/state-machine/diff';
 import type { CoordinateMap } from '../../engines/svgCoordinateExtractor';
-import { isDiffEmpty } from '../../engines/modelDiff';
+import { isDiffEmpty } from '../../modelTypes/state-machine/diff';
 import {
   buildBeforeOverlay,
   buildAfterOverlay,

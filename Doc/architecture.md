@@ -1098,7 +1098,7 @@ src/
 └── ...既存の上位コンポーネント・ストア...
 ```
 
-既存 import を一括で書き換えるリスクを避けるため、**移設完了後に元の `src/parsers/` / `src/engines/` / `src/types/` は re-export のみの shim ファイルに残す**。shim は v7.6 で削除予定。
+既存 import を一括で書き換えるリスクを避けるため、移設完了後しばらくは元の `src/parsers/` / `src/engines/` / `src/types/` に re-export のみの shim ファイルを残していた。**v7.6 でこの shim 6 本（`stateMachineParser` / `matrixGenerator` / `modelDiff` / `transitionTableSerializer` / `types/parser` / `types/stateMachine`）を撤去**し、全 importer が直接 `src/modelTypes/state-machine/...` を指すようにした（`src/parsers/` ディレクトリは消滅、`src/engines/` と `src/types/` には型非依存ユーティリティのみ残る）。
 
 ### 17.2 ModelTypeDefinition インターフェース
 

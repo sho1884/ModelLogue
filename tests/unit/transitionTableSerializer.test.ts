@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { modelToCanonicalCsv } from '../../src/engines/transitionTableSerializer';
-import { parse } from '../../src/parsers/stateMachineParser';
-import type { StateMachineModel } from '../../src/types/stateMachine';
+import { modelToCanonicalCsv } from '../../src/modelTypes/state-machine/transitionTableSerializer';
+import { parse } from '../../src/modelTypes/state-machine/parser';
+import type { StateMachineModel } from '../../src/modelTypes/state-machine/model';
 
 function parseOrThrow(source: string): StateMachineModel {
   const { model, errors } = parse(source);

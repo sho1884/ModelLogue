@@ -5,7 +5,7 @@
 
 import type { Marker, MarkerGeometry } from '../types/marker';
 import type { CoordinateMap } from '../engines/svgCoordinateExtractor';
-import type { StateMachineModel } from '../types/stateMachine';
+import type { StateMachineModel } from '../modelTypes/state-machine/model';
 
 const COLOR_NAMES: Record<string, string> = {
   red: '赤 (red)',
