@@ -1,0 +1,230 @@
+@startuml
+
+hide circle
+hide empty members
+hide method
+
+!procedure $req($id, $name)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $req($id, $name, $txt)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name, $txt)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name, $txt)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name, $txt)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $contain($Parent, $Child)
+    "$Parent" +-- "$Child"
+!endprocedure
+
+!procedure $derive($Supplier, $Client)
+    "$Supplier" <.. "$Client" : <<deriveReqt>>
+!endprocedure
+
+!procedure $refine($Client, $NamedElement)
+    "$Client" <.. "$NamedElement" : <<refine>>
+!endprocedure
+
+!procedure $satisfy($Req, $Design)
+    "$Req" <.. "$Design" : <<satisfy>>
+!endprocedure
+
+!procedure $verify($Req, $Test)
+    "$Req" <.. "$Test" : <<verify>>
+!endprocedure
+
+!procedure $trace($A, $B)
+    "$A" <.. "$B" : <<trace>>
+!endprocedure
+
+!procedure $copy($Original, $Copy)
+    "$Original" <.. "$Copy" : <<copy>>
+!endprocedure
+
+$req("UR-001", "Review state machine diagram")
+$req("UR-002", "Refer to PlantUML source")
+$req("UR-003", "View state transition table")
+$req("UR-004", "Place markers on the diagram")
+$req("UR-005", "Discuss the model with AI")
+$req("UR-006", "Apply AI suggestions")
+$req("UR-007", "Save review evidence")
+$req("UR-008", "Obtain the PlantUML subset grammar")
+$req("UR-009", "Receive an initial model")
+$req("UR-010", "Close the review session with an outcome")
+$req("UR-011", "Convert between source and table")
+$req("UR-012", "Refer to requirements text")
+$req("UR-013", "Review N-switch coverage test cases")
+$req("UR-014", "Review a requirement diagram")
+$req("UR-015", "Review a business process diagram")
+$fReq("SR-001", "Display PlantUML source (read-only during review; editable while seeding until a parseable model exists)")
+$fReq("SR-002", "Parse PlantUML subset into state machine model")
+$fReq("SR-010", "Display PlantUML SVG with pan and zoom")
+$fReq("SR-011", "Extract element coordinates from PlantUML SVG")
+$fReq("SR-012", "Provide diagram tool selection")
+$fReq("SR-013", "Draw marker by drag")
+$fReq("SR-014", "Manage marker colors from a fixed palette")
+$fReq("SR-015", "Select, move, and resize markers")
+$fReq("SR-016", "Delete marker")
+$fReq("SR-017", "Render marker overlay over the SVG")
+$fReq("SR-020", "Generate State×Event matrix in hybrid (layered) form")
+$fReq("SR-021", "Generate PreState×PostState matrix in hybrid (layered) form")
+$fReq("SR-022", "Provide marker and grammar context to AI")
+$fReq("SR-030", "Send chat message to AI via n8n")
+$fReq("SR-031", "Render chat message list")
+$fReq("SR-032", "Extract PlantUML source from AI response")
+$fReq("SR-033", "Present AI-proposed modifications as a visual before/after model comparison")
+$fReq("SR-034", "Apply proposed source modification")
+$fReq("SR-035", "Undo and Redo applied source modifications")
+$fReq("SR-040", "Manage session state in browser memory")
+$fReq("SR-041", "Save the review session as a JSON file (review evidence)")
+$fReq("SR-060", "Check PlantUML Server health")
+$fReq("SR-061", "Check n8n connectivity")
+$fReq("SR-070", "Render state machine diagram as primary view, with an empty-state guide")
+$fReq("SR-071", "Render resizable analysis panel with tabs built dynamically from ModelTypeDefinition.analysisTabs")
+$fReq("SR-072", "Render chat panel with proposal view")
+$fReq("SR-073", "Select the model type at session seed (one-way, fixed for the session lifetime)")
+$fReq("SR-080", "Provide a Requirements tab holding a short, read-only-during-review requirements text")
+$fReq("SR-081", "Offer the PlantUML subset grammar as a downloadable file")
+$fReq("SR-082", "Generate an initial model from the requirements text")
+$fReq("SR-083", "Open a previously saved review or an externally prepared starter file (file import)")
+$fReq("SR-090", "Compute a model-level diff between two StateMachineModel values")
+$fReq("SR-100", "Export the current PlantUML source from the Source tab")
+$fReq("SR-101", "Export each state-transition matrix from its tab")
+$fReq("SR-102", "Export generated test cases and coverage report from the Test cases tab")
+$fReq("SR-103", "Display N-switch test cases in a dedicated Analysis panel tab, updated reactively from the current model")
+$fReq("SR-110", "Parse requirement-diagram input (macro DSL form and semi-structured seed form) into RequirementModel")
+$fReq("SR-111", "Generate traceability matrix (requirement × requirement, cells marking relation kind)")
+$fReq("SR-112", "Identify orphan requirements (no incoming requirement-to-requirement relation, no outgoing, or both)")
+$fReq("SR-113", "Display requirement list as a table with checkboxes, inline notes, and Copy / Save .csv — derive and contain only, per ADR-013, with soft-delete + reason per ADR-014")
+$fReq("SR-114", "Render-pipeline filter: comment out hidden-requirement declarations and their relations before sending the PlantUML source to PlantUML Server")
+$fReq("SR-115", "Seed new requirement-diagram sessions with the !procedure preamble so the edit buffer is a valid PlantUML source from the first keystroke")
+$fReq("SR-116", "Apply an AI chat reply to a requirement-diagram session: extract the ```csv block, regenerate canonical PlantUML mechanically, auto-apply without a before/after modal")
+$fReq("SR-117", "Auto-place green/amber added/changed markers on the requirement diagram after an AI apply, cleared on every source change")
+$fReq("SR-120", "Scenarios tab — enumerate every start→end path in the process diagram, one row per path")
+$fReq("SR-121", "Events tab — list every `<<timer>>` / `<<message>>` / `<<error>>` event with the paths that contain it")
+$fReq("SR-122", "Roles tab — list every swim lane with its tasks and the hand-off points to other lanes")
+$fReq("SR-123", "Artifacts tab (optional) — list every `-> 伝票名;` arrow label with the tasks that produce / consume it")
+$fReq("SR-124", "Parse process-diagram source (PlantUML activity subset, §3.15.3) into ProcessModel")
+$fReq("SR-125", "Externals tab — list external IT systems / repositories referenced from task notes, with their touching tasks")
+
+$derive("UR-001", "UR-003")
+$derive("UR-001", "UR-011")
+$derive("UR-001", "UR-013")
+$derive("UR-002", "SR-001")
+$derive("UR-009", "SR-001")
+$derive("UR-001", "SR-002")
+$derive("UR-002", "SR-002")
+$derive("UR-003", "SR-002")
+$derive("UR-009", "SR-002")
+$derive("UR-001", "SR-010")
+$derive("UR-001", "SR-011")
+$derive("UR-004", "SR-011")
+$derive("UR-001", "SR-012")
+$derive("UR-004", "SR-012")
+$derive("UR-004", "SR-013")
+$derive("UR-004", "SR-014")
+$derive("UR-004", "SR-015")
+$derive("UR-004", "SR-016")
+$derive("UR-004", "SR-017")
+$derive("UR-003", "SR-020")
+$derive("UR-003", "SR-021")
+$derive("UR-004", "SR-022")
+$derive("UR-005", "SR-022")
+$derive("UR-008", "SR-022")
+$derive("UR-005", "SR-030")
+$derive("UR-005", "SR-031")
+$derive("UR-006", "SR-032")
+$derive("UR-006", "SR-033")
+$derive("UR-006", "SR-034")
+$derive("UR-006", "SR-035")
+$derive("UR-002", "SR-040")
+$derive("UR-005", "SR-040")
+$derive("UR-007", "SR-040")
+$derive("UR-010", "SR-040")
+$derive("UR-007", "SR-041")
+$derive("UR-010", "SR-041")
+$derive("UR-001", "SR-060")
+$derive("UR-005", "SR-061")
+$derive("UR-001", "SR-070")
+$derive("UR-002", "SR-071")
+$derive("UR-003", "SR-071")
+$derive("UR-012", "SR-071")
+$derive("UR-013", "SR-071")
+$derive("UR-014", "SR-071")
+$derive("UR-005", "SR-072")
+$derive("UR-006", "SR-072")
+$derive("UR-009", "SR-073")
+$derive("UR-014", "SR-073")
+$derive("UR-009", "SR-080")
+$derive("UR-012", "SR-080")
+$derive("UR-008", "SR-081")
+$derive("UR-009", "SR-082")
+$derive("UR-007", "SR-083")
+$derive("UR-009", "SR-083")
+$derive("UR-006", "SR-090")
+$derive("UR-007", "SR-100")
+$derive("UR-007", "SR-101")
+$derive("UR-013", "SR-102")
+$derive("UR-013", "SR-103")
+$derive("UR-014", "SR-110")
+$derive("UR-014", "SR-111")
+$derive("UR-014", "SR-112")
+$derive("UR-014", "SR-113")
+$derive("UR-014", "SR-114")
+$derive("UR-014", "SR-115")
+$derive("UR-006", "SR-116")
+$derive("UR-014", "SR-116")
+$derive("UR-004", "SR-117")
+$derive("UR-006", "SR-117")
+$derive("UR-014", "SR-117")
+$derive("UR-015", "SR-120")
+$derive("UR-015", "SR-121")
+$derive("UR-015", "SR-122")
+$derive("UR-015", "SR-123")
+$derive("UR-015", "SR-124")
+$derive("UR-015", "SR-125")
+
+@enduml

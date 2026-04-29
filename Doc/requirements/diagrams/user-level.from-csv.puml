@@ -1,0 +1,107 @@
+@startuml
+
+hide circle
+hide empty members
+hide method
+
+!procedure $req($id, $name)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $req($id, $name, $txt)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name, $txt)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name, $txt)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name, $txt)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $contain($Parent, $Child)
+    "$Parent" +-- "$Child"
+!endprocedure
+
+!procedure $derive($Supplier, $Client)
+    "$Supplier" <.. "$Client" : <<deriveReqt>>
+!endprocedure
+
+!procedure $refine($Client, $NamedElement)
+    "$Client" <.. "$NamedElement" : <<refine>>
+!endprocedure
+
+!procedure $satisfy($Req, $Design)
+    "$Req" <.. "$Design" : <<satisfy>>
+!endprocedure
+
+!procedure $verify($Req, $Test)
+    "$Req" <.. "$Test" : <<verify>>
+!endprocedure
+
+!procedure $trace($A, $B)
+    "$A" <.. "$B" : <<trace>>
+!endprocedure
+
+!procedure $copy($Original, $Copy)
+    "$Original" <.. "$Copy" : <<copy>>
+!endprocedure
+
+$req("UR-001", "Review state machine diagram")
+$req("UR-002", "Refer to the PlantUML source of the current model")
+$req("UR-003", "View state transition table")
+$req("UR-004", "Place markers on the diagram")
+$req("UR-005", "Discuss the model with AI")
+$req("UR-006", "Apply AI suggestions")
+$req("UR-007", "Save review evidence and lift individual artifacts")
+$req("UR-008", "Obtain the PlantUML subset grammar definition")
+$req("UR-009", "Receive an initial model into the review session")
+$req("UR-010", "Close the review session with an outcome")
+$req("UR-011", "Convert between state machine source and table")
+$req("UR-012", "Refer to the target requirements text alongside the model")
+$req("UR-013", "Review N-switch coverage test cases")
+$req("UR-014", "Review a requirement diagram")
+$req("UR-015", "Review a business process / workflow diagram")
+
+$derive("UR-001", "UR-003")
+$derive("UR-001", "UR-011")
+$derive("UR-001", "UR-013")
+
+@enduml
