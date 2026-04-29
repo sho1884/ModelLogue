@@ -1,29 +1,59 @@
 # ModelLogue requirement diagrams (dogfood)
 
 Three views of ModelLogue's own requirements expressed as SR-113 CSV
-inputs to the requirement-diagram model type. The point is to exercise
-the v7.5 + v7.7 (ADR-015) features on the project's actual data, with
-each diagram answering a single review question.
+inputs to the requirement-diagram model type, plus one supplementary
+example showing how internal hierarchies render when both abstraction
+levels have nested structure. The point is to exercise the v7.5 + v7.7
+(ADR-015) features on the project's actual data, with each diagram
+answering a single review question.
 
-## Files (3 review purposes × 1 axis each, per ADR-015)
+## Files
 
-| Review purpose | Axis | CSV (input) | Generated `.puml` |
-|---|---|---|---|
-| UR area inventory: how the user-facing tasks split across review targets | `group` | [urs.csv](urs.csv) | [urs.from-csv.puml](urs.from-csv.puml) |
-| SR component inventory: which functions land in which area of the codebase | `group` | [srs.csv](srs.csv) | [srs.from-csv.puml](srs.from-csv.puml) |
-| Cross-tier coverage: every UR realised by ≥ 1 SR, every SR traced to a UR | `level` | [coverage.csv](coverage.csv) | [coverage.from-csv.puml](coverage.from-csv.puml) |
+| Review purpose | Axis | CSV (input) | Generated `.puml` | Rendered SVG |
+|---|---|---|---|---|
+| UR area inventory: how the user-facing tasks split across review targets | `group` | [urs.csv](urs.csv) | [urs.from-csv.puml](urs.from-csv.puml) | [urs.svg](urs.svg) |
+| SR component inventory: which functions land in which area of the codebase | `group` | [srs.csv](srs.csv) | [srs.from-csv.puml](srs.from-csv.puml) | [srs.svg](srs.svg) |
+| Cross-tier coverage: every UR realised by ≥ 1 SR, every SR traced to a UR | `level` | [coverage.csv](coverage.csv) | [coverage.from-csv.puml](coverage.from-csv.puml) | [coverage.svg](coverage.svg) |
+| Internal hierarchy demo: both UR and SR sides have parent/child contain relations | `level` | [coverage-hierarchical.csv](coverage-hierarchical.csv) | [coverage-hierarchical.from-csv.puml](coverage-hierarchical.from-csv.puml) | [coverage-hierarchical.svg](coverage-hierarchical.svg) |
 
 The `*.from-csv.puml` files are generated mechanically from the
 matching CSV via `csvParser → modelToPlantUml(model, axis)` (the same
-pipeline SR-116 uses on AI replies). Regenerate with:
+pipeline SR-116 uses on AI replies). The `*.svg` files are PlantUML
+Server's render of those `.puml` files. Regenerate with:
 
 ```
 REGEN_FROM_CSV=1 npx vitest run tests/unit/projectRequirementDiagramsFromCsv
+# then re-render the SVGs (assumes PlantUML Server on :8080):
+for f in urs srs coverage coverage-hierarchical; do
+  curl -s -X POST --data-binary @Doc/requirements/diagrams/$f.from-csv.puml \
+    http://localhost:8080/svg/ -o Doc/requirements/diagrams/$f.svg
+done
 ```
 
 Without `REGEN_FROM_CSV`, the test asserts byte-equality between the
 on-disk `.from-csv.puml` and what the converter produces from the
 CSV (deterministic per ADR-011).
+
+## Internal hierarchies (coverage-hierarchical.svg)
+
+The 3 main reviews above happen to be flat at both levels (every UR
+sits at the top level of its package, every SR likewise). The
+`coverage-hierarchical.*` files demonstrate the structure when one or
+both levels have internal `contained_in` relationships:
+
+- **UR side**: `UR-A` parents `UR-A1`, `UR-A2`. `UR-B` parents `UR-B1`.
+- **SR side**: `SR-X` parents `SR-X1`, `SR-X2`.
+- **Cross-tier derive**: `UR-A1 → SR-X`, `UR-A1 → SR-X1`, `UR-A2 → SR-X2`, `UR-B1 → SR-Y`.
+
+In the rendered diagram:
+
+- The 2 `<<Frame>>` packages (`user`, `system`) stay as visual frames per the level axis.
+- Inside each package, `+--` composition arrows show the parent/child hierarchy (UR-A `+--` UR-A1, etc.).
+- Cross-package `<..` derive arrows connect parents-of-derive to children-of-derive across the frames.
+
+This is the SysML / DOORS standard pattern: requirement hierarchy is
+composition (`+--`); requirement-to-requirement traceability is
+derive (`<..`). They coexist without ambiguity.
 
 ## ADR-015 in action: one axis per review
 

@@ -1,0 +1,114 @@
+@startuml
+
+hide circle
+hide empty members
+hide method
+
+!procedure $req($id, $name)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $req($id, $name, $txt)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name, $txt)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name, $txt)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name, $txt)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $contain($Parent, $Child)
+    "$Parent" +-- "$Child"
+!endprocedure
+
+!procedure $derive($Supplier, $Client)
+    "$Supplier" <.. "$Client" : <<deriveReqt>>
+!endprocedure
+
+!procedure $refine($Client, $NamedElement)
+    "$Client" <.. "$NamedElement" : <<refine>>
+!endprocedure
+
+!procedure $satisfy($Req, $Design)
+    "$Req" <.. "$Design" : <<satisfy>>
+!endprocedure
+
+!procedure $verify($Req, $Test)
+    "$Req" <.. "$Test" : <<verify>>
+!endprocedure
+
+!procedure $trace($A, $B)
+    "$A" <.. "$B" : <<trace>>
+!endprocedure
+
+!procedure $copy($Original, $Copy)
+    "$Original" <.. "$Copy" : <<copy>>
+!endprocedure
+
+left to right direction
+
+package "user" <<Frame>> {
+  $req("UR-A", "Top user requirement A")
+  $req("UR-A1", "Sub-requirement A1")
+  $req("UR-A2", "Sub-requirement A2")
+  $req("UR-B", "Top user requirement B")
+  $req("UR-B1", "Sub-requirement B1")
+}
+
+package "system" <<Frame>> {
+  $fReq("SR-X", "System parent X")
+  $fReq("SR-X1", "System child X1")
+  $fReq("SR-X2", "System child X2")
+  $fReq("SR-Y", "System Y")
+}
+
+$contain("UR-A", "UR-A1")
+$contain("UR-A", "UR-A2")
+$contain("UR-B", "UR-B1")
+$derive("UR-A1", "SR-X")
+$contain("SR-X", "SR-X1")
+$derive("UR-A1", "SR-X1")
+$contain("SR-X", "SR-X2")
+$derive("UR-A2", "SR-X2")
+$derive("UR-B1", "SR-Y")
+
+@enduml

@@ -1,0 +1,10 @@
+id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group
+UR-A,Top user requirement A,requirement,,,,,,,user,
+UR-A1,Sub-requirement A1,requirement,,UR-A,,,,,user,
+UR-A2,Sub-requirement A2,requirement,,UR-A,,,,,user,
+UR-B,Top user requirement B,requirement,,,,,,,user,
+UR-B1,Sub-requirement B1,requirement,,UR-B,,,,,user,
+SR-X,System parent X,functional,,,UR-A1,,,,system,
+SR-X1,System child X1,functional,,SR-X,UR-A1,,,,system,
+SR-X2,System child X2,functional,,SR-X,UR-A2,,,,system,
+SR-Y,System Y,functional,,,UR-B1,,,,system,

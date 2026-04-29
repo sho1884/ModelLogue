@@ -36,6 +36,14 @@ const PAIRS: Pair[] = [
     csv: 'Doc/requirements/diagrams/coverage.csv',
     puml: 'Doc/requirements/diagrams/coverage.from-csv.puml',
   },
+  // Hierarchical coverage demo (small fixture): both UR and SR sides
+  // have internal contained_in hierarchies, plus cross-tier derive
+  // arrows. Documents how the package + composition arrows render
+  // when both levels have nested structure (per dogfood Q&A in README).
+  {
+    csv: 'Doc/requirements/diagrams/coverage-hierarchical.csv',
+    puml: 'Doc/requirements/diagrams/coverage-hierarchical.from-csv.puml',
+  },
 ];
 
 const REGEN = process.env.REGEN_FROM_CSV === '1';
