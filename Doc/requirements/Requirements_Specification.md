@@ -824,15 +824,15 @@ BPMN / Activity の形式仕様から派生した「レビュー目的では必�
 
 ### 3.16 Model-type Setup Robustness / モデル型セットアップの堅牢性 (UR-016, v7.7+)
 
-UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保持、(c) 型未指定からの起動。これに対応する SR は段階的に展開する：
+UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保持、(c) 型未指定からの起動。各 sub-problem に 1 つずつ SR を割り当て、要件の重複を避ける：
 
 | Sub-problem | 対応 SR | 状態 |
 |---|---|---|
-| (a) 型ミスマッチの早期検知 | **SR-126** Cross-type parse diagnosis（active parser fail 時に他型 parser も試して suggestion を出す） | 部分的に対応（v7.7 実装済） |
-| (b) 切替時の情報保持 | **未割り当て** ── 専用 SR が要るか、setModelTypeIdKeepingSource を独立 SR として書き起こすか要検討 | 未着手 |
-| (c) 型未指定 bundle からの起動 | **未割り当て** ── n8n 由来の bundle に modelTypeId が無い場合の自動判定。Stage B/C 系 | 未着手 |
+| (a) 型ミスマッチの早期検知 | **SR-126** Cross-type parse diagnosis | 実装済（v7.7） |
+| (b) 切替時の情報保持 | **SR-128** Source-preserving model-type switch | 実装済（v7.7、SR-126 から先行投入） |
+| (c) 型未指定 bundle からの起動 | **SR-129** Auto-detect on bundle without modelTypeId | 未着手 |
 
-#### 3.16.1 SR-126: cross-type parse diagnosis（実装済、UR-016(a) の一部のみ対応）
+#### 3.16.1 SR-126：cross-type parse diagnosis
 
 **動作**:
 
@@ -840,6 +840,15 @@ UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保�
 2. 入力が trivial（trim 後 ≤ 30 文字）でなければ、登録済みの他の `ModelTypeDefinition` の `parse(source)` を全て実行
 3. ある alternative が **エラー 0 件かつ非自明モデル**を返したら、その型 ID を「推奨」として `parseSuggestion` 状態に格納
 4. 0 エラー alternative が複数ある場合は曖昧として推奨せず（ユーザに任せる）
+
+**発火タイミング**：`MainLayout` の `parseSource` useEffect は `currentSource` が変わるたびに走る。currentSource が変わる経路は：
+
+- ユーザが Source タブにペーストした
+- 外部 bundle が `bootstrapFromBundle` 経由で入った
+- AI が「Generate model」で生成したソースが apply された
+- セッション中に何らかの理由で源を編集した
+
+**いずれの入口でも、active 型 parser がエラーなら同時に診断が走り、適合型があれば banner で提案する**。つまり SR-126 は「post-effort（編集中）」だけでなく「pre-effort（投入直後）」も自動的にカバーする。UR-016 (a) の早期検知の要件は、この SR が単独で満たす。
 
 **UI**（SourceEditor のエラー帯下）:
 
@@ -851,13 +860,31 @@ Line 6: ...
 process としてエラー 0 件で解釈できます。 [Switch]
 ```
 
-`Switch` クリックで `setModelTypeIdKeepingSource(suggestedTypeId)` を呼び出し、**現在の `currentSource` を保ったまま型を切り替えて再 parse**。これは header dropdown の `setModelTypeId` とは別アクション（後者は新型の `defaultSeedSource` で source をリセットする）。
+`Switch` クリックで **SR-128** の `setModelTypeIdKeepingSource(suggestedTypeId)` を呼び出す。
 
-**SR-126 が UR-016 の (a) を完全に解決しないこと**: SR-126 のトリガは「parse 失敗後」。ユーザは既にソース投入の労力を払い、active parser でエラー一覧を見せられた段階。**早期検知という言葉の本来の意味（投入直後 / paste 時 / bundle 取り込み時）ではない**。完全な (a) 解決は paste / bundle import 時の自動判定が必要で、それは (c) と重なる別 SR となる。
+#### 3.16.2 SR-128：source-preserving model-type switch
 
-#### 3.16.2 残作業
+「型を選び間違えた、同じソースを別型として再解釈したい」フローを担う独立アクション。`setModelTypeId`（header dropdown 経由）が新型の `defaultSeedSource` でソースをリセットする「新規開始」フローなのに対し、SR-128 の `setModelTypeIdKeepingSource` は **現在の作業状態を保持したまま型だけ差し替える**。
 
-(b) と (c) は SR が立っていない。立てる順序や ADR 必要性を別途議論したうえで、UR-016 の完成度を上げていく。
+**保持対象の契約**:
+
+| 項目 | 動作 | 理由 |
+|---|---|---|
+| `currentSource` | 保持 | この機能の核心 |
+| `sourceHistory` / `redoStack` | 保持 | undo/redo 連続性を維持 |
+| chat messages | 保持 | 対話は新型でも継続性ある |
+| `requirementsText` | 保持 | 自然言語要求は新型でも有効 |
+| 手動マーカー | 保持 | ユーザの注釈は本人責任で残す（座標が新型 diagram で意味薄くなる可能性は受容） |
+| autoMarkers | 再 parse 経由で消える | 旧モデル差分由来、新型では無意味 |
+| 解析タブ active | `'requirements'` にフォールバック | 旧型のタブが新型の `analysisTabs` に無い可能性 |
+
+**ロック**：`setModelTypeId` と同じ。REVIEW phase 開始後（`hasEstablishedModel=true`）/ unknown id / 同一 id では no-op。
+
+**再 parse トリガ**：`MainLayout` の `parseSource` useEffect が `modelTypeId` 変更を検知して新型で parse を走らせる。SR-128 のアクション + SR-126 の banner（呼び出し元）= UR-016 (a) と (b) の連携 UX 全体。
+
+#### 3.16.3 SR-129：未着手
+
+(c) の自動判定は未実装。bundle に `modelTypeId` が無い場合の信頼度しきい値・タイブレーク方針は ADR 級の判断を含むため、別途設計フェーズを設ける。
 
 ---
 

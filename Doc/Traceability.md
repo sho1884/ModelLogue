@@ -103,8 +103,9 @@ flowchart LR
         SR125["SR-125<br/>Externals tab (v7.6, 任意)<br/>note 内 **外部:** 注釈から外部 IT システムを抽出<br/>externals.ts + ExternalsView"]
     end
 
-    subgraph PD2["Parser Diagnostics / パース診断 (v7.7)"]
-        SR126["SR-126<br/>Cross-type parse diagnosis (v7.7)<br/>active parser 失敗時に他型での解釈を打診<br/>crossTypeDiagnosis.ts + parseSuggestion + SourceEditor banner"]
+    subgraph PD2["Parser Diagnostics & Type Setup / パース診断・型セットアップ (v7.7)"]
+        SR126["SR-126<br/>Cross-type parse diagnosis (v7.7)<br/>currentSource 入力時に他型 parser も試して提案<br/>crossTypeDiagnosis.ts + parseSuggestion + SourceEditor banner"]
+        SR128["SR-128<br/>Source-preserving model-type switch (v7.7)<br/>currentSource / chat / markers を保ったまま型を切替<br/>sessionStore.setModelTypeIdKeepingSource"]
     end
 
     subgraph IN["Infrastructure / インフラ"]
@@ -185,6 +186,7 @@ flowchart LR
 
     %% UR-016: Establish the correct model type for the session
     UR016 --> SR126
+    UR016 --> SR128
 
     %% UR-010: Close the review session with an outcome
     UR010 --> SR040
@@ -303,6 +305,7 @@ flowchart LR
 | SR-125 Externals タブ (note 内 **外部:** から外部 IT システム抽出, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
 | **Parser Diagnostics / パース診断 (v7.7)** |
 | SR-126 Cross-type parse diagnosis (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-128 Source-preserving model-type switch (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 

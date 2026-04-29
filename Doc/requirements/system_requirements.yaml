@@ -1546,7 +1546,7 @@ parser_diagnostics:
     function: "Cross-type parse diagnosis — when the active parser fails, suggest switching to another registered model type that parses the same source cleanly"
     parent: [UR-016]
     component: src/services/crossTypeDiagnosis.ts + modelStore.parseSuggestion + SourceEditor banner
-    status: implemented  # v7.7 (UR-016 sub-problem (a) only; (b) and (c) are separate future SRs)
+    status: implemented  # v7.7 — fully covers UR-016(a) early detection across all currentSource entry events (paste / bundle import / AI generate / manual edit). Pairs with SR-128 (the switch action invoked by the banner).
     notes: |
       Stage A of the model-type auto-detection plan
       (project_model_type_auto_detection.md, 2026-04-24). With three
@@ -1603,6 +1603,60 @@ parser_diagnostics:
       - "Switching produces a clean parse on the same source (the banner disappears, the analysis tabs populate)"
       - "Manually changing the header dropdown (existing setModelTypeId) clears any pending parseSuggestion"
       - "Empty / trivial source (≤ 30 chars after trim) never triggers diagnosis"
+
+  SR-128:
+    function: "Source-preserving model-type switch — change modelTypeId without resetting the user's currentSource / chat / requirementsText / manual markers"
+    parent: [UR-016]
+    component: src/stores/sessionStore.setModelTypeIdKeepingSource + MainLayout re-parse useEffect (modelTypeId in deps)
+    status: implemented  # v7.7 — implementation shipped under SR-126 as the Switch button's target action; SR-128 formalises the contract.
+    notes: |
+      Two switch flows must coexist:
+
+        - setModelTypeId (header dropdown): "I'm starting fresh
+          under a new type." Resets currentSource to the new
+          type's defaultSeedSource, clears chat / markers /
+          requirementsText.
+        - setModelTypeIdKeepingSource (this SR): "I picked the
+          wrong type and want to re-tag what I have." Keeps the
+          user's existing input and only swaps modelTypeId.
+
+      The two flows MUST be distinguishable to the user via the
+      entry point (header dropdown vs cross-type-diagnosis Switch
+      button). Conflating them silently destroys work or surprises
+      with stale content. UR-016 (b) is satisfied by having the
+      latter flow available with a clear preservation contract.
+
+      Preservation contract (the meaning of "keeping source"):
+        - currentSource: kept (the whole reason)
+        - sourceHistory + redoStack: kept (undo / redo continuity)
+        - chat messages: kept (dialogue continues to be relevant)
+        - requirementsText: kept (the natural-language brief is
+          still relevant to the same artifact under another type)
+        - manual markers (markerStore.markers): kept (user
+          annotations; positions may land on irrelevant diagram
+          coordinates after the type switch — accepted UX cost)
+        - autoMarkers: cleared (computed from the previous
+          type's model diff; nonsensical under the new type;
+          cleared by the re-parse pipeline via fetchCoordinates)
+        - active analysis tab: reset to 'requirements' (the
+          previous tab may not exist in the new type's
+          analysisTabs)
+
+      Locks (shared with setModelTypeId):
+        - REVIEW phase locked (hasEstablishedModel=true) → no-op
+        - unknown id (resolveModelTypeId falls back) → no-op
+        - same id → no-op
+
+      Re-parse trigger:
+        MainLayout's parseSource useEffect depends on modelTypeId,
+        so changing the id automatically schedules a re-parse on
+        the preserved source. The user immediately sees whether
+        the new type fits the existing input.
+    acceptance_criteria:
+      - "Switching model type via this action does NOT clear the user's existing currentSource / chat / requirementsText / manual markers"
+      - "Same locks as setModelTypeId: the action is a no-op once the REVIEW phase has started, for unknown type ids, and for same-id calls"
+      - "After the switch, the new type's parser runs on the preserved source automatically (the user immediately sees whether the new type accepts their existing input)"
+      - "autoMarkers from the previous type's diff are cleared as a side-effect of the re-parse; the active analysis tab falls back to 'requirements'"
 
 # =============================================================================
 # Data Model
