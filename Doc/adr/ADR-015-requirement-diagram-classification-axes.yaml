@@ -1,0 +1,136 @@
+id: ADR-015
+title: "要求図の分類軸（type / level / group）と一図一軸の規律"
+date: "2026-04-29"
+status: proposed
+superseded_by: null
+
+participants:
+  author: "claude (dogfood session 2026-04-29)"
+  approver: "sho1884"
+  last_updated: "2026-04-29"
+
+context:
+  problem: |
+    v7.5 で実装した要求図モデル型を、ModelLogue 自身の UR-001..UR-015 と
+    SR-001..SR-125 に対して dogfood した結果、SR-113 CSV → canonical
+    PlantUML パイプラインで生成した `.puml` には視覚的グルーピング
+    （`package "..." <<Frame>> { ... }`）が一切含まれず、PlantUML の
+    auto-layout が 2D 配置のアンカーを失って図がフラットに展開される
+    ことが分かった。具体的には、システムレベル CSV から生成した SVG は
+    幅 24919px（手書き版の 3 倍）になり、レビューの読み手には実用に耐
+    えない。
+
+    一方、手書き .puml は同じ要求群を 11 個の `package <<Frame>>` で
+    分けてレイアウトを 8325 × 745px に圧縮できていた。これは PlantUML
+    に「2D グリッドで配置せよ」というヒントを与えていたから。
+
+    さらに dogfood の過程で、現実のレビュー実務では同じデータに対して
+    複数の正当な分類軸が併存することが浮かび上がった：
+
+      - **抽象階層（tier / level）**: ユーザー要求 (UR) ／ システム要求
+        (SR) ／ 設計 (Design) — 価値工学／要求工学の標準階層
+      - **ステレオタイプ（type）**: functional / non-functional /
+        constraint — 既存の一級概念で、色とステレオタイプ表示を駆動
+      - **アドホック分類（group）**: コンポーネント領域、フェーズ、
+        サブシステム… — レビュー目的ごとに自由に切る軸
+
+    これらは互いに直交する属性であり、図の生成時にひとつだけを選んで
+    視覚的グルーピングに射影するのが自然な構造である。
+
+    ユーザーからのレビュー実務観点での指針:
+    「複雑なものを一度にレビューで扱うのは筋が悪い。せいぜい分類軸は
+    ひとつだけに絞るようにと条件を付けておけばよい。」
+    すなわち、ツール側で多軸を強制的に防ぐ必要はないが、入力側
+    （CSV、AI プロンプト、人間向けドキュメント）の規律として
+    「一図一軸」を明文化しておくべき、という方針。
+
+    また、UR を上の箱に SR を下の箱に置いて両者を横断する派生関係を
+    視覚化する「クロス階層カバレッジレビュー」は、業界標準
+    （SysML 要求図、DOORS）でも一般的なレビュー目的であり、これを
+    一級ビューとして扱うには `level` を semantic に持つ必要がある。
+  drivers:
+    - "レビュー目的駆動の設計：一枚の図はひとつの問い（カバレッジ／領域インベントリ／孤立検出）に答えるべき"
+    - "PlantUML auto-layout に逆らわない：50 ノード級の要求図でも読める配置を `package` ヒントで成立させる"
+    - "AI 交換フォーマット (SR-113 CSV) の互換性：列追加 OK、ただし意味は明確に"
+    - "既存 type 列を踏襲：type は『要求の種類』、level は『抽象階層』、group は『レビュー固有軸』として直交させる"
+    - "標準概念は標準概念として：UR/SR/Design は要求工学の一般概念であり、ad-hoc 文字列に押し込めるのは抽象のかけ違い"
+
+decision:
+  summary: "Requirement に level（user/system/design/null）と group（自由文字列）を追加し、生成側は type/level/group のいずれか一軸を選んで package ブロックに射影する。一図一軸を入力側の規律として明文化する"
+  detail: |
+    要求モデルが持つ属性として、既存の `type`（種類）に加えて以下の
+    2 つの分類軸を直交属性として導入することにした：
+
+      - `level: 'user' | 'system' | 'design' | null`
+        抽象階層を表す semantic 属性。要求工学の標準階層に揃える。
+        将来必要になれば値域は別 ADR で拡張する。
+      - `group: string | null`
+        レビュー固有のアドホック分類軸。コンポーネント領域、フェーズ、
+        サブシステム等、自由文字列で表現する。
+
+    既存の `type` を含めて 3 つの直交軸ができる。図の生成時には、
+    `groupingAxis: 'type' | 'level' | 'group'` パラメータでひとつを
+    選び、その属性の distinct 値ごとに `package "VALUE" <<Frame>>
+    { ... }` を吐く。選んだ軸が全行で null の場合はフラット出力に
+    フォールバック。
+
+    具体的な変更:
+
+      1. データモデル: `Requirement` 型に `level` と `group` を追加。
+      2. CSV 形式（SR-113）: 末尾に 2 列を追加して 11 列にする。
+         `id, statement, type, text, contained_in, derives_from,
+         hidden, deleted, note, level, group`
+         空セルは null。既存 9 列形式の CSV も読み込み可能（後方互換）。
+      3. PlantUML 生成器: `groupingAxis` パラメータを受け取り、選ばれ
+         た軸で package ブロックを構築。冒頭に `top to bottom
+         direction` を出して上下並びを安定化。
+      4. AI プロンプト: level の値を埋めるべき場面を例示し、group は
+         「このレビューで切りたい軸」を 1 種類だけ書くこと、複数軸を
+         同時に埋めないことを明記する。
+      5. 解析: 孤立要求検出 (SR-112) は level を考慮できるよう拡張可能。
+         例：「system レベル要求は user レベル要求への derive を 1 つ
+         以上持つべき」。これは別 SR で扱う。
+      6. クロス階層カバレッジレビュー: UR + SR を 1 つの CSV に並べ、
+         level を grouping axis に指定するだけで「上に UR、下に SR、
+         間に派生矢印」のレビュー用ビューが得られる。
+
+    一図一軸の規律はツールでは強制しない（ユーザーが多軸 CSV を作っ
+    たら多軸の出力が出るだけ）。代わりに次の場所で明文化する：
+
+      - Requirements_Specification.md §3.13（人間向けドキュメント）
+      - n8n のシステムプロンプト（AI が一軸ルールを学ぶ）
+      - Doc/requirements/diagrams/README.md（dogfood 例）
+
+neglected:
+  - option: "type ベースの自動グルーピングのみ（hardcode：ステレオタイプごとに package を吐く）"
+    because: "type の境界がレビュー目的と一致する場合にしか使えず、領域別やフェーズ別のグルーピングに対応できない"
+  - option: "level なしで group 列のみ追加（自由文字列のみで全部表現）"
+    because: "UR/SR/Design という標準階層を ad-hoc 文字列に押し込めることになり、孤立検出やトレーサビリティのフィルタリングといった level 軸の解析価値を失う"
+  - option: "1 図に複数軸の入れ子グルーピング（level と group を nested package で同時に表現）"
+    because: "ユーザー指針『複雑なものを一度に扱うのは筋が悪い』に反し、レビュー目的が曖昧になる"
+  - option: "contained_in の親 ID が CSV に存在しない場合、それを暗黙的に group 名として扱う"
+    because: "contained_in のセマンティクス（データ）と表現（プレゼン）を混同し、ID 誤記時の挙動が曖昧になる"
+
+consequences:
+  positive:
+    - "クロス階層カバレッジレビュー（UR上／SR下／派生矢印）が一級レビュー目的になり、SysML / DOORS 流の業界標準実務に揃う"
+    - "一図一軸の規律により、同じデータから複数のレビュー目的別ビュー（level でカバレッジ、group で領域、type でデフォルト）を切り出せる"
+    - "level を semantic に持つことで、レベル横断の解析（孤立検出、トレーサビリティ・フィルタ）と AI プロンプト制約（『システム要求は必ず上位要求 1 つ以上を参照』）が可能になる"
+    - "生成器は `groupingAxis` 1 パラメータで完結、ADR-011 の決定論性を維持"
+  negative:
+    - "CSV 形式が 2 列増える（データモデル移行、AI プロンプト再学習、既存 CSV はそのまま読めるが round-trip では新列が空セルとして出る）"
+    - "生成器 API に `groupingAxis` パラメータが増える。デフォルト挙動の決定が必要（推奨：level も group も全行 null なら type、それ以外は埋まっている軸）"
+    - "一図一軸はドキュメントと AI プロンプトでの規律であり、型システムでは強制されない。ユーザーが多軸 CSV を作ると不格好な出力になる余地がある"
+  risks:
+    - "level の値域（user/system/design）が業種によっては足りない可能性（domain / hardware / interface 等）。最初は厳密に始めて、必要になれば別 ADR で拡張する"
+    - "AI が level に書くべき内容を group 列に書く誤用が起きうる。プロンプトに明確な例示が必須"
+    - "既存 dogfood 図（Doc/requirements/diagrams/*.csv）は新列を使った形に再構成が必要。README.md の比較考察も書き直す"
+
+references:
+  - "ADR-011 strict-formats-and-deterministic-conversion (生成器の決定論性方針)"
+  - "ADR-012 model-type-plugin-architecture (要求図モデル型の親 ADR)"
+  - "ADR-013 requirement-review-scope-boundary (v7.5 のスコープ：UR↔UR / UR↔SR まで、satisfy / verify / trace は別フェーズ)"
+  - "Doc/requirements/diagrams/README.md (dogfood で本問題が顕在化した経緯)"
+  - "SR-113 (requirement list shape — 新列を受ける)"
+  - "SR-115 (preamble seeding — 不変)"
+  - "SR-116 (AI csv reply ingestion — 新列を学ぶ必要)"

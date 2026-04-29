@@ -89,6 +89,8 @@ flowchart LR
         SR115["SR-115<br/>Seed preamble in buffer (v7.5)<br/>!procedure preamble を buffer に同梱<br/>preamble.ts"]
         SR116["SR-116<br/>Apply CSV AI reply (v7.5)<br/>CSV→PlantUML regen + auto-apply + no modal<br/>extractSuggestedSource + csvParser + plantUmlGenerator"]
         SR117["SR-117<br/>Auto-markers on live diagram (v7.5)<br/>added=green / changed=amber<br/>diff.ts + svgCoordinates.ts + autoMarkerPlacement.ts"]
+        SR118["SR-118<br/>level / group classification axes (v7.7, ADR-015)<br/>Requirement に level (user/system/design) と group を持たせる<br/>model.ts + csvParser.ts + listSerializer.ts"]
+        SR119["SR-119<br/>Selectable visual grouping axis (v7.7, ADR-015)<br/>type / level / group のいずれかで package グルーピング<br/>plantUmlGenerator.ts"]
     end
 
     subgraph PD["Process Diagram / プロセス図 (v7.6)"]
@@ -198,6 +200,8 @@ flowchart LR
     UR014 --> SR115
     UR014 --> SR116
     UR014 --> SR117
+    UR014 --> SR118
+    UR014 --> SR119
     UR014 --> SR070
     UR014 --> SR071
 
@@ -280,6 +284,8 @@ flowchart LR
 | SR-115 `!procedure` preamble を edit buffer に同梱 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
 | SR-116 CSV AI 応答を apply（regen + auto-apply、モーダル無し） (v7.5) |  |  |  |  |  | x |  |  |  |  |  |  |  | x |  |
 | SR-117 自動マーカー（added=緑 / changed=オレンジ） (v7.5) |  |  |  | x |  | x |  |  |  |  |  |  |  | x | x |
+| SR-118 level / group 分類軸を要求モデルに追加 (v7.7, ADR-015) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-119 視覚的グルーピング軸の選択（type / level / group） (v7.7, ADR-015) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
 | **Process Diagram / プロセス図 (v7.6)** |
 | SR-120 Scenarios タブ (start→end 経路列挙) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-121 Events タブ (timer/message/error 一覧) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |

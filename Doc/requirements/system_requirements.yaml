@@ -1237,6 +1237,127 @@ requirement_diagram:
       - "State-machine sessions never populate autoMarkers — the overlay in ProposalView (SR-033) handles that case"
       - "Placement is deterministic for a given (before, after, coords) triple; unit test fixture confirms green/amber kinds and rect geometry"
 
+  SR-118:
+    function: "Persist level (user/system/design) and group (free-text) classification axes on requirements"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/model.ts + parser.ts + csvParser.ts + listSerializer.ts + plantUmlGenerator.ts
+    status: planned
+    notes: |
+      Per ADR-015. Adds two orthogonal classification axes to
+      Requirement so the existing `type` (functional / nonFunctional /
+      constraint) is no longer the only attribute available for
+      grouping or filtering during review:
+
+        - `level: 'user' | 'system' | 'design' | null` — abstraction
+          tier in the value-engineering sense. 'user' for UR-style
+          tasks, 'system' for SR-style functions, 'design' for design
+          decisions/constraints below SR. Optional (null = unspecified).
+          Strict closed value space at first; ADR-015 commits to
+          extending only via a follow-up ADR if a new tier is needed.
+        - `group: string | null` — review-purpose-specific axis with
+          free-text values (e.g. "Source editing", "AI chat", "Phase 1",
+          a sub-system name). Used when the review wants a grouping
+          that is NOT the canonical level tier and NOT the stereotype
+          type — for example, system-level inventory by component area.
+
+      One-axis discipline: the human-facing docs (Requirements_
+      Specification.md §3.13) and the n8n requirement-type prompt
+      MUST instruct authors / AI to populate at most ONE of {level,
+      group} for any single review CSV. Multi-axis grouping in one
+      diagram is bad practice; if both axes need attention, split
+      into separate review sessions.
+
+      CSV schema extension (SR-113 list shape):
+        Existing 9 columns — id, statement, type, text, contained_in,
+        derives_from, hidden, deleted, note — gain TWO trailing
+        columns:
+          ..., level, group
+        Empty cells mean null. Existing 9-column CSVs still parse
+        (parser tolerates a missing tail). Save .csv (listSerializer)
+        emits all 11 columns.
+
+      Backward compatibility:
+        - Sessions saved before this SR landed have null level / group
+          everywhere — they continue to render and analyze without
+          change.
+        - The default groupingAxis (SR-119) falls back to `type` when
+          both level and group are null for all rows, so the existing
+          flat / type-stereotype rendering remains the no-op default.
+
+      AI prompt (n8n) update:
+        - Explain the three axes (type / level / group) and their
+          orthogonality.
+        - Encode the one-axis-per-CSV rule: at most one of level/group
+          should be populated per review session.
+        - Provide examples for cross-tier coverage (level=user/system)
+          and area inventory (group=area-name).
+    acceptance_criteria:
+      - "Requirement model has level: 'user' | 'system' | 'design' | null and group: string | null fields"
+      - "csvParser accepts the 11-column form AND the legacy 9-column form (level / group default to null when columns are absent)"
+      - "listSerializer (Save .csv) writes all 11 columns; round-trip CSV → model → CSV is byte-stable for the canonical column order"
+      - "Unknown level values (anything other than user / system / design or empty) produce a parse error citing the offending row"
+      - "Sessions saved before this SR continue to load and render with null level / group everywhere (no schema migration needed)"
+      - "n8n requirement-type system prompt teaches the 3-axis model and the one-axis-per-CSV rule with at least one cross-tier example and one area-inventory example"
+
+  SR-119:
+    function: "Render requirement diagram with selectable visual grouping axis (type / level / group)"
+    parent: [UR-014]
+    component: src/modelTypes/requirement/plantUmlGenerator.ts + RequirementDiagram session config
+    status: planned
+    notes: |
+      Per ADR-015. The existing CSV → modelToPlantUml pipeline produces
+      a flat .puml — every requirement at top level, no `package`
+      blocks — which makes 50+ node review diagrams horizontally
+      sprawl (PlantUML auto-layout has no 2D anchor). The dogfood
+      system-level CSV produced a 24919 px wide SVG against the
+      8325 px wide hand-authored equivalent that did use packages.
+
+      modelToPlantUml gains a `groupingAxis` parameter:
+
+        type GroupingAxis = 'none' | 'type' | 'level' | 'group';
+
+      Behaviour:
+        - 'none' (or chosen axis is null for every row): emit flat,
+          as today.
+        - 'type' / 'level' / 'group': partition the requirements by
+          distinct values of the chosen attribute and emit one
+          `package "<value>" <<Frame>> { ... }` block per partition.
+          Within each block, requirements are emitted in their model
+          order.
+        - Relations (`$contain`, `$derive`, etc.) are emitted AFTER
+          all package blocks, in their model order.
+
+      Layout hint:
+        - The generated PlantUML begins with `top to bottom direction`
+          so when grouping by level (UR upper / SR lower), the boxes
+          actually stack vertically. `left to right direction` is an
+          option for area-grouped reviews where horizontal scanning
+          works better; expose it as a per-session config knob in
+          a follow-up.
+
+      Default selection rule:
+        - When the session config does not specify groupingAxis:
+            - if any row has a non-null `group`     → use 'group'
+            - else if any row has a non-null `level` → use 'level'
+            - else                                  → 'none'
+          (`type` is never the auto-default; it stays an explicit
+          choice for the rare "let stereotype drive layout" case.)
+
+      Determinism (ADR-011):
+        - Output stays byte-identical for the same (model,
+          groupingAxis) pair.
+        - Package emission order is determined by the FIRST appearance
+          of each distinct grouping value in model.requirements
+          (stable, not alphabetical).
+    acceptance_criteria:
+      - "modelToPlantUml accepts a groupingAxis parameter typed as 'none' | 'type' | 'level' | 'group'"
+      - "When groupingAxis='level' and the model has UR + SR rows, the output contains exactly two `package` blocks named after the level values, in first-appearance order"
+      - "When groupingAxis='group' and group is null on every row, the output is flat (no package blocks)"
+      - "Generated PlantUML begins with `top to bottom direction` whenever any package block is emitted"
+      - "Round-trip: parse(modelToPlantUml(model, axis)) yields a model with matching ids, statements, types, levels, groups, and parentIds for every requirement"
+      - "Determinism (ADR-011): two calls with the same (model, groupingAxis) produce byte-identical output"
+      - "PlantUML Server renders the output (HTTP 200) for all three non-flat axes when applied to the dogfood CSVs in Doc/requirements/diagrams/"
+
 # =============================================================================
 # Process Diagram (v7.6)
 # =============================================================================

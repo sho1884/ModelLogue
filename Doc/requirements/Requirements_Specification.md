@@ -480,6 +480,8 @@ PlantUML Server でそのまま描画するためには `!procedure $fReq …` �
 | SR-113 | Requirement list table with visibility checkbox, inline notes, delete-with-reason action, and Copy / Save .csv / 要求リスト表、表示切替・備考編集・理由付き削除・Copy / Save .csv **(v7.5 planned, ADR-014)** | UR-014 |
 | SR-114 | Renderer filter — comment out hidden requirements (and touching relations) before PlantUML Server / hidden な要求とそれに触れる関係を送信前にコメントアウト（deleted は source 側で既にコメント済み） **(v7.5 planned, ADR-014)** | UR-014 |
 | SR-115 | Seed new requirement sessions with the `!procedure` preamble so the edit buffer is always a valid PlantUML source / 新規 requirement セッションの buffer を preamble 同梱で seed、PlantUML 直送で有効 **(v7.5 planned)** | UR-014 |
+| SR-118 | Persist `level` (user/system/design) and `group` (free-text) classification axes on requirements / Requirement に level / group の 2 直交分類軸を持たせる **(v7.7 planned, ADR-015)** | UR-014 |
+| SR-119 | Render requirement diagram with selectable visual grouping axis (type / level / group) / 視覚的グルーピング軸を type / level / group から選択して PlantUML を生成 **(v7.7 planned, ADR-015)** | UR-014 |
 
 #### 3.13.8 既存 SR への影響
 
@@ -505,6 +507,55 @@ v7.5 の要求図レビューは**要求 ↔ 要求**の関係（derive / contai
 - **List タブ**: 削除済み行は打ち消し線＋薄灰で常時表示（見える = エビデンス）、Undelete 可能
 
 詳細は [ADR-014](../adr/ADR-014-soft-delete-with-reason.yaml) 参照。この原則は将来的に他モデル型（状態遷移図の state / transition 削除等）へ波及しうる。
+
+#### 3.13.11 分類軸（type / level / group）と一図一軸の規律（ADR-015、v7.7 planned）
+
+要求図のレビューには**目的駆動で複数のビュー**が必要だが、1 枚の図に複数の分類軸を同時に持ち込むのは筋が悪い。Requirement に直交する 3 つの分類軸を持たせ、図の生成時には**その中からひとつだけ**を視覚的グルーピングに射影する。詳細は [ADR-015](../adr/ADR-015-requirement-diagram-classification-axes.yaml) 参照。
+
+**3 つの分類軸**:
+
+| 軸 | 値域 | 意味 | 既存 / 新設 |
+|---|---|---|---|
+| `type` | `requirement / functionalRequirement / nonFunctionalRequirement / designConstraint` | 要求の**種類**。色・ステレオタイプ表示を駆動 | 既存（v7.5） |
+| `level` | `'user' / 'system' / 'design' / null` | 要求の**抽象階層**。価値工学／要求工学の標準階層 | 新設（SR-118） |
+| `group` | 自由文字列 / null | レビュー固有の**アドホック分類軸**（コンポーネント領域、フェーズ等） | 新設（SR-118） |
+
+**典型レビュー目的と対応する軸の選び方**:
+
+| レビュー目的 | 入力 CSV の構成 | 視覚的グルーピング軸 | 期待される図 |
+|---|---|---|---|
+| **クロス階層カバレッジ**：UR が SR で網羅されているか | UR + SR を同一 CSV、各行に level=user / system | `level` | 上に UR の箱、下に SR の箱、間を `derives_from` 矢印が横断 |
+| **UR の領域整理** | UR のみ、各行に group="状態遷移" / "要求" / "プロセス" / "共通" / "補助" 等 | `group` | UR が領域別の package に分かれる |
+| **SR の領域整理** | SR のみ、各行に group="Source editing" / "AI chat" / "Process diagram" 等 | `group` | SR がコンポーネント別の package に分かれる |
+| **ステレオタイプ別俯瞰** | type 列のみ多様（functional / nonfunctional / constraint 混在） | `type` | functional, non-functional, constraint が package で分離 |
+
+**一図一軸の規律**:
+
+`level` と `group` を同時に埋めて両軸でグルーピングすることは禁止する（ツール側では強制しないが、ドキュメント・AI プロンプト・CSV 例で**入力規律**として明示）。理由は実務観点：「複雑なものを一度にレビューで扱うのは筋が悪い」。同じデータでも軸を変えれば別の問いに答える別の図になるので、CSV を分けるか、軸を切り替える。
+
+**CSV 形式の拡張（SR-113 11 列形）**:
+
+```
+id, statement, type, text, contained_in, derives_from, hidden, deleted, note, level, group
+```
+
+末尾の `level, group` が新規。空セルは null。**既存 9 列形式の CSV も読み込み可能**（後方互換、新列は null 扱い）。Save .csv（[`listSerializer.ts`](../../src/modelTypes/requirement/listSerializer.ts)）は 11 列を出力。
+
+**生成器のグルーピング軸選択（SR-119）**:
+
+```ts
+type GroupingAxis = 'none' | 'type' | 'level' | 'group';
+modelToPlantUml(model: RequirementModel, axis?: GroupingAxis): string
+```
+
+- `'none'` または対象軸が全行 null → フラット出力（v7.5 と同じ）
+- それ以外 → 該当軸の distinct 値ごとに `package "<value>" <<Frame>> { ... }` を吐く
+- 冒頭に `top to bottom direction` を出して上下並びを安定化（特に level 軸）
+- デフォルト軸は **group → level → none** の順で、最初に非 null 行を持つ軸を採用（`type` は明示指定された場合のみ）
+
+**`level` 値域の拡張方針**:
+
+`'user' / 'system' / 'design'` で開始。業種により足りなくなる可能性（domain / hardware / interface 等）はあるが、**必要になった時点で別 ADR で拡張する**方針。最初から広げると意味が曖昧になり、孤立検出や AI プロンプト制約（『システム要求は必ず上位要求 1 つ以上を参照』）が緩んでしまう。
 
 ---
 
