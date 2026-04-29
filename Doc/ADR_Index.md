@@ -20,7 +20,7 @@
 | [ADR-012](#adr-012) | モデル型プラグインアーキテクチャ（ModelTypeDefinition） | 2026-04-22 | 承認済 | src/modelTypes/<type>/ 配下にモデル型ごとのパーサ・EBNF・解析タブ仕様・補助サービスクライアントを閉じ込め、ModelTypeDefinition インターフェースの registry で束ねる |
 | [ADR-013](#adr-013) | 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う | 2026-04-22 | 承認済 | v7.5 の要求図サポートは要求 ↔ 要求の関係（derive / contain / refine / copy）に限定し、要求 ↔ 外部（satisfy / verify / trace）は別フェーズの別機能として後日設計する |
 | [ADR-014](#adr-014) | レビュー過程の削除は soft-delete + reason 必須でエビデンスとして残す | 2026-04-22 | 承認済 | レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする。表現形式は PlantUML コメント（`' @modellogue ...`）にして、source を直接 PlantUML に送っても妥当なまま保つ |
-| [ADR-015](#adr-015) | 要求図の分類軸（type / level / group）と一図一軸の規律 | 2026-04-29 | 提案中 | Requirement に level（user/system/design/null）と group（自由文字列）を追加し、生成側は type/level/group のいずれか一軸を選んで package ブロックに射影する。一図一軸を入力側の規律として明文化する |
+| [ADR-015](#adr-015) | 要求図の分類軸（type / level / group）と一図一軸の規律 | 2026-04-29 | 承認済 | Requirement に level（user/system/design/null）と group（自由文字列）を追加し、生成側は type/level/group のいずれか一軸を選んで package ブロックに射影する。一図一軸を入力側の規律として明文化する |
 
 ---
 
@@ -1226,7 +1226,7 @@ round-trip させる必要が出て、単一の artifact で完結しない。
 **要求図の分類軸（type / level / group）と一図一軸の規律**
 
 - **日付**: 2026-04-29
-- **ステータス**: 提案中
+- **ステータス**: 承認済
 - **最終更新**: 2026-04-29
 - **関連**: ADR-011 strict-formats-and-deterministic-conversion (生成器の決定論性方針), ADR-012 model-type-plugin-architecture (要求図モデル型の親 ADR), ADR-013 requirement-review-scope-boundary (v7.5 のスコープ：UR↔UR / UR↔SR まで、satisfy / verify / trace は別フェーズ), Doc/requirements/diagrams/README.md (dogfood で本問題が顕在化した経緯), SR-113 (requirement list shape — 新列を受ける), SR-115 (preamble seeding — 不変), SR-116 (AI csv reply ingestion — 新列を学ぶ必要)
 

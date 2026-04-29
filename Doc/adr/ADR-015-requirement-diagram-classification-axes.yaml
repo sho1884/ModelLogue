@@ -1,7 +1,7 @@
 id: ADR-015
 title: "要求図の分類軸（type / level / group）と一図一軸の規律"
 date: "2026-04-29"
-status: proposed
+status: accepted
 superseded_by: null
 
 participants:

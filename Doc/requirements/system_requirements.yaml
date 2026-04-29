@@ -1241,7 +1241,7 @@ requirement_diagram:
     function: "Persist level (user/system/design) and group (free-text) classification axes on requirements"
     parent: [UR-014]
     component: src/modelTypes/requirement/model.ts + parser.ts + csvParser.ts + listSerializer.ts + plantUmlGenerator.ts
-    status: planned
+    status: implemented  # v7.7 (ADR-015)
     notes: |
       Per ADR-015. Adds two orthogonal classification axes to
       Requirement so the existing `type` (functional / nonFunctional /
@@ -1298,7 +1298,7 @@ requirement_diagram:
     function: "Render requirement diagram with selectable visual grouping axis (type / level / group)"
     parent: [UR-014]
     component: src/modelTypes/requirement/plantUmlGenerator.ts + RequirementDiagram session config
-    status: planned
+    status: implemented  # v7.7 (ADR-015; emits `left to right direction`)
     notes: |
       Per ADR-015. The existing CSV → modelToPlantUml pipeline produces
       a flat .puml — every requirement at top level, no `package`
