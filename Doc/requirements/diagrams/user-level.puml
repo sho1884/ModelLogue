@@ -1,0 +1,140 @@
+@startuml
+' ModelLogue user requirements diagram (UR-001 .. UR-015)
+'
+' Source of truth: Doc/requirements/user_requirements.yaml
+' Generated for review via ModelLogue's own requirement-diagram model
+' type (dogfood). Open this file in ModelLogue (model type:
+' "Requirement diagram") to review.
+'
+' Grouping:
+'   - Review tasks specific to each model type (state machine /
+'     requirement / process)
+'   - Common review functionality shared across all model types
+'   - Auxiliary capabilities
+'
+' Derive arrows: state-machine-specific tasks (transition-table view,
+' source↔table conversion, N-switch coverage) derive from the parent
+' goal "review the state machine".
+
+hide circle
+hide empty members
+hide method
+
+!procedure $req($id, $name)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $req($id, $name, $txt)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name, $txt)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name, $txt)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name, $txt)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $contain($Parent, $Child)
+    "$Parent" +-- "$Child"
+!endprocedure
+
+!procedure $derive($Supplier, $Client)
+    "$Supplier" <.. "$Client" : <<deriveReqt>>
+!endprocedure
+
+!procedure $refine($Client, $NamedElement)
+    "$Client" <.. "$NamedElement" : <<refine>>
+!endprocedure
+
+!procedure $satisfy($Req, $Design)
+    "$Req" <.. "$Design" : <<satisfy>>
+!endprocedure
+
+!procedure $verify($Req, $Test)
+    "$Req" <.. "$Test" : <<verify>>
+!endprocedure
+
+!procedure $trace($A, $B)
+    "$A" <.. "$B" : <<trace>>
+!endprocedure
+
+!procedure $copy($Original, $Copy)
+    "$Original" <.. "$Copy" : <<copy>>
+!endprocedure
+
+title ModelLogue ユーザー要求 (UR-001 .. UR-015)
+
+package "状態遷移図のレビュー" <<Frame>> {
+  $req("UR-001", "Review state machine diagram")
+  $req("UR-003", "View state transition table")
+  $req("UR-011", "Convert source ↔ table")
+  $req("UR-013", "Review N-switch test cases")
+}
+
+package "要求図のレビュー" <<Frame>> {
+  $req("UR-014", "Review requirement diagram")
+}
+
+package "プロセス図のレビュー" <<Frame>> {
+  $req("UR-015", "Review process diagram")
+}
+
+package "共通レビュー機能" <<Frame>> {
+  $req("UR-002", "Refer to PlantUML source")
+  $req("UR-004", "Place markers on the diagram")
+  $req("UR-005", "Discuss the model with AI")
+  $req("UR-006", "Apply AI suggestions")
+  $req("UR-007", "Save review evidence")
+  $req("UR-009", "Receive initial model")
+  $req("UR-010", "Close session with outcome")
+  $req("UR-012", "Refer to requirements text")
+}
+
+package "補助機能" <<Frame>> {
+  $req("UR-008", "Obtain PlantUML grammar")
+}
+
+' state-machine-specific URs derive from the state-machine review goal
+$derive("UR-001", "UR-003")
+$derive("UR-001", "UR-011")
+$derive("UR-001", "UR-013")
+
+@enduml

@@ -1,0 +1,189 @@
+@startuml
+' ModelLogue system requirements diagram (SR-001 .. SR-125)
+'
+' Source of truth: Doc/requirements/system_requirements.yaml
+' Generated for review via ModelLogue's own requirement-diagram model
+' type (dogfood). Open this file in ModelLogue (model type:
+' "Requirement diagram") to review.
+'
+' Grouping mirrors the section headers in system_requirements.yaml.
+' Removed SRs (SR-003, SR-050) are intentionally omitted.
+'
+' Parent-UR linkage is NOT shown as derive arrows here — the trace
+' belongs in the user-level diagram and the matrix in
+' Doc/Traceability.md. This view is the SR landscape grouped by
+' component area.
+
+hide circle
+hide empty members
+hide method
+
+!procedure $req($id, $name)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $req($id, $name, $txt)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name, $txt)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name, $txt)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name, $txt)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $contain($Parent, $Child)
+    "$Parent" +-- "$Child"
+!endprocedure
+
+!procedure $derive($Supplier, $Client)
+    "$Supplier" <.. "$Client" : <<deriveReqt>>
+!endprocedure
+
+!procedure $refine($Client, $NamedElement)
+    "$Client" <.. "$NamedElement" : <<refine>>
+!endprocedure
+
+!procedure $satisfy($Req, $Design)
+    "$Req" <.. "$Design" : <<satisfy>>
+!endprocedure
+
+!procedure $verify($Req, $Test)
+    "$Req" <.. "$Test" : <<verify>>
+!endprocedure
+
+!procedure $trace($A, $B)
+    "$A" <.. "$B" : <<trace>>
+!endprocedure
+
+!procedure $copy($Original, $Copy)
+    "$Original" <.. "$Copy" : <<copy>>
+!endprocedure
+
+title ModelLogue システム要求 (SR-001 .. SR-125)
+
+package "Source editing" <<Frame>> {
+  $fReq("SR-001", "Display PlantUML source (read-only during review)")
+  $fReq("SR-002", "Parse PlantUML subset into state machine model")
+}
+
+package "Diagram display" <<Frame>> {
+  $fReq("SR-010", "Display PlantUML SVG with pan and zoom")
+  $fReq("SR-011", "Extract element coordinates from PlantUML SVG")
+  $fReq("SR-012", "Provide diagram tool selection")
+  $fReq("SR-013", "Draw marker by drag")
+  $fReq("SR-014", "Manage marker colors from a fixed palette")
+  $fReq("SR-015", "Select, move, and resize markers")
+  $fReq("SR-016", "Delete marker")
+  $fReq("SR-017", "Render marker overlay over the SVG")
+}
+
+package "State transition table" <<Frame>> {
+  $fReq("SR-020", "Generate State×Event matrix (hybrid)")
+  $fReq("SR-021", "Generate PreState×PostState matrix (hybrid)")
+}
+
+package "AI chat" <<Frame>> {
+  $fReq("SR-022", "Provide marker and grammar context to AI")
+  $fReq("SR-030", "Send chat message to AI via n8n")
+  $fReq("SR-031", "Render chat message list")
+  $fReq("SR-032", "Extract PlantUML source from AI response")
+  $fReq("SR-033", "Visual before/after model comparison")
+  $fReq("SR-034", "Apply proposed source modification")
+  $fReq("SR-035", "Undo and Redo applied source modifications")
+}
+
+package "Session management" <<Frame>> {
+  $fReq("SR-040", "Manage session state in browser memory")
+  $fReq("SR-041", "Save the review session as a JSON file")
+}
+
+package "Infrastructure" <<Frame>> {
+  $fReq("SR-060", "Check PlantUML Server health")
+  $fReq("SR-061", "Check n8n connectivity")
+}
+
+package "UI layout" <<Frame>> {
+  $fReq("SR-070", "Render diagram primary view + empty-state guide")
+  $fReq("SR-071", "Render analysis panel with dynamic tabs")
+  $fReq("SR-072", "Render chat panel with proposal view")
+  $fReq("SR-073", "Select model type at session seed")
+}
+
+package "Requirements text" <<Frame>> {
+  $fReq("SR-080", "Provide a Requirements tab (read-only during review)")
+  $fReq("SR-081", "Offer the PlantUML subset grammar as a download")
+  $fReq("SR-082", "Generate an initial model from the requirements text")
+  $fReq("SR-083", "Open a saved review or starter file")
+}
+
+package "Model diff" <<Frame>> {
+  $fReq("SR-090", "Compute model-level diff between two StateMachineModels")
+}
+
+package "Artifact export" <<Frame>> {
+  $fReq("SR-100", "Export PlantUML source from the Source tab")
+  $fReq("SR-101", "Export each state-transition matrix")
+  $fReq("SR-102", "Export generated test cases and coverage report")
+  $fReq("SR-103", "Display N-switch test cases reactively")
+}
+
+package "Requirement diagram (v7.5)" <<Frame>> {
+  $fReq("SR-110", "Parse requirement-diagram input into RequirementModel")
+  $fReq("SR-111", "Generate requirement × requirement traceability matrix")
+  $fReq("SR-112", "Identify orphan requirements")
+  $fReq("SR-113", "Display requirement list with notes / Copy / Save .csv")
+  $fReq("SR-114", "Render-pipeline filter for hidden-requirement declarations")
+  $fReq("SR-115", "Seed sessions with the !procedure preamble")
+  $fReq("SR-116", "Apply AI csv reply, regenerate canonical PlantUML")
+  $fReq("SR-117", "Auto-place added/changed markers after AI apply")
+}
+
+package "Process diagram (v7.6)" <<Frame>> {
+  $fReq("SR-120", "Scenarios tab — enumerate every start→end path")
+  $fReq("SR-121", "Events tab — timer / message / error inventory")
+  $fReq("SR-122", "Roles tab — swim lanes and lane hand-offs")
+  $fReq("SR-123", "Artifacts tab — arrow-label inventory")
+  $fReq("SR-124", "Parse process-diagram source into ProcessModel")
+  $fReq("SR-125", "Externals tab — external systems referenced from notes")
+}
+
+@enduml

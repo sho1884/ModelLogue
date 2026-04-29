@@ -12,6 +12,14 @@
 // Only the SysML-convention macros remain — no ModelLogue-specific
 // additions. Review-state (hide / delete / note) is expressed in
 // PlantUML comments (`' @modellogue ...`), not in invented macros.
+//
+// Identifier handling (2026-04-29): the relation macros wrap their
+// argument expansions in `"..."`. PlantUML's class-diagram parser
+// treats hyphenated identifiers as subtraction expressions in arrow
+// position (e.g. `UR-001 <.. UR-003` is parsed as a malformed
+// expression and the diagram errors out). Quoting the alias names
+// avoids this and is a no-op for unhyphenated IDs. Found while
+// dogfooding the project's own UR-NNN / SR-NNN style.
 
 export const INJECTED_PREAMBLE = `hide circle
 hide empty members
@@ -70,31 +78,31 @@ hide method
 !endprocedure
 
 !procedure $contain($Parent, $Child)
-    $Parent +-- $Child
+    "$Parent" +-- "$Child"
 !endprocedure
 
 !procedure $derive($Supplier, $Client)
-    $Supplier <.. $Client : <<deriveReqt>>
+    "$Supplier" <.. "$Client" : <<deriveReqt>>
 !endprocedure
 
 !procedure $refine($Client, $NamedElement)
-    $Client <.. $NamedElement : <<refine>>
+    "$Client" <.. "$NamedElement" : <<refine>>
 !endprocedure
 
 !procedure $satisfy($Req, $Design)
-    $Req <.. $Design : <<satisfy>>
+    "$Req" <.. "$Design" : <<satisfy>>
 !endprocedure
 
 !procedure $verify($Req, $Test)
-    $Req <.. $Test : <<verify>>
+    "$Req" <.. "$Test" : <<verify>>
 !endprocedure
 
 !procedure $trace($A, $B)
-    $A <.. $B : <<trace>>
+    "$A" <.. "$B" : <<trace>>
 !endprocedure
 
 !procedure $copy($Original, $Copy)
-    $Original <.. $Copy : <<copy>>
+    "$Original" <.. "$Copy" : <<copy>>
 !endprocedure`;
 
 // Seed template used when a fresh requirement-diagram session starts.
