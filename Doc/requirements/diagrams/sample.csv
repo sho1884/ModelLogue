@@ -1,0 +1,13 @@
+id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group
+UR-100,Manage user account,requirement,,,,,,,user,
+UR-110,Sign up,requirement,,UR-100,,,,,user,
+UR-120,Log in,requirement,,UR-100,,,,,user,
+UR-121,Log in with password,requirement,,UR-120,,,,,user,
+UR-122,Log in with OAuth,requirement,,UR-120,,,,,user,
+UR-130,Log out,requirement,,UR-100,,,,,user,
+SR-200,Auth subsystem,functional,,,UR-100,,,,system,
+SR-210,Sign-up endpoint,functional,,SR-200,UR-110,,,,system,
+SR-220,Login endpoint,functional,,SR-200,UR-120,,,,system,
+SR-221,Password handler,functional,,SR-220,UR-121,,,,system,
+SR-222,OAuth handler,functional,,SR-220,UR-122,,,,system,
+SR-230,Logout endpoint,functional,,SR-200,UR-130,,,,system,

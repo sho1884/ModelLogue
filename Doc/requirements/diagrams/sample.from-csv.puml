@@ -1,0 +1,122 @@
+@startuml
+
+hide circle
+hide empty members
+hide method
+
+!procedure $req($id, $name)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $req($id, $name, $txt)
+    class "$name" as $id <<requirement>> #White {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $fReq($id, $name, $txt)
+    class "$name" as $id <<functionalRequirement>> {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $nfReq($id, $name, $txt)
+    class "$name" as $id <<Non-functionalRequirement>> #PaleGreen {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    }
+!endprocedure
+
+!procedure $dConstraint($id, $name, $txt)
+    class "$name" as $id <<designConstraint>> #PaleTurquoise {
+    id = "$id"
+    text = "$txt"
+    }
+!endprocedure
+
+!procedure $contain($Parent, $Child)
+    "$Parent" +-- "$Child"
+!endprocedure
+
+!procedure $derive($Supplier, $Client)
+    "$Client" .up.> "$Supplier" : <<deriveReqt>>
+!endprocedure
+
+!procedure $refine($Client, $NamedElement)
+    "$NamedElement" .up.> "$Client" : <<refine>>
+!endprocedure
+
+!procedure $satisfy($Req, $Design)
+    "$Design" .up.> "$Req" : <<satisfy>>
+!endprocedure
+
+!procedure $verify($Req, $Test)
+    "$Test" .up.> "$Req" : <<verify>>
+!endprocedure
+
+!procedure $trace($A, $B)
+    "$B" .up.> "$A" : <<trace>>
+!endprocedure
+
+!procedure $copy($Original, $Copy)
+    "$Copy" .up.> "$Original" : <<copy>>
+!endprocedure
+
+package "user" <<Frame>> {
+  $req("UR-100", "Manage user account")
+  $req("UR-110", "Sign up")
+  $req("UR-120", "Log in")
+  $req("UR-121", "Log in with password")
+  $req("UR-122", "Log in with OAuth")
+  $req("UR-130", "Log out")
+}
+
+package "system" <<Frame>> {
+  $fReq("SR-200", "Auth subsystem")
+  $fReq("SR-210", "Sign-up endpoint")
+  $fReq("SR-220", "Login endpoint")
+  $fReq("SR-221", "Password handler")
+  $fReq("SR-222", "OAuth handler")
+  $fReq("SR-230", "Logout endpoint")
+}
+
+$contain("UR-100", "UR-110")
+$contain("UR-100", "UR-120")
+$contain("UR-120", "UR-121")
+$contain("UR-120", "UR-122")
+$contain("UR-100", "UR-130")
+$derive("UR-100", "SR-200")
+$contain("SR-200", "SR-210")
+$derive("UR-110", "SR-210")
+$contain("SR-200", "SR-220")
+$derive("UR-120", "SR-220")
+$contain("SR-220", "SR-221")
+$derive("UR-121", "SR-221")
+$contain("SR-220", "SR-222")
+$derive("UR-122", "SR-222")
+$contain("SR-200", "SR-230")
+$derive("UR-130", "SR-230")
+
+@enduml

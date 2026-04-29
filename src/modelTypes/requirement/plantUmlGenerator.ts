@@ -23,17 +23,16 @@
 // non-null level; else 'none'. `type` is never auto-selected — it stays
 // an explicit choice for the rare "stereotype-driven layout" case.
 //
-// When ANY package block is emitted, the generator also writes a
-// `left to right direction` directive. PlantUML class diagrams treat
-// arrows as layout constraints; with `top to bottom direction` and a
-// many-to-many edge set (typical of cross-tier coverage diagrams,
-// e.g. UR↔SR derive arrows) the engine collapses the diagram into a
-// nearly-flat single row stretched horizontally. `left to right
-// direction` produces a much more usable tall-and-narrow shape, with
-// packages stacking vertically and within-package elements arranged
-// left-to-right. Verified empirically against the project's own
-// coverage.csv (15 URs + 50 SRs + 65 derive arrows): 1693x5255 vs
-// 28177x293 with the alternative.
+// No explicit layout direction directive (2026-04-29). The relation
+// macros in preamble.ts emit `.up.>` arrows with an explicit `up`
+// direction modifier, which pulls the supplier above the client per
+// SysML convention. The `$contain` `+--` arrow places the parent
+// (whole) above the child (part) without a modifier. Together these
+// give a top-to-bottom orientation without us declaring a global
+// `top to bottom direction` (which collapses each package into a
+// single horizontal row). Verified against the 3-tier sample:
+// hierarchies within each level + cross-tier derive arrows produce a
+// readable vertically-stacked layout.
 
 import type {
   Requirement,
@@ -150,8 +149,20 @@ export function modelToPlantUml(
 
   const willEmitPackages = buckets.size > 0;
 
-  // Layout hint: see file header for empirical justification.
-  if (willEmitPackages) {
+  // Layout direction is conditional:
+  //   - `left to right direction`: emitted for INVENTORY-style
+  //     diagrams (axis = 'group' / 'type', no cross-tier derive
+  //     arrows expected). Without it, default top-to-bottom direction
+  //     would spread inventory packages horizontally; LR makes them
+  //     stack vertically, which reads better.
+  //   - No directive: emitted for CROSS-TIER diagrams (axis =
+  //     'level'). The relation macros' `.up.>` modifier handles
+  //     orientation, and adding LR here interferes with `.up.>` for
+  //     large derive-arrow sets (the supplier ends up below the
+  //     client instead of above).
+  // Determined empirically against the project's own sample.csv,
+  // urs.csv, srs.csv, and coverage.csv.
+  if (willEmitPackages && axis !== 'level') {
     lines.push('left to right direction');
     lines.push('');
   }

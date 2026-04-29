@@ -44,6 +44,18 @@ const PAIRS: Pair[] = [
     csv: 'Doc/requirements/diagrams/coverage-hierarchical.csv',
     puml: 'Doc/requirements/diagrams/coverage-hierarchical.from-csv.puml',
   },
+  // 3-tier test sample (per 2026-04-29 user direction): both UR and SR
+  // sides have 3-level contain hierarchies (parent → child → grandchild),
+  // with each SR deriving from its corresponding UR. The canonical
+  // small fixture for "this is what a properly-modelled cross-tier
+  // review looks like" — expected to render with both packages
+  // stacked vertically and internal multi-row layout per the
+  // hierarchies. Used as the ongoing-verification artifact while the
+  // tool matures.
+  {
+    csv: 'Doc/requirements/diagrams/sample.csv',
+    puml: 'Doc/requirements/diagrams/sample.from-csv.puml',
+  },
 ];
 
 const REGEN = process.env.REGEN_FROM_CSV === '1';

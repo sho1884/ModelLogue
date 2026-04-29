@@ -61,30 +61,28 @@ hide method
 !endprocedure
 
 !procedure $derive($Supplier, $Client)
-    "$Supplier" <.. "$Client" : <<deriveReqt>>
+    "$Client" .up.> "$Supplier" : <<deriveReqt>>
 !endprocedure
 
 !procedure $refine($Client, $NamedElement)
-    "$Client" <.. "$NamedElement" : <<refine>>
+    "$NamedElement" .up.> "$Client" : <<refine>>
 !endprocedure
 
 !procedure $satisfy($Req, $Design)
-    "$Req" <.. "$Design" : <<satisfy>>
+    "$Design" .up.> "$Req" : <<satisfy>>
 !endprocedure
 
 !procedure $verify($Req, $Test)
-    "$Req" <.. "$Test" : <<verify>>
+    "$Test" .up.> "$Req" : <<verify>>
 !endprocedure
 
 !procedure $trace($A, $B)
-    "$A" <.. "$B" : <<trace>>
+    "$B" .up.> "$A" : <<trace>>
 !endprocedure
 
 !procedure $copy($Original, $Copy)
-    "$Original" <.. "$Copy" : <<copy>>
+    "$Copy" .up.> "$Original" : <<copy>>
 !endprocedure
-
-left to right direction
 
 package "user" <<Frame>> {
   $req("UR-A", "Top user requirement A")

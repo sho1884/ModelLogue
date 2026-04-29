@@ -15,6 +15,7 @@ answering a single review question.
 | SR component inventory: which functions land in which area of the codebase | `group` | [srs.csv](srs.csv) | [srs.from-csv.puml](srs.from-csv.puml) | [srs.svg](srs.svg) |
 | Cross-tier coverage: every UR realised by ≥ 1 SR, every SR traced to a UR | `level` | [coverage.csv](coverage.csv) | [coverage.from-csv.puml](coverage.from-csv.puml) | [coverage.svg](coverage.svg) |
 | Internal hierarchy demo: both UR and SR sides have parent/child contain relations | `level` | [coverage-hierarchical.csv](coverage-hierarchical.csv) | [coverage-hierarchical.from-csv.puml](coverage-hierarchical.from-csv.puml) | [coverage-hierarchical.svg](coverage-hierarchical.svg) |
+| **3-tier test sample**: 6 URs and 6 SRs, each side a 3-level `$contain` hierarchy, with cross-tier `$derive` arrows. Canonical small fixture for "this is what a properly-modelled cross-tier review looks like" — used as the ongoing-verification artifact while the tool matures (per 2026-04-29 user direction; full dogfood deferred until the tool stabilises). | `level` | [sample.csv](sample.csv) | [sample.from-csv.puml](sample.from-csv.puml) | [sample.svg](sample.svg) |
 
 The `*.from-csv.puml` files are generated mechanically from the
 matching CSV via `csvParser → modelToPlantUml(model, axis)` (the same

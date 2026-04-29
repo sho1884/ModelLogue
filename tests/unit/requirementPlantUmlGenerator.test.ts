@@ -109,22 +109,40 @@ R2,b,functional,,,,,,,system,`;
       const { model } = parseRequirementsCsv(csv);
       const puml = modelToPlantUml(model!, 'none');
       expect(puml).not.toContain('package "');
+      // No package → no layout directive either.
       expect(puml).not.toContain('left to right direction');
     });
 
-    it('groups by `level` and emits a layout direction', () => {
+    it('groups by `level` (cross-tier) and emits NO layout directive', () => {
       const csv = `UR-1,user req 1,requirement,,,,,,,user,
 UR-2,user req 2,requirement,,,,,,,user,
 SR-1,sys req 1,functional,,,UR-1,,,,system,
 SR-2,sys req 2,functional,,,UR-2,,,,system,`;
       const { model } = parseRequirementsCsv(csv);
       const puml = modelToPlantUml(model!, 'level');
-      expect(puml).toContain('left to right direction');
+      // Cross-tier diagrams: the preamble's `.up.>` direction
+      // modifier on derive arrows handles orientation. Adding a
+      // global `left to right direction` directive here interferes
+      // with `.up.>` for large derive-arrow sets and the supplier
+      // ends up below the client instead of above. Skipping the
+      // directive lets `.up.>` work cleanly.
+      expect(puml).not.toContain('left to right direction');
       expect(puml).toContain('package "user" <<Frame>> {');
       expect(puml).toContain('package "system" <<Frame>> {');
-      // Cross-tier derive arrows live OUTSIDE the package blocks.
       expect(puml).toContain('$derive("UR-1", "SR-1")');
       expect(puml).toContain('$derive("UR-2", "SR-2")');
+    });
+
+    it('groups by `group` (inventory) and DOES emit `left to right direction`', () => {
+      const csv = `R1,a,functional,,,,,,,,Area1
+R2,b,functional,,,,,,,,Area2`;
+      const { model } = parseRequirementsCsv(csv);
+      const puml = modelToPlantUml(model!, 'group');
+      // Inventory-style diagrams have no cross-package arrows, so
+      // they need the LR directive to stack packages vertically.
+      expect(puml).toContain('left to right direction');
+      expect(puml).toContain('package "Area1" <<Frame>> {');
+      expect(puml).toContain('package "Area2" <<Frame>> {');
     });
 
     it('groups by `group` (free-text) and preserves first-appearance order', () => {
@@ -157,7 +175,7 @@ R3,c,constraint,,,,,,,,`;
       const csv = `R1,a,functional,,,,,,,,`;
       const { model } = parseRequirementsCsv(csv);
       const puml = modelToPlantUml(model!, 'level');
-      // No level set on any row → no packages.
+      // No level set on any row → no packages, no layout directive.
       expect(puml).not.toContain('package "');
       expect(puml).not.toContain('left to right direction');
     });

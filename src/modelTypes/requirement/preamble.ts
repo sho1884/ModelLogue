@@ -20,6 +20,23 @@
 // expression and the diagram errors out). Quoting the alias names
 // avoids this and is a no-op for unhyphenated IDs. Found while
 // dogfooding the project's own UR-NNN / SR-NNN style.
+//
+// Layout direction (2026-04-29): the derive / refine / satisfy /
+// verify / trace / copy macros emit dotted arrows with the `.up.>`
+// direction modifier (`Client .up.> Supplier`). This pins the
+// SUPPLIER above the CLIENT in the rendered layout, which is the
+// SysML / DOORS canonical orientation (higher-level requirements on
+// top, derived ones below). Without the modifier, PlantUML's
+// class-diagram engine treats cross-package arrows as plain edges
+// and packages migrate side-by-side — which is wrong for the
+// requirement-trace use case. The argument order in the expansion
+// is FLIPPED relative to the macro signature (Client first, then
+// Supplier) so the visual head lands at Supplier; the rendered
+// arrow semantics are unchanged.
+//
+// `$contain` is left as `+--` (composition) — PlantUML's class-
+// diagram default places the parent (whole) above the child (part)
+// without explicit direction, which is what we want.
 
 export const INJECTED_PREAMBLE = `hide circle
 hide empty members
@@ -82,27 +99,27 @@ hide method
 !endprocedure
 
 !procedure $derive($Supplier, $Client)
-    "$Supplier" <.. "$Client" : <<deriveReqt>>
+    "$Client" .up.> "$Supplier" : <<deriveReqt>>
 !endprocedure
 
 !procedure $refine($Client, $NamedElement)
-    "$Client" <.. "$NamedElement" : <<refine>>
+    "$NamedElement" .up.> "$Client" : <<refine>>
 !endprocedure
 
 !procedure $satisfy($Req, $Design)
-    "$Req" <.. "$Design" : <<satisfy>>
+    "$Design" .up.> "$Req" : <<satisfy>>
 !endprocedure
 
 !procedure $verify($Req, $Test)
-    "$Req" <.. "$Test" : <<verify>>
+    "$Test" .up.> "$Req" : <<verify>>
 !endprocedure
 
 !procedure $trace($A, $B)
-    "$A" <.. "$B" : <<trace>>
+    "$B" .up.> "$A" : <<trace>>
 !endprocedure
 
 !procedure $copy($Original, $Copy)
-    "$Original" <.. "$Copy" : <<copy>>
+    "$Copy" .up.> "$Original" : <<copy>>
 !endprocedure`;
 
 // Seed template used when a fresh requirement-diagram session starts.
