@@ -19,6 +19,7 @@
 | 09 | [09-multiple-starts.puml](./09-multiple-starts.puml) | `start` を 2 回以上 | 単一 `start` の直後に分岐で起動条件を表現、または本当に別プロセスなら別図に |
 | 10 | [10-arrow-label-no-successor.puml](./10-arrow-label-no-successor.puml) | `-> label;` に続くノードが存在しない | ラベルの位置を次ノードがある場所へ移す、または不要なら削除 |
 | 11 | [11-start-in-fork-branch.puml](./11-start-in-fork-branch.puml) | fork ブランチの中に `start` | 内側の `start` を削除、または内側を partition もしくは別図に |
+| 12 | [12-lane-after-start.puml](./12-lane-after-start.puml) | 最初の `\|...\|` swimlane が `start` の後ろ（PlantUML が拒否、EBNF v1.2.2） | 最初のレーン宣言を `start` の前に移動。後続の lane CHANGE は body のままで OK |
 
 ## 使い方（parser 実装時）
 

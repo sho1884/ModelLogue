@@ -1,5 +1,5 @@
 (* ModelLogue PlantUML Process Diagram Subset Grammar *)
-(* Version: 1.2.1                                       *)
+(* Version: 1.2.2                                       *)
 (* Reference: ADR-009 (minimal-subset guardrails),       *)
 (*            ADR-012 (model-type plugin architecture),  *)
 (*            §3.15 Requirements_Specification.md        *)
@@ -34,6 +34,19 @@
 (*     forgiveness layer for common deviating inputs the  *)
 (*     parser silently absorbs without erroring). T-1     *)
 (*     was the first such tolerance; see §TOLERANCES.    *)
+(*   1.2.2 (2026-04-29): swimlane ordering tightened     *)
+(*     The first `lane_declaration` of a diagram, if any, *)
+(*     MUST appear BEFORE `start`. PlantUML's activity    *)
+(*     engine hard-rejects a swimlane introduced after    *)
+(*     `start` has fired ("This swimlane must be defined  *)
+(*     at the start of the diagram"). v1.2.1 left this    *)
+(*     under-specified — `lane_declaration` was allowed   *)
+(*     in both prelude and body, which let the parser     *)
+(*     accept input PlantUML refused to render and the    *)
+(*     diagram pane stayed at the seed image. Subsequent  *)
+(*     lane declarations during the body (LANE CHANGES)   *)
+(*     remain valid; only the FIRST-EVER one is now       *)
+(*     constrained.                                       *)
 (*                                                       *)
 (* Purpose: Define the ONLY syntax ModelLogue accepts    *)
 (* for the `process` model type (UR-015, v7.6). Any      *)
@@ -61,6 +74,15 @@ diagram          = "@startuml" , newline ,
 (* BEFORE `start`. Lane declarations may also appear   *)
 (* here — the lane active when `start` fires becomes   *)
 (* the default lane for subsequent nodes.              *)
+(*                                                       *)
+(* Swimlane-ordering rule (v1.2.2):                      *)
+(*   If the diagram uses swimlanes AT ALL, the FIRST     *)
+(*   `lane_declaration` MUST appear in the prelude       *)
+(*   (i.e. before `start`). PlantUML's activity engine   *)
+(*   rejects an after-start first-ever swimlane with     *)
+(*   "This swimlane must be defined at the start of the *)
+(*   diagram." Subsequent lane declarations in the body  *)
+(*   are LANE CHANGES and remain valid.                  *)
 
 prelude_line     = empty_line
                  | comment
@@ -70,11 +92,18 @@ prelude_line     = empty_line
 (* The body accepts all forms that can appear AFTER     *)
 (* `start`. Arrow labels are body-only (they cannot     *)
 (* appear before `start`).                              *)
+(*                                                       *)
+(* `lane_change` is structurally identical to a          *)
+(* `lane_declaration` token, but the parser only accepts *)
+(* it here when at least one lane was already declared   *)
+(* in the prelude. A first-ever `|...|` token in the     *)
+(* body is rejected with a parse error pointing at the   *)
+(* PlantUML constraint above (v1.2.2).                   *)
 
 body_line        = empty_line
                  | comment
                  | ignored_decorator
-                 | lane_declaration
+                 | lane_change
                  | partition_open
                  | partition_close
                  | stop_node
@@ -82,6 +111,8 @@ body_line        = empty_line
                  | arrow_label
                  | if_construct
                  | fork_construct ;
+
+lane_change      = lane_declaration ;
 
 empty_line       = { whitespace } ;
 comment          = "'" , { any_char } ;
@@ -332,6 +363,13 @@ fork_branch_line = empty_line
 (*  sub-process can legitimately be a multi-actor        *)
 (*  collaboration. The partition box will span multiple  *)
 (*  lane columns in the rendered SVG.                    *)
+(*                                                       *)
+(*  ORDERING (v1.2.2): if the diagram uses swimlanes at  *)
+(*  all, the FIRST `|...|` declaration must appear in    *)
+(*  the prelude (before `start`). PlantUML rejects an    *)
+(*  after-start first lane outright. Lane CHANGES        *)
+(*  during the body (subsequent `|...|` lines after the  *)
+(*  prelude one) are valid and common.                   *)
 
 lane_declaration = "|" , lane_name , "|" ;
 lane_name        = { any_char_except_pipe } ;
@@ -395,6 +433,8 @@ any_char_except_quote        = ?any Unicode scalar except "\"" or newline? ;
 (*   - `start` appearing more than once, or inside any   *)
 (*     nested block                                      *)
 (*   - `arrow_label` with no successor node              *)
+(*   - First-ever `lane_declaration` appearing AFTER     *)
+(*     `start` (PlantUML hard-rejects; v1.2.2)           *)
 (*                                                       *)
 (* Unrecognised `<<stereotype>>` names are NOT rejected; *)
 (* they are accepted as free labels but do not surface   *)

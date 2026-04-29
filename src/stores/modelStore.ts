@@ -137,7 +137,23 @@ export const useModelStore = create<ModelStore>((set, get) => ({
     const renderable = def ? def.renderPlantUml(source, model) : source;
 
     try {
-      const svgString = await fetchSvg(renderable);
+      const result = await fetchSvg(renderable);
+      if (result.errorMessage !== null) {
+        // PlantUML rejected the source. Drop the stale SVG / coords /
+        // auto-markers so the user is not left looking at a previous
+        // diagram while a banner says "render failed" — the silent
+        // mismatch caused the v7.6 "diagram pane stays at seed"
+        // bug 2026-04-29.
+        set({
+          coordinates: null,
+          svgString: null,
+          svgFetchError: result.errorMessage,
+          pendingAutoMarkerBefore: null,
+        });
+        useMarkerStore.getState().clearAutoMarkers();
+        return;
+      }
+      const svgString = result.svg;
       // v7.5: each model-type definition owns coordinate extraction.
       // state-machine matches state <rect>s and pseudo-state ellipses;
       // requirement matches class-diagram entity <rect>s. Missing
@@ -186,8 +202,12 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       }
     } catch (e) {
       set({
+        coordinates: null,
+        svgString: null,
         svgFetchError: e instanceof Error ? e.message : 'SVG fetch failed',
+        pendingAutoMarkerBefore: null,
       });
+      useMarkerStore.getState().clearAutoMarkers();
     }
   },
 

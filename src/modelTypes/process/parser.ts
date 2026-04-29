@@ -114,6 +114,12 @@ export function parse(source: string): ProcessParseResult {
   };
 
   let seenStart = false;
+  // Tracks whether ANY explicit `|name|` lane declaration has been
+  // processed yet. Used to enforce the v1.2.2 rule "first-ever
+  // swimlane must appear before start" — `lanes` itself can't gate
+  // this because the start handler eagerly registers the implicit
+  // `(default)` lane the moment `start` fires.
+  let seenExplicitLane = false;
   let pendingIncomingLabel: string | null = null;
   let nodeIdCounter = 0;
   const nextId = () => `p${++nodeIdCounter}`;
@@ -251,8 +257,23 @@ export function parse(source: string): ProcessParseResult {
     const laneMatch = line.match(LANE_RE);
     if (laneMatch) {
       const name = laneMatch[1].trim() || '(unnamed)';
+      // EBNF v1.2.2: the FIRST-ever lane declaration must appear in the
+      // prelude (before `start`). PlantUML's activity engine hard-
+      // rejects an after-start first swimlane with "This swimlane must
+      // be defined at the start of the diagram." Subsequent lane
+      // declarations during the body are LANE CHANGES and remain
+      // valid; only the first-ever one is constrained.
+      if (seenStart && !seenExplicitLane) {
+        addError(
+          lineNum,
+          `the first \`|${name}|\` swimlane declaration must appear BEFORE \`start\` — PlantUML rejects an after-start first swimlane (move the line above \`start\`; see examples/rejected/12)`
+        );
+        i++;
+        continue;
+      }
       currentLane = name;
       ensureLane(name);
+      seenExplicitLane = true;
       i++;
       continue;
     }

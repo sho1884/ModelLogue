@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchSvg } from '../../services/plantUmlService';
+import { fetchSvg, type SvgFetchResult } from '../../services/plantUmlService';
 import {
   extractCoordinates,
   type CoordinateMap,
@@ -114,10 +114,23 @@ export function ProposalView({
       fetchSvg(suggestedSource),
       beforeNonEmpty
         ? fetchSvg(currentSource).catch(() => null)
-        : Promise.resolve<string | null>(null),
+        : Promise.resolve<SvgFetchResult | null>(null),
     ])
-      .then(([proposedSvg, beforeSvg]) => {
+      .then(([proposedResult, beforeResult]) => {
         if (cancelled || !afterParse.model) return;
+        if (proposedResult.errorMessage !== null) {
+          setState({ kind: 'error', message: proposedResult.errorMessage });
+          return;
+        }
+        const proposedSvg = proposedResult.svg;
+        // Treat a 400 on the BEFORE source the same as a fetch failure:
+        // if PlantUML rejects current, the proposal still has value
+        // (it might be the AI's attempt to fix the broken state). Show
+        // the proposed side only.
+        const beforeSvg =
+          beforeResult && beforeResult.errorMessage === null
+            ? beforeResult.svg
+            : null;
         // Coordinate extraction and the colored overlay are both
         // state-machine-specific today. For other model types we
         // still show the side-by-side SVGs but skip the diff overlay

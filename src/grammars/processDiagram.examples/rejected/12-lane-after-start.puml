@@ -1,0 +1,27 @@
+' Rejected (EBNF v1.2.2): the FIRST swimlane declaration appears
+' AFTER `start`. PlantUML's activity engine hard-rejects this with
+' "This swimlane must be defined at the start of the diagram." —
+' once `start` has fired in the implicit default lane, you can no
+' longer introduce a swimlane structure.
+'
+' Subsequent lane declarations during the body (LANE CHANGES) are
+' fine; only the FIRST-EVER one is constrained. Move the first
+' `|...|` to BEFORE `start` to fix.
+'
+' Rewrite:
+'   @startuml
+'   |顧客|              ← first lane in prelude
+'   start
+'   :口座開設を申し込む;
+'   |行員|              ← lane CHANGE in body — still valid
+'   :申込内容を確認;
+'   stop
+'   @enduml
+@startuml
+start
+|顧客|
+:口座開設を申し込む;
+|行員|
+:申込内容を確認;
+stop
+@enduml

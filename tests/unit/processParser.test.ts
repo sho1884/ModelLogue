@@ -369,4 +369,68 @@ describe('processParser — rejected corpus', () => {
       r.errors.some((e) => /arrow label|successor/i.test(e.message))
     ).toBe(true);
   });
+
+  it('12-lane-after-start: error mentions swimlane and BEFORE start', () => {
+    const r = parse(loadPuml(REJECTED_DIR, '12-lane-after-start.puml'));
+    expect(
+      r.errors.some((e) =>
+        /swimlane|BEFORE\s+`?start`?/i.test(e.message)
+      )
+    ).toBe(true);
+  });
+
+  // Tighter checks for EBNF v1.2.2 swimlane-ordering rule.
+  describe('swimlane-ordering rule (EBNF v1.2.2)', () => {
+    it('lane in prelude (before start) is accepted', () => {
+      const r = parse(`@startuml
+|顧客|
+start
+:申込;
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+    });
+
+    it('lane CHANGE during body (after one in prelude) is accepted', () => {
+      const r = parse(`@startuml
+|顧客|
+start
+:申込;
+|行員|
+:確認;
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+      expect(r.model!.lanes).toEqual(['顧客', '行員']);
+    });
+
+    it('first-ever lane in body (no prelude lane) is rejected', () => {
+      const r = parse(`@startuml
+start
+|顧客|
+:申込;
+stop
+@enduml`);
+      expect(r.errors.length).toBeGreaterThan(0);
+      expect(
+        r.errors.some((e) =>
+          /swimlane|BEFORE\s+`?start`?/i.test(e.message)
+        )
+      ).toBe(true);
+      expect(r.model).toBeNull();
+    });
+
+    it('no swimlanes at all is fine (single default lane)', () => {
+      const r = parse(`@startuml
+start
+:任意の作業;
+stop
+@enduml`);
+      expect(r.errors).toEqual([]);
+      expect(r.model).not.toBeNull();
+      expect(r.model!.lanes).toEqual(['(default)']);
+    });
+  });
 });
