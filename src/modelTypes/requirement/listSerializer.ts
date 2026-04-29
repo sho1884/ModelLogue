@@ -1,8 +1,9 @@
 // SR-113: Requirement list CSV / HTML serializer.
 //
-// CSV columns (per Requirements_Specification.md §3.13.7):
+// CSV columns (per Requirements_Specification.md §3.13.7, ADR-015):
 //
-//   id, name, type, text, contained_in, derives_from, hidden, deleted, note
+//   id, statement, type, text, contained_in, derives_from,
+//   hidden, deleted, note, level, group
 //
 // The CSV is also a valid SR-110 seed-form input — round-tripping
 // from Save .csv into the Requirements tab of a fresh session restores
@@ -23,6 +24,8 @@ const CSV_HEADER = [
   'hidden',
   'deleted',
   'note',
+  'level',
+  'group',
 ];
 
 const TYPE_TO_SEED: Record<Requirement['type'], string> = {
@@ -60,6 +63,8 @@ export function modelToRequirementsCsv(model: RequirementModel): string {
       r.hidden ? 'Y' : '',
       r.deleted ? 'Y' : '',
       r.note,
+      r.level ?? '',
+      r.group ?? '',
     ];
     lines.push(row.map(csvCell).join(','));
   }
@@ -99,6 +104,8 @@ export function modelToRequirementsHtml(model: RequirementModel): string {
           `<td style="text-align:center;">${r.hidden ? 'Y' : ''}</td>` +
           `<td style="text-align:center;">${r.deleted ? 'Y' : ''}</td>` +
           `<td>${htmlEscape(r.note)}</td>` +
+          `<td>${htmlEscape(r.level ?? '')}</td>` +
+          `<td>${htmlEscape(r.group ?? '')}</td>` +
           '</tr>'
         );
       })

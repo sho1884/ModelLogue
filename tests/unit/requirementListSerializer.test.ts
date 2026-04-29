@@ -5,15 +5,15 @@ import {
 } from '../../src/modelTypes/requirement/listSerializer';
 import { parse } from '../../src/modelTypes/requirement/parser';
 
-describe('requirement list serializer (SR-113)', () => {
-  it('CSV header matches §3.13.7', () => {
+describe('requirement list serializer (SR-113, ADR-015)', () => {
+  it('CSV header is the canonical 11-column form (ADR-015)', () => {
     const m = parse(`@startuml
 $fReq("R1", "foo")
 @enduml`).model!;
     const csv = modelToRequirementsCsv(m);
     const header = csv.split('\n')[0];
     expect(header).toBe(
-      'id,statement,type,text,contained_in,derives_from,hidden,deleted,note'
+      'id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group'
     );
   });
 
@@ -43,8 +43,9 @@ $fReq("R2", "top")
     const r1 = csv.split('\n').find((l) => l.startsWith('R1,'))!;
     const r2 = csv.split('\n').find((l) => l.startsWith('R2,'))!;
     expect(r1).toContain(',Group1,');
-    // R2 has no parent → empty column between text and derives_from
-    expect(r2).toMatch(/^R2,top,functional,,,,,,/);
+    // R2 has no parent → trailing 8 empty cells (text + contained_in +
+    // derives_from + hidden + deleted + note + level + group)
+    expect(r2).toMatch(/^R2,top,functional,,,,,,,,$/);
   });
 
   it('joins multiple derive sources with "; "', () => {
@@ -74,9 +75,9 @@ $fReq("R2", "parked")
     const r1 = lines.find((l) => l.startsWith('R1,'))!;
     const r2 = lines.find((l) => l.startsWith('R2,'))!;
     const r3 = lines.find((l) => l.startsWith('R3,'))!;
-    expect(r1).toContain(',please review');
-    expect(r2).toMatch(/,Y,,/); // hidden=Y, deleted empty
-    expect(r3).toMatch(/,,Y,out of scope/); // deleted=Y with reason
+    expect(r1).toContain(',please review,,');
+    expect(r2).toMatch(/,Y,,,,$/); // hidden=Y, deleted/note/level/group empty (4 trailing commas)
+    expect(r3).toMatch(/,,Y,out of scope,,$/); // deleted=Y with reason, level/group empty
   });
 
   it('CSV with embedded commas gets RFC 4180 quoting', () => {
@@ -96,6 +97,8 @@ $fReq("R2", "bar")
     const html = modelToRequirementsHtml(m);
     expect(html.startsWith('<table')).toBe(true);
     expect(html).toContain('<th>id</th>');
+    expect(html).toContain('<th>level</th>');
+    expect(html).toContain('<th>group</th>');
     expect(html).toContain(
       '<th scope="row" style="font-weight:normal;text-align:left;">R1</th>'
     );
@@ -111,5 +114,31 @@ $fReq("R2", "bar")
 @enduml`).model!;
     const html = modelToRequirementsHtml(m);
     expect(html).toContain('text-decoration:line-through');
+  });
+
+  it('emits level and group when present on the model', () => {
+    // Build a model directly (parser doesn't fill level/group from
+    // macro DSL — those are CSV-side fields).
+    const model = {
+      requirements: [
+        {
+          id: 'UR-001',
+          statement: 'top-level user requirement',
+          text: null,
+          type: 'requirement' as const,
+          parentId: null,
+          hidden: false,
+          deleted: false,
+          note: '',
+          level: 'user' as const,
+          group: 'Review tasks',
+        },
+      ],
+      relations: [],
+    };
+    const csv = modelToRequirementsCsv(model);
+    const row = csv.split('\n')[1];
+    // Trailing two cells: level=user, group=Review tasks
+    expect(row).toMatch(/,user,Review tasks$/);
   });
 });

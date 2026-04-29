@@ -1,0 +1,53 @@
+id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group
+SR-001,Display PlantUML source (read-only during review),functional,,,,,,,,Source editing
+SR-002,Parse PlantUML subset into state machine model,functional,,,,,,,,Source editing
+SR-010,Display PlantUML SVG with pan and zoom,functional,,,,,,,,Diagram display
+SR-011,Extract element coordinates from PlantUML SVG,functional,,,,,,,,Diagram display
+SR-012,Provide diagram tool selection,functional,,,,,,,,Diagram display
+SR-013,Draw marker by drag,functional,,,,,,,,Diagram display
+SR-014,Manage marker colors from a fixed palette,functional,,,,,,,,Diagram display
+SR-015,"Select, move, and resize markers",functional,,,,,,,,Diagram display
+SR-016,Delete marker,functional,,,,,,,,Diagram display
+SR-017,Render marker overlay over the SVG,functional,,,,,,,,Diagram display
+SR-020,Generate State×Event matrix (hybrid),functional,,,,,,,,State transition table
+SR-021,Generate PreState×PostState matrix (hybrid),functional,,,,,,,,State transition table
+SR-022,Provide marker and grammar context to AI,functional,,,,,,,,AI chat
+SR-030,Send chat message to AI via n8n,functional,,,,,,,,AI chat
+SR-031,Render chat message list,functional,,,,,,,,AI chat
+SR-032,Extract PlantUML source from AI response,functional,,,,,,,,AI chat
+SR-033,Visual before/after model comparison,functional,,,,,,,,AI chat
+SR-034,Apply proposed source modification,functional,,,,,,,,AI chat
+SR-035,Undo and Redo applied source modifications,functional,,,,,,,,AI chat
+SR-040,Manage session state in browser memory,functional,,,,,,,,Session management
+SR-041,Save the review session as a JSON file,functional,,,,,,,,Session management
+SR-060,Check PlantUML Server health,functional,,,,,,,,Infrastructure
+SR-061,Check n8n connectivity,functional,,,,,,,,Infrastructure
+SR-070,Render diagram primary view + empty-state guide,functional,,,,,,,,UI layout
+SR-071,Render analysis panel with dynamic tabs,functional,,,,,,,,UI layout
+SR-072,Render chat panel with proposal view,functional,,,,,,,,UI layout
+SR-073,Select model type at session seed,functional,,,,,,,,UI layout
+SR-080,Provide a Requirements tab (read-only during review),functional,,,,,,,,Requirements text
+SR-081,Offer the PlantUML subset grammar as a download,functional,,,,,,,,Requirements text
+SR-082,Generate an initial model from the requirements text,functional,,,,,,,,Requirements text
+SR-083,Open a saved review or starter file,functional,,,,,,,,Requirements text
+SR-090,Compute model-level diff between two StateMachineModels,functional,,,,,,,,Model diff
+SR-100,Export PlantUML source from the Source tab,functional,,,,,,,,Artifact export
+SR-101,Export each state-transition matrix,functional,,,,,,,,Artifact export
+SR-102,Export generated test cases and coverage report,functional,,,,,,,,Artifact export
+SR-103,Display N-switch test cases reactively,functional,,,,,,,,Artifact export
+SR-110,Parse requirement-diagram input into RequirementModel,functional,,,,,,,,Requirement diagram (v7.5)
+SR-111,Generate requirement × requirement traceability matrix,functional,,,,,,,,Requirement diagram (v7.5)
+SR-112,Identify orphan requirements,functional,,,,,,,,Requirement diagram (v7.5)
+SR-113,Display requirement list with notes / Copy / Save .csv,functional,,,,,,,,Requirement diagram (v7.5)
+SR-114,Render-pipeline filter for hidden-requirement declarations,functional,,,,,,,,Requirement diagram (v7.5)
+SR-115,Seed sessions with the !procedure preamble,functional,,,,,,,,Requirement diagram (v7.5)
+SR-116,"Apply AI csv reply, regenerate canonical PlantUML",functional,,,,,,,,Requirement diagram (v7.5)
+SR-117,Auto-place added/changed markers after AI apply,functional,,,,,,,,Requirement diagram (v7.5)
+SR-118,Persist level / group classification axes on requirements,functional,,,,,,,,Requirement diagram (v7.7)
+SR-119,Render requirement diagram with selectable visual grouping axis,functional,,,,,,,,Requirement diagram (v7.7)
+SR-120,Scenarios tab — enumerate every start→end path,functional,,,,,,,,Process diagram (v7.6)
+SR-121,Events tab — timer / message / error inventory,functional,,,,,,,,Process diagram (v7.6)
+SR-122,Roles tab — swim lanes and lane hand-offs,functional,,,,,,,,Process diagram (v7.6)
+SR-123,Artifacts tab — arrow-label inventory,functional,,,,,,,,Process diagram (v7.6)
+SR-124,Parse process-diagram source into ProcessModel,functional,,,,,,,,Process diagram (v7.6)
+SR-125,Externals tab — external systems referenced from notes,functional,,,,,,,,Process diagram (v7.6)

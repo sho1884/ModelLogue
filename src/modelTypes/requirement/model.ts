@@ -10,6 +10,12 @@ export type RequirementType =
   | 'nonFunctionalRequirement'
   | 'designConstraint';
 
+/**
+ * Abstraction tier (ADR-015 / SR-118). Orthogonal to `type` and `group`.
+ * Closed value space; extension requires a follow-up ADR.
+ */
+export type RequirementLevel = 'user' | 'system' | 'design';
+
 export interface Requirement {
   /** Stable identifier, unique within the model. */
   id: string;
@@ -49,6 +55,24 @@ export interface Requirement {
    * notes like "needs clarification". Empty string means no note.
    */
   note: string;
+  /**
+   * Abstraction tier (ADR-015 / SR-118). Orthogonal to `type` and
+   * `group`. Used as a visual grouping axis when chosen by SR-119, and
+   * as a filter for level-aware analytics (e.g. "every system-level
+   * requirement should derive from ≥1 user-level requirement").
+   * Null = unspecified.
+   */
+  level: RequirementLevel | null;
+  /**
+   * Free-text classification axis (ADR-015 / SR-118). Used to slice
+   * requirements by review-purpose-specific groupings (component area,
+   * phase, sub-system, etc.). Orthogonal to `type` and `level`. The
+   * "one axis per diagram" discipline (ADR-015) means: when both
+   * `level` and `group` are populated in the same model, only one
+   * should drive the visual grouping in any single review diagram.
+   * Null = unspecified.
+   */
+  group: string | null;
 }
 
 export type RequirementRelationKind =

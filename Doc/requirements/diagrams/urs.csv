@@ -1,0 +1,16 @@
+id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group
+UR-001,Review state machine diagram,requirement,,,,,,,,状態遷移図のレビュー
+UR-003,View state transition table,requirement,,,UR-001,,,,,状態遷移図のレビュー
+UR-011,Convert between source and table,requirement,,,UR-001,,,,,状態遷移図のレビュー
+UR-013,Review N-switch coverage test cases,requirement,,,UR-001,,,,,状態遷移図のレビュー
+UR-014,Review a requirement diagram,requirement,,,,,,,,要求図のレビュー
+UR-015,Review a business process diagram,requirement,,,,,,,,プロセス図のレビュー
+UR-002,Refer to PlantUML source,requirement,,,,,,,,共通レビュー機能
+UR-004,Place markers on the diagram,requirement,,,,,,,,共通レビュー機能
+UR-005,Discuss the model with AI,requirement,,,,,,,,共通レビュー機能
+UR-006,Apply AI suggestions,requirement,,,,,,,,共通レビュー機能
+UR-007,Save review evidence,requirement,,,,,,,,共通レビュー機能
+UR-009,Receive an initial model,requirement,,,,,,,,共通レビュー機能
+UR-010,Close the review session with an outcome,requirement,,,,,,,,共通レビュー機能
+UR-012,Refer to requirements text,requirement,,,,,,,,共通レビュー機能
+UR-008,Obtain the PlantUML subset grammar,requirement,,,,,,,,補助機能

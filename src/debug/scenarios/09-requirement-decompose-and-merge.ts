@@ -17,32 +17,33 @@ function wrapCsv(csv: string): string {
   return '```csv\n' + csv + '\n```';
 }
 
-const HEADER = 'id,statement,type,text,contained_in,derives_from,hidden,deleted,note';
+const HEADER =
+  'id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group';
 
 const STEP1 = [
   HEADER,
-  'R1,雨天でも使える,functional,,,,,,',
+  'R1,雨天でも使える,functional,,,,,,,,',
 ].join('\n');
 
 const STEP2 = [
   HEADER,
-  'R1,雨天でも使える,functional,,,,,,',
+  'R1,雨天でも使える,functional,,,,,,,,',
   // 3 new children, contained in R1.
-  'R11,ケースの水密性,functional,,R1,,,,',
-  'R12,スイッチの防滴,functional,,R1,,,,',
-  'R13,電池室の密閉,functional,,R1,,,,',
+  'R11,ケースの水密性,functional,,R1,,,,,,',
+  'R12,スイッチの防滴,functional,,R1,,,,,,',
+  'R13,電池室の密閉,functional,,R1,,,,,,',
 ].join('\n');
 
 const STEP3 = [
   HEADER,
-  'R1,雨天でも使える,functional,,,,,,',
+  'R1,雨天でも使える,functional,,,,,,,,',
   // R11 absorbs R12 — statement generalised, relations unchanged.
-  'R11,本体全体の水密性,functional,,R1,,,,',
+  'R11,本体全体の水密性,functional,,R1,,,,,,',
   // R12 soft-deleted with a merge reason (ADR-014). Keeps the row as
   // evidence in the Requirement list tab; the renderer drops the
   // declaration from the diagram.
-  'R12,スイッチの防滴,functional,,R1,,,Y,R11 に統合',
-  'R13,電池室の密閉,functional,,R1,,,,',
+  'R12,スイッチの防滴,functional,,R1,,,Y,R11 に統合,,',
+  'R13,電池室の密閉,functional,,R1,,,,,,',
 ].join('\n');
 
 const scenario: Scenario = {

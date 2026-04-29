@@ -21,13 +21,20 @@ interface Pair {
 }
 
 const PAIRS: Pair[] = [
+  // UR-only inventory, grouped by review-target area (group axis).
   {
-    csv: 'Doc/requirements/diagrams/user-level.csv',
-    puml: 'Doc/requirements/diagrams/user-level.from-csv.puml',
+    csv: 'Doc/requirements/diagrams/urs.csv',
+    puml: 'Doc/requirements/diagrams/urs.from-csv.puml',
   },
+  // SR-only inventory, grouped by component area (group axis).
   {
-    csv: 'Doc/requirements/diagrams/system-level.csv',
-    puml: 'Doc/requirements/diagrams/system-level.from-csv.puml',
+    csv: 'Doc/requirements/diagrams/srs.csv',
+    puml: 'Doc/requirements/diagrams/srs.from-csv.puml',
+  },
+  // Cross-tier coverage: UR + SR, grouped by abstraction level (level axis).
+  {
+    csv: 'Doc/requirements/diagrams/coverage.csv',
+    puml: 'Doc/requirements/diagrams/coverage.from-csv.puml',
   },
 ];
 

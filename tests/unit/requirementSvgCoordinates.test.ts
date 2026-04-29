@@ -37,6 +37,8 @@ function model(ids: string[]): RequirementModel {
       hidden: false,
       deleted: false,
       note: '',
+      level: null,
+      group: null,
     })),
     relations: [],
   };

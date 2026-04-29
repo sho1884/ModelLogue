@@ -15,6 +15,8 @@ function req(
     hidden: boolean;
     deleted: boolean;
     note: string;
+    level: 'user' | 'system' | 'design' | null;
+    group: string | null;
   }> = {}
 ) {
   return {
@@ -26,6 +28,8 @@ function req(
     hidden: overrides.hidden ?? false,
     deleted: overrides.deleted ?? false,
     note: overrides.note ?? '',
+    level: overrides.level ?? null,
+    group: overrides.group ?? null,
   };
 }
 

@@ -23,8 +23,8 @@ describe('saved .puml contents (requirement session)', () => {
 
   it('post-apply buffer carries the preamble (standalone renderable)', () => {
     const csv =
-      'R1,light up,functional,,,,,,\n' +
-      'R2,emit light,functional,,R1,R1,,,';
+      'R1,light up,functional,,,,,,,,\n' +
+      'R2,emit light,functional,,R1,R1,,,,,';
     const { model } = parseRequirementsCsv(csv);
     const puml = modelToPlantUml(model!);
 
@@ -42,9 +42,9 @@ describe('saved .puml contents (requirement session)', () => {
     // fresh requirement session's buffer, parsed — the reviewer gets
     // back the same RequirementModel they saved.
     const csv =
-      'R1,keep,functional,,,,,,\n' +
-      'R2,merged-out,functional,,R1,,,Y,merged into R1\n' +
-      'R3,parked,functional,,,,Y,,';
+      'R1,keep,functional,,,,,,,,\n' +
+      'R2,merged-out,functional,,R1,,,Y,merged into R1,,\n' +
+      'R3,parked,functional,,,,Y,,,,';
     const { model: original } = parseRequirementsCsv(csv);
     const puml = modelToPlantUml(original!);
 

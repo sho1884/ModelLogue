@@ -1,18 +1,4 @@
 @startuml
-' ModelLogue system requirements diagram (SR-001 .. SR-125)
-'
-' Source of truth: Doc/requirements/system_requirements.yaml
-' Generated for review via ModelLogue's own requirement-diagram model
-' type (dogfood). Open this file in ModelLogue (model type:
-' "Requirement diagram") to review.
-'
-' Grouping mirrors the section headers in system_requirements.yaml.
-' Removed SRs (SR-003, SR-050) are intentionally omitted.
-'
-' Parent-UR linkage is NOT shown as derive arrows here — the trace
-' belongs in the user-level diagram and the matrix in
-' Doc/Traceability.md. This view is the SR landscape grouped by
-' component area.
 
 hide circle
 hide empty members
@@ -98,7 +84,7 @@ hide method
     "$Original" <.. "$Copy" : <<copy>>
 !endprocedure
 
-title ModelLogue システム要求 (SR-001 .. SR-125)
+left to right direction
 
 package "Source editing" <<Frame>> {
   $fReq("SR-001", "Display PlantUML source (read-only during review)")
@@ -175,6 +161,11 @@ package "Requirement diagram (v7.5)" <<Frame>> {
   $fReq("SR-115", "Seed sessions with the !procedure preamble")
   $fReq("SR-116", "Apply AI csv reply, regenerate canonical PlantUML")
   $fReq("SR-117", "Auto-place added/changed markers after AI apply")
+}
+
+package "Requirement diagram (v7.7)" <<Frame>> {
+  $fReq("SR-118", "Persist level / group classification axes on requirements")
+  $fReq("SR-119", "Render requirement diagram with selectable visual grouping axis")
 }
 
 package "Process diagram (v7.6)" <<Frame>> {

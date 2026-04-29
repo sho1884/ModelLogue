@@ -1,20 +1,21 @@
 # ModelLogue requirement diagrams (dogfood)
 
-This directory holds two views of ModelLogue's own requirements,
-expressed via the requirement-diagram model type. The point is to
-exercise the v7.5 feature on the project's actual data and capture
-what we learn.
+Three views of ModelLogue's own requirements expressed as SR-113 CSV
+inputs to the requirement-diagram model type. The point is to exercise
+the v7.5 + v7.7 (ADR-015) features on the project's actual data, with
+each diagram answering a single review question.
 
-## Files
+## Files (3 review purposes × 1 axis each, per ADR-015)
 
-| Pair | Hand-written `.puml` | CSV-driven |
-|---|---|---|
-| User level (UR-001 .. UR-015) | [user-level.puml](user-level.puml) | [user-level.csv](user-level.csv) → [user-level.from-csv.puml](user-level.from-csv.puml) |
-| System level (SR-001 .. SR-125) | [system-level.puml](system-level.puml) | [system-level.csv](system-level.csv) → [system-level.from-csv.puml](system-level.from-csv.puml) |
+| Review purpose | Axis | CSV (input) | Generated `.puml` |
+|---|---|---|---|
+| UR area inventory: how the user-facing tasks split across review targets | `group` | [urs.csv](urs.csv) | [urs.from-csv.puml](urs.from-csv.puml) |
+| SR component inventory: which functions land in which area of the codebase | `group` | [srs.csv](srs.csv) | [srs.from-csv.puml](srs.from-csv.puml) |
+| Cross-tier coverage: every UR realised by ≥ 1 SR, every SR traced to a UR | `level` | [coverage.csv](coverage.csv) | [coverage.from-csv.puml](coverage.from-csv.puml) |
 
 The `*.from-csv.puml` files are generated mechanically from the
-matching CSV via `csvParser → modelToPlantUml` (the same pipeline
-SR-116 uses on AI replies). Regenerate with:
+matching CSV via `csvParser → modelToPlantUml(model, axis)` (the same
+pipeline SR-116 uses on AI replies). Regenerate with:
 
 ```
 REGEN_FROM_CSV=1 npx vitest run tests/unit/projectRequirementDiagramsFromCsv
@@ -24,97 +25,55 @@ Without `REGEN_FROM_CSV`, the test asserts byte-equality between the
 on-disk `.from-csv.puml` and what the converter produces from the
 CSV (deterministic per ADR-011).
 
-## Why two paths
+## ADR-015 in action: one axis per review
 
-The requirement-diagram model type accepts inputs in two shapes:
+The CSV has 11 columns:
+`id, statement, type, text, contained_in, derives_from, hidden,
+deleted, note, level, group`
 
-1. **Macro-DSL `.puml`** — what the parser ultimately consumes and
-   what PlantUML Server renders. Authoring it by hand is what I did
-   first.
-2. **Semi-structured CSV** — the canonical exchange format with the
-   AI (`id, statement, type, text, contained_in, derives_from,
-   hidden, deleted, note`, per SR-113). The runtime regenerates the
-   canonical `.puml` from it via SR-116.
+Each of the three CSVs uses **exactly one** of `level` / `group` as
+its visual grouping axis (the other column is empty on every row):
 
-For state-machine and process-diagram sessions the user authors
-PlantUML directly. For requirement sessions the input is a table
-(or natural language → AI → table); writing PlantUML by hand
-sidesteps the intended modality. Producing both pairs lets us
-compare what each lens does to the same data.
+- **urs.csv** — `level` empty, `group` set to one of `状態遷移図のレビュー / 要求図のレビュー / プロセス図のレビュー / 共通レビュー機能 / 補助機能`. Generates 5 `package <<Frame>>` blocks at axis = group.
+- **srs.csv** — `level` empty, `group` set to the YAML section name (Source editing / Diagram display / … / Process diagram). Generates 12 packages.
+- **coverage.csv** — `level` set to `user` for UR rows and `system` for SR rows, `group` empty on every row. `derives_from` connects each SR to its parent UR(s). Generates 2 packages plus ~65 cross-tier `$derive` arrows.
 
-## What the comparison shows
+Mixing both axes (populating `level` and `group` on the same CSV) is
+forbidden by convention (ADR-015 / SR-118 / n8n prompt). The data
+model is orthogonal so it would technically work, but the resulting
+diagram answers no clear review question.
 
-### Visual scale
+## Layout direction (empirical finding)
 
-| | hand-written | CSV-driven | ratio |
+The generator emits `left to right direction` whenever any package
+block is present. With the alternative `top to bottom direction`,
+PlantUML's class-diagram layout collapses the cross-tier coverage
+case into a near-flat single row (28177 × 293 px) because the many-
+to-many derive arrows dominate the layout solver. With
+`left to right direction`, packages stack vertically and within-
+package elements arrange horizontally, giving a usable tall-and-
+narrow shape:
+
+| Diagram | viewBox (px) | nodes | package blocks |
 |---|---|---|---|
-| user-level: SVG viewBox | 2132 × 436 px | 2396 × 345 px | similar |
-| system-level: SVG viewBox | 8325 × 745 px | **24919 × 361 px** | **3× wider** |
+| urs.from-csv | 1095 × 1084 | 15 | 5 |
+| srs.from-csv | 2329 × 3052 | 52 | 12 |
+| coverage.from-csv | 1693 × 5255 | 67 | 2 (level=user / level=system) |
 
-The CSV-driven system-level lays all 65 boxes out in a single tall
-strip because PlantUML's auto-layout has nothing to anchor the
-grouping. Without packages it falls back to "left-to-right pile of
-classes connected by dashed arrows", which sprawls horizontally as
-the node count grows. The hand-written version, with 11
-`package <<Frame>> { ... }` blocks, gives PlantUML a 2D grid hint
-and the layout compresses.
+For comparison, the dogfood that surfaced ADR-015 produced a
+`system-level.from-csv.puml` of 24919 × 361 px — flat, no packages,
+unreadable. The new pipeline replaces that with `srs.from-csv.puml`
+(2329 × 3052) for the same data.
 
-### What each input modality can express
+## What this dogfood teaches
 
-| | hand-written `.puml` | CSV |
-|---|---|---|
-| Visual grouping (`package <<Frame>> { ... }`) | yes | **no** — no `package` column |
-| `$contain` relation | yes | yes (`contained_in`) — but `$contain` is logical containment, NOT a visual frame in PlantUML class diagrams |
-| `$derive` arrows | yes | yes (`derives_from`, semicolon-separated) |
-| Title / decorative comments | yes | **no** — converter emits a fixed shape |
-| Cross-level UR ↔ SR trace | possible (would need both layers in one source) | natural — both can be rows in one CSV |
-| Round-trip determinism | unspecified (formatting drift possible) | guaranteed (ADR-011) |
-| Authoring ergonomics for 50+ rows | tedious | one-row-per-line table |
+1. **The CSV format is sufficient for review-purpose-specific diagrams.** The same project can produce three distinct review artifacts from three CSV files, each answering a single review question.
+2. **One axis per review is enforceable by author discipline.** No tooling police. The CSV format permits both `level` and `group` on the same row; the n8n prompt and this README state the rule.
+3. **PlantUML layout is sensitive to direction.** `left to right direction` is the better default for class-diagram requirement views with cross-package edges, even when the abstract intent is "UR on top, SR on bottom" (level packages stack vertically; the actual UR ↔ SR arrows flow left to right within the tall layout).
+4. **Free-text `group` doesn't lose review value.** It can carry the YAML section names verbatim, so the diagram author doesn't need to invent a separate taxonomy.
 
-The CSV format **does not have a package column**. That's a real
-expressiveness gap between the two paths: the hand-written
-`system-level.puml` groups SRs by area as a review-comprehension
-device; the CSV-driven version cannot reproduce that.
+## Found and fixed during dogfooding
 
-The observation isn't "the CSV format is incomplete" — it is by
-design SR-113-shaped, designed to be flat and to round-trip with
-the AI. Visual grouping in a requirement diagram is more of a
-diagram-author decision than a data property; if it matters,
-authoring `.puml` by hand (or augmenting the AI reply) is the right
-escape hatch.
-
-### Does the CSV path capture the trace better?
-
-In the system-level pair, only the CSV-driven version actually
-draws the UR ↔ SR derive arrows because the CSV had room to list
-both UR and SR rows side-by-side. The hand-written version
-deliberately omitted them — 80+ arrows on top of 65 nodes is
-visually overwhelming and `Doc/Traceability.md` already carries
-the matrix.
-
-So the two artifacts answer different review questions:
-
-- **`system-level.puml` (hand-written, packages, no arrows)** —
-  "What functions are we shipping, grouped by area?" Skim-friendly.
-- **`system-level.from-csv.puml` (flat, all arrows)** —
-  "Which URs does each SR descend from? Are any SRs orphaned?"
-  Trace-friendly, requires zoom.
-
-Neither replaces the other.
-
-## What dogfooding revealed
-
-Running the project's own UR / SR through the requirement-diagram
-pipeline surfaced one real bug:
-
-**preamble-relation hyphen-ID rendering bug** (fixed in the
-companion commit). The canonical `!procedure` preamble expanded
-relation arguments without quoting (`$Supplier <.. $Client`), which
-PlantUML's class-diagram parser reads as a subtraction expression
-when the alias contains a hyphen (`UR-001 <.. UR-003` → `Syntax
-Error`). All existing requirement-parser tests use unhyphenated IDs
-(`R1`, `P`, `C`, …), so the case never fired. Dogfooding with
-real `UR-NNN` / `SR-NNN` style is what surfaced it.
-
-The fix wraps the variable expansions in `"..."`. No-op for
-unhyphenated IDs; rescues the hyphenated case.
+- **Preamble hyphen-ID rendering** ([f5f98e7](https://github.com/sho1884/ModelLogue/commit/f5f98e7)): the canonical macro preamble expanded relation arguments without quoting, which PlantUML's class-diagram parser misread as subtraction expressions for hyphenated identifiers (`UR-001 <.. UR-003 → Syntax Error`). Wrapped variables in `"..."` in `$contain / $derive / $refine / $satisfy / $verify / $trace / $copy`. No-op for unhyphenated IDs.
+- **Diagram pane silent failure** ([035a5aa](https://github.com/sho1884/ModelLogue/commit/035a5aa)): when PlantUML rejected a source, `fetchSvg` threw and the modelStore left `svgString` untouched, so the diagram pane kept showing the previous (or seed) image. Now the error message is parsed out of PlantUML's self-rendered error SVG and surfaced via `svgFetchError`, with the stale SVG cleared.
+- **EBNF v1.2.2 / process diagram swimlane ordering** ([035a5aa](https://github.com/sho1884/ModelLogue/commit/035a5aa)): tightened the parser/spec to reject the first-ever `|...|` swimlane after `start` (PlantUML hard-rejects this regardless), and added rejected corpus test 12.

@@ -9,7 +9,7 @@ function wrapCsv(csv: string): string {
 describe('requirementDefinition.extractSuggestedSource', () => {
   it('extracts a ```csv block and regenerates PlantUML', () => {
     const ai = `Here is the updated list.\n\n${wrapCsv(
-      `R1,light up,functional,,,,,,\nR2,emit,functional,,R1,,,,`
+      `R1,light up,functional,,,,,,,,\nR2,emit,functional,,R1,,,,,,`
     )}\n\nDone.`;
     const puml = requirementDefinition.extractSuggestedSource!(ai, '');
     expect(puml).not.toBeNull();
@@ -29,15 +29,15 @@ describe('requirementDefinition.extractSuggestedSource', () => {
   });
 
   it('returns null when the csv block fails to parse', () => {
-    const ai = wrapCsv(`R1,gone,functional,,,,,Y,`); // deleted=Y with empty note
+    const ai = wrapCsv(`R1,gone,functional,,,,,Y,,,`); // deleted=Y with empty note
     const puml = requirementDefinition.extractSuggestedSource!(ai, '');
     expect(puml).toBeNull();
   });
 
   it('accepts a csv block that includes the canonical header row', () => {
     const csv =
-      'id,statement,type,text,contained_in,derives_from,hidden,deleted,note\n' +
-      'R1,light up,functional,,,,,,';
+      'id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group\n' +
+      'R1,light up,functional,,,,,,,,';
     const puml = requirementDefinition.extractSuggestedSource!(wrapCsv(csv), '');
     expect(puml).toContain('$fReq("R1", "light up")');
   });

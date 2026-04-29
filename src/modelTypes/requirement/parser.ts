@@ -430,6 +430,8 @@ export function parse(source: string): RequirementParseResult {
           hidden: false,
           deleted: true,
           note: pendingDelete.reason,
+          level: null,
+          group: null,
         },
         lineNum
       );
@@ -549,6 +551,8 @@ export function parse(source: string): RequirementParseResult {
             hidden: false,
             deleted: false,
             note: '',
+            level: null,
+            group: null,
           },
           lineNum
         );
@@ -646,6 +650,8 @@ export function parse(source: string): RequirementParseResult {
               hidden,
               deleted,
               note,
+              level: null,
+              group: null,
             },
             lineNum
           );

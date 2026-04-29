@@ -3,26 +3,41 @@
 // The canonical CSV shape (per §3.13.7 and listSerializer.ts):
 //
 //   id, statement, type, text, contained_in, derives_from,
-//   hidden, deleted, note
+//   hidden, deleted, note, level, group
 //
 // - type is one of: requirement / req / functional / func / nonfunctional /
 //   non-functional / nonfunc / non-func / nfunc / constraint / c.
-//   Anything else defaults to functionalRequirement.
+//   Empty defaults to functionalRequirement; anything else is an error.
 // - contained_in: single parent id, or empty
 // - derives_from: semicolon-separated list of source ids, or empty
 // - hidden / deleted: 'Y' / 'y' → true, anything else → false
 // - note: free text; required when deleted=Y (ADR-014)
+// - level: 'user' / 'system' / 'design' / empty (ADR-015 / SR-118)
+// - group: free text or empty (ADR-015 / SR-118)
 //
 // The CSV is the exchange format with the AI (requirement-type sessions,
 // v7.5) — the AI sees CSV and returns CSV. Compare: state-machine sees
 // and returns PlantUML directly.
+//
+// Strict 11-column form (ADR-015): the project is pre-public-release, so
+// we do not tolerate the legacy 9-column shape. Rows with a different
+// column count are rejected with a parse error citing the line.
 
 import type {
   Requirement,
+  RequirementLevel,
   RequirementModel,
   RequirementRelation,
   RequirementType,
 } from './model';
+
+const EXPECTED_COLUMNS = 11;
+
+const LEVEL_VALUES: readonly RequirementLevel[] = [
+  'user',
+  'system',
+  'design',
+];
 
 const TYPE_MAP: Record<string, RequirementType> = {
   requirement: 'requirement',
@@ -114,7 +129,22 @@ export function parseRequirementsCsv(csvText: string): CsvParseResult {
       (cells[1]?.trim().toLowerCase() === 'statement' ||
         cells[1]?.trim().toLowerCase() === 'name')
     ) {
+      if (cells.length !== EXPECTED_COLUMNS) {
+        errors.push({
+          line: li + 1,
+          message: `header has ${cells.length} columns; expected ${EXPECTED_COLUMNS} (id, statement, type, text, contained_in, derives_from, hidden, deleted, note, level, group)`,
+        });
+        continue;
+      }
       headerSkipped = true;
+      continue;
+    }
+
+    if (cells.length !== EXPECTED_COLUMNS) {
+      errors.push({
+        line: li + 1,
+        message: `row has ${cells.length} columns; expected ${EXPECTED_COLUMNS} (ADR-015: CSV is fixed at 11 columns)`,
+      });
       continue;
     }
 
@@ -143,6 +173,21 @@ export function parseRequirementsCsv(csvText: string): CsvParseResult {
     const hidden = (cells[6] ?? '').trim().toUpperCase() === 'Y';
     const deleted = (cells[7] ?? '').trim().toUpperCase() === 'Y';
     const note = cells[8] ?? '';
+    const levelRaw = (cells[9] ?? '').trim().toLowerCase();
+    let level: RequirementLevel | null = null;
+    if (levelRaw !== '') {
+      if ((LEVEL_VALUES as readonly string[]).includes(levelRaw)) {
+        level = levelRaw as RequirementLevel;
+      } else {
+        errors.push({
+          line: li + 1,
+          message: `unknown level '${cells[9]}' — accepted: user / system / design (or empty)`,
+        });
+        continue;
+      }
+    }
+    const groupRaw = (cells[10] ?? '').trim();
+    const group = groupRaw === '' ? null : groupRaw;
 
     if (deleted && note.trim() === '') {
       errors.push({
@@ -161,6 +206,8 @@ export function parseRequirementsCsv(csvText: string): CsvParseResult {
       hidden,
       deleted,
       note,
+      level,
+      group,
     });
 
     if (containedIn !== '') {

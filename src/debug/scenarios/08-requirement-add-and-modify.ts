@@ -15,30 +15,31 @@ function wrapCsv(csv: string): string {
   return '```csv\n' + csv + '\n```';
 }
 
-const HEADER = 'id,statement,type,text,contained_in,derives_from,hidden,deleted,note';
+const HEADER =
+  'id,statement,type,text,contained_in,derives_from,hidden,deleted,note,level,group';
 
 const STEP1 = [
   HEADER,
-  'R1,光を出す,functional,,,,,,',
-  'R2,周囲を明るくする,functional,,,R1,,,',
-  'C1,屋外でも使える,constraint,,,,,,',
+  'R1,光を出す,functional,,,,,,,,',
+  'R2,周囲を明るくする,functional,,,R1,,,,,',
+  'C1,屋外でも使える,constraint,,,,,,,,',
 ].join('\n');
 
 const STEP2 = [
   HEADER,
   // R1's statement changed — should trigger the orange marker.
-  'R1,周囲を明るくする光を出す,functional,,,,,,',
-  'R2,周囲を明るくする,functional,,,R1,,,',
-  'C1,屋外でも使える,constraint,,,,,,',
+  'R1,周囲を明るくする光を出す,functional,,,,,,,,',
+  'R2,周囲を明るくする,functional,,,R1,,,,,',
+  'C1,屋外でも使える,constraint,,,,,,,,',
 ].join('\n');
 
 const STEP3 = [
   HEADER,
-  'R1,周囲を明るくする光を出す,functional,,,,,,',
-  'R2,周囲を明るくする,functional,,,R1,,,',
-  'C1,屋外でも使える,constraint,,,,,,',
+  'R1,周囲を明るくする光を出す,functional,,,,,,,,',
+  'R2,周囲を明るくする,functional,,,R1,,,,,',
+  'C1,屋外でも使える,constraint,,,,,,,,',
   // Newly added NFR — should trigger the green marker.
-  'Q1,頻繁にバッテリを交換したくない,nonfunctional,,,,,,',
+  'Q1,頻繁にバッテリを交換したくない,nonfunctional,,,,,,,,',
 ].join('\n');
 
 const scenario: Scenario = {
