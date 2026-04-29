@@ -4,6 +4,7 @@ import { useCodeMirror } from '../../editors/useCodeMirror';
 import { ExportActions } from '../ExportActions';
 import { copyToClipboard } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
+import { getModelTypeDefinition } from '../../modelTypes/registry';
 
 // SR-001 (v7.2): the source is a read-only reference during REVIEW phase.
 // During SEED phase (no parseable model yet), the editor stays editable
@@ -15,7 +16,11 @@ export function SourceEditor() {
   const sessionName = useSessionStore((s) => s.sessionName);
   const hasEstablishedModel = useSessionStore((s) => s.hasEstablishedModel);
   const modelTypeId = useSessionStore((s) => s.modelTypeId);
+  const setModelTypeIdKeepingSource = useSessionStore(
+    (s) => s.setModelTypeIdKeepingSource
+  );
   const parseErrors = useModelStore((s) => s.parseErrors);
+  const parseSuggestion = useModelStore((s) => s.parseSuggestion);
 
   // Editable while still in SEED phase. REVIEW phase is one-way.
   const isSeeding = !hasEstablishedModel;
@@ -74,6 +79,32 @@ export function SourceEditor() {
               Line {e.line}: {e.message}
             </div>
           ))}
+          {parseSuggestion && (
+            <div className="mt-1 pt-1 border-t border-red-200 flex items-center gap-2 text-red-700">
+              <span>
+                {(() => {
+                  const activeLabel =
+                    getModelTypeDefinition(parseSuggestion.activeTypeId)
+                      ?.label ?? parseSuggestion.activeTypeId;
+                  const suggestedLabel =
+                    getModelTypeDefinition(parseSuggestion.suggestedTypeId)
+                      ?.label ?? parseSuggestion.suggestedTypeId;
+                  return `この入力は ${activeLabel} としてはエラー ${parseSuggestion.activeErrorCount} 件ですが、${suggestedLabel} としてエラー 0 件で解釈できます。`;
+                })()}
+              </span>
+              <button
+                onClick={() =>
+                  setModelTypeIdKeepingSource(parseSuggestion.suggestedTypeId)
+                }
+                className="px-2 py-0.5 text-xs font-medium rounded border border-red-300 text-red-700 hover:bg-red-100"
+                title="モデル型を切り替えて、現在のソースで再パースします"
+              >
+                Switch to{' '}
+                {getModelTypeDefinition(parseSuggestion.suggestedTypeId)
+                  ?.label ?? parseSuggestion.suggestedTypeId}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

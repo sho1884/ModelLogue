@@ -102,6 +102,10 @@ flowchart LR
         SR125["SR-125<br/>Externals tab (v7.6, 任意)<br/>note 内 **外部:** 注釈から外部 IT システムを抽出<br/>externals.ts + ExternalsView"]
     end
 
+    subgraph PD2["Parser Diagnostics / パース診断 (v7.7)"]
+        SR126["SR-126<br/>Cross-type parse diagnosis (v7.7)<br/>active parser 失敗時に他型での解釈を打診<br/>crossTypeDiagnosis.ts + parseSuggestion + SourceEditor banner"]
+    end
+
     subgraph IN["Infrastructure / インフラ"]
         SR060["SR-060<br/>Check PlantUML Server health<br/>PlantUML Server稼働確認"]
         SR061["SR-061<br/>Check n8n connectivity<br/>n8n接続確認"]
@@ -177,6 +181,8 @@ flowchart LR
     UR009 --> SR080
     UR009 --> SR082
     UR009 --> SR083
+    UR009 --> SR126
+    UR002 --> SR126
 
     %% UR-010: Close the review session with an outcome
     UR010 --> SR040
@@ -293,6 +299,8 @@ flowchart LR
 | SR-123 Artifacts タブ (矢印ラベル伝票インベントリ, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-124 プロセス図入力 (PlantUML activity サブセット) を解析 (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-125 Externals タブ (note 内 **外部:** から外部 IT システム抽出, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| **Parser Diagnostics / パース診断 (v7.7)** |
+| SR-126 Cross-type parse diagnosis (v7.7) |  | x |  |  |  |  |  |  | x |  |  |  |  |  |  |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 

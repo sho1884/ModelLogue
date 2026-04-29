@@ -46,6 +46,11 @@ interface SessionStore {
   // after REVIEW (hasEstablishedModel=true) and for unknown ids. Resets
   // in-progress seed inputs so the session never holds mixed-type state.
   setModelTypeId: (id: string) => void;
+  // SR-126: switch type WITHOUT resetting the source — used by the
+  // cross-type parse-diagnosis suggestion banner. The whole point is
+  // to re-parse the user's existing source under the suggested type.
+  // Same lock as setModelTypeId (no-op after REVIEW or for unknown ids).
+  setModelTypeIdKeepingSource: (id: string) => void;
   closeSession: (status: SessionOutcomeStatus, note: string | null) => void;
   exportSession: () => ReviewSession;
   bootstrapFromBundle: (bundle: SeedBundle) => void;
@@ -107,6 +112,23 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       redoStack: [],
       outcome: null,
     });
+  },
+
+  setModelTypeIdKeepingSource: (id) => {
+    // SR-126: source-preserving variant of setModelTypeId, used by
+    // the cross-type parse-diagnosis switch button. Same locks
+    // (REVIEW phase, unknown id, no-op).
+    const store = get();
+    if (store.hasEstablishedModel) return;
+    const resolved = resolveModelTypeId(id);
+    if (resolved === store.modelTypeId) return;
+    // Switch the analysis tab to the always-present Requirements tab
+    // (the previous type's tabs may not exist in the new type).
+    useUiStore.getState().setActiveAnalysisTab('requirements');
+    // Keep currentSource, sourceHistory, redoStack, outcome,
+    // requirementsText, chat, markers as-is — the user is just
+    // re-tagging their existing input under a different parser.
+    set({ modelTypeId: resolved });
   },
 
   markModelEstablished: () => {

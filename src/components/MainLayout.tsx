@@ -33,10 +33,14 @@ export function MainLayout() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const testCasesDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
-  // Parse source immediately on change
+  // Parse source immediately on change. SR-126 (v7.7): also re-parse
+  // when the active modelTypeId changes — the cross-type-suggestion
+  // switch button (setModelTypeIdKeepingSource) doesn't touch the
+  // source, so without this dependency the suggestion banner would
+  // stick around after the user accepted it.
   useEffect(() => {
     parseSource(currentSource);
-  }, [currentSource, parseSource]);
+  }, [currentSource, modelTypeId, parseSource]);
 
   // Fetch SVG with debounce (500ms). SR-070 (v7.2): when the source is
   // empty, do NOT call PlantUML Server — that returns a default welcome

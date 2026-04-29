@@ -1538,6 +1538,73 @@ process_diagram:
       - "Copy / Save .csv emits the canonical CSV with columns external, touching_tasks (semicolon-separated, task-label order preserved)"
 
 # =============================================================================
+# Parser Diagnostics — Cross-type Help (v7.7)
+# =============================================================================
+
+parser_diagnostics:
+  SR-126:
+    function: "Cross-type parse diagnosis — when the active parser fails, suggest switching to another registered model type that parses the same source cleanly"
+    parent: [UR-009, UR-002]
+    component: src/services/crossTypeDiagnosis.ts + modelStore.parseSuggestion + SourceEditor banner
+    status: planned
+    notes: |
+      Stage A of the model-type auto-detection plan
+      (project_model_type_auto_detection.md, 2026-04-24). With three
+      registered model types (state-machine, requirement, process)
+      and more on the horizon, picking the wrong one at session seed
+      becomes a real failure mode — the user sees a wall of parse
+      errors with no guidance about which type would fit.
+
+      Trigger discipline:
+        - Run only when the active parser produced at least one
+          parse error AND the source is non-trivial (length > some
+          floor like 30 chars).
+        - Run every other registered ModelTypeDefinition's parse(source).
+        - Compare error counts. Suggest an alternative ONLY when:
+          (a) the alternative produces zero errors, AND
+          (b) the alternative also produces a non-trivial model
+              (so we don't suggest the alt's `defaultSeedSource`
+              flavour passes — we want a real model parsed).
+        - Never suggest if multiple alternatives tie at zero errors
+          (ambiguous; leave the user to pick from the header
+          selector instead of nudging toward an arbitrary one).
+
+      UI surface:
+        - SourceEditor's existing red error band gains one extra row
+          below the line-numbered errors:
+            「この入力は <currentType> としてはエラー <N> 件ですが、
+             <suggestedType> としてエラー 0 件で解釈できます。
+             ヘッダー型セレクタで切り替えますか？  [Switch]」
+        - The Switch button calls a new sessionStore action that
+          changes modelTypeId WITHOUT clobbering currentSource — the
+          whole point is to re-parse the existing source under the
+          suggested type. This differs from the existing
+          setModelTypeId which resets the source to the new type's
+          defaultSeedSource (header dropdown semantics).
+        - Suggestion is cleared when the next parse succeeds, when
+          the user manually switches via the header dropdown, or on
+          source change.
+
+      Out of scope (Stages B / C, separate SRs later):
+        - Auto-detect on paste / bundle import without an active type.
+        - Confidence scoring beyond pass/fail (Stage B's per-type
+          scoring functions).
+        - Fully autoselecting when confidence is high (Stage C).
+
+      No new ADR is required (Stage A is pure error-handling polish).
+      Stages B / C will need a heuristic-design ADR when scheduled.
+    acceptance_criteria:
+      - "When the active parser returns 0 errors, no diagnosis runs and parseSuggestion stays null"
+      - "When the active parser fails on a non-trivial source AND exactly one alternative parser returns 0 errors with a non-empty model, parseSuggestion holds {suggestedTypeId, alternativeErrorCount:0, activeErrorCount:N}"
+      - "When the active parser fails AND every alternative also returns errors, parseSuggestion stays null (no useful nudge)"
+      - "When two or more alternatives return 0 errors, parseSuggestion stays null (ambiguous)"
+      - "The suggestion banner appears in SourceEditor below the line-numbered error list and includes a Switch button"
+      - "Clicking Switch changes modelTypeId to suggestedTypeId AND keeps currentSource intact (no reset to the new type's defaultSeedSource)"
+      - "Switching produces a clean parse on the same source (the banner disappears, the analysis tabs populate)"
+      - "Manually changing the header dropdown (existing setModelTypeId) clears any pending parseSuggestion"
+      - "Empty / trivial source (≤ 30 chars after trim) never triggers diagnosis"
+
+# =============================================================================
 # Data Model
 # =============================================================================
 

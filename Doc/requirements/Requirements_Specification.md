@@ -820,6 +820,38 @@ BPMN / Activity の形式仕様から派生した「レビュー目的では必�
 
 ---
 
+### 3.16 Cross-type Parse Diagnosis / モデル型横断パース診断 (v7.7)
+
+モデル型が増える（state-machine / requirement / process / 将来の class / sequence / …）ほど、ユーザがセッション seed 時に**間違った型を選ぶ**事故が増える。**SR-126** は、active な parser がパース失敗したときに**他のモデル型 parser でも試す**ことで、型違いを検出してヒントを出す機能（[`project_model_type_auto_detection.md`](../../memory/) の Stage A）。
+
+#### 3.16.1 動作
+
+1. `modelStore.parseSource(source)` で active parser がエラーを返す
+2. 入力が trivial（trim 後 ≤ 30 文字）でなければ、登録済みの他の `ModelTypeDefinition` の `parse(source)` を全て実行
+3. ある alternative が **エラー 0 件かつ非自明モデル**を返したら、その型 ID を「推奨」として `parseSuggestion` 状態に格納
+4. 0 エラー alternative が複数ある場合は曖昧として推奨せず（ユーザに任せる）
+
+#### 3.16.2 UI（SourceEditor のエラー帯下）
+
+```
+Line 5: unrecognised line: `:申込;` (see grammars/...)
+Line 6: ...
+─────────────────────────────────────
+この入力は state-machine としてはエラー 12 件ですが、
+process としてエラー 0 件で解釈できます。 [Switch]
+```
+
+`Switch` クリックで `setModelTypeIdKeepingSource(suggestedTypeId)` を呼び出し、**現在の `currentSource` を保ったまま型を切り替えて再 parse**。これは header dropdown の `setModelTypeId` とは別アクション（後者は新型の `defaultSeedSource` で source をリセットする）。
+
+#### 3.16.3 Stage B / C は別フェーズ
+
+- **Stage B**（自動判定 on paste / bundle 取り込み）：active な型がそもそも未指定の場合に最善の型を選ぶ。スコアリング関数が必要。
+- **Stage C**（信頼度しきい値で完全自動）：Stage B の精度が実証されてから。
+
+両者とも別 SR / 別 ADR で着手する。Stage A は SR-126 単体で完結。
+
+---
+
 ## 4. Non-Functional Requirements / 非機能要件
 
 > Source / 出典: [nonfunctional_requirements.yaml](./nonfunctional_requirements.yaml)

@@ -8,6 +8,10 @@ import {
   generateStateStateMatrix,
 } from '../modelTypes/state-machine/matrixGenerator';
 import { fetchSvg } from '../services/plantUmlService';
+import {
+  diagnoseAlternativeTypes,
+  type ParseSuggestion,
+} from '../services/crossTypeDiagnosis';
 import { useSessionStore } from './sessionStore';
 import { useMarkerStore } from './markerStore';
 import { getModelTypeDefinition } from '../modelTypes/registry';
@@ -49,9 +53,18 @@ interface ModelStore {
   // Consumed and cleared inside fetchCoordinates. Null on plain
   // edits / undo / redo — those just clear any existing auto-markers.
   pendingAutoMarkerBefore: RequirementModel | ProcessModel | null;
+  // SR-126: cross-type parse diagnosis (Stage A). Non-null when the
+  // active parser failed AND exactly one alternative model type
+  // would parse the source cleanly. Drives the "switch to TYPE?"
+  // banner in SourceEditor. Cleared on successful parse and on
+  // explicit model-type switch.
+  parseSuggestion: ParseSuggestion | null;
 
   parseSource: (source: string) => void;
   fetchCoordinates: (source: string) => Promise<void>;
+  /** SR-126 helper: clear a stale suggestion when the user manually
+   *  switches type via the header dropdown. */
+  clearParseSuggestion: () => void;
   setPendingAutoMarkerBefore: (
     model: RequirementModel | ProcessModel | null
   ) => void;
@@ -81,9 +94,12 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   svgString: null,
   svgFetchError: null,
   pendingAutoMarkerBefore: null,
+  parseSuggestion: null,
 
   setPendingAutoMarkerBefore: (model) =>
     set({ pendingAutoMarkerBefore: model }),
+
+  clearParseSuggestion: () => set({ parseSuggestion: null }),
 
   parseSource: (source: string) => {
     const modelTypeId = useSessionStore.getState().modelTypeId;
@@ -105,11 +121,25 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       }
     }
 
+    // SR-126: cross-type diagnosis. When the active parser failed,
+    // try the other registered model types' parsers and surface a
+    // "switch?" hint when exactly one of them parses cleanly. When
+    // the active parser succeeded, clear any stale suggestion.
+    let parseSuggestion: ParseSuggestion | null = null;
+    if (result.errors.length > 0) {
+      parseSuggestion = diagnoseAlternativeTypes(
+        source,
+        modelTypeId,
+        result.errors.length
+      );
+    }
+
     set({
       model: (result.model ?? null) as ActiveModel,
       parseErrors: result.errors,
       stateEventMatrix,
       stateStateMatrix,
+      parseSuggestion,
     });
 
     // SR-001 (v7.2): a non-trivial parseable model flips SEED → REVIEW.
