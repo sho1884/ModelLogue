@@ -270,3 +270,50 @@ requirements:
       an external service in the same repository, callable from
       both ModelLogue and CI/CD pipelines.
     priority: medium
+
+  UR-016:
+    task: "Establish the correct model type for the session, even when the type is unstated or initially miscued"
+    background: >
+      Three concerns are bundled here because they all manifest as
+      "the session is running under the wrong model type":
+
+      a) Late detection. As the number of model types grows
+         (state-machine, requirement, process, future class /
+         sequence / classification-tree / …), the chance of picking
+         the wrong type at session seed grows. The cost of catching
+         the mistake late is the work the reviewer has already
+         poured into the wrong-typed session — source, chat,
+         markers, requirements text. The detection must happen as
+         early as possible in the workflow, not after the user has
+         invested effort.
+
+      b) Information loss when correcting. When the type does need
+         to be switched, the user's existing input must not be
+         silently destroyed. The default seed-template overwrite
+         that fits "I'm starting fresh under a new type" is wrong
+         for "I picked the wrong type and need to re-tag what I
+         already have." Both flows must be available, and the
+         re-tag flow must preserve source / chat / markers /
+         requirements text.
+
+      c) External bootstrapping without an explicit type. The
+         session is increasingly seeded by upstream pipelines
+         (n8n workflows extracting from larger documents, CI
+         handoff, GitHub PR bots, etc.). These external producers
+         can pass a PlantUML source / CSV / requirements text
+         fragment but cannot reasonably be required to declare
+         "this is a state-machine diagram" / "this is a process
+         diagram" — that classification is exactly what the user
+         expects ModelLogue to handle. When `modelTypeId` is
+         absent or ambiguous in the seed bundle, the system must
+         resolve it from the content itself, falling back to a
+         user choice only when the content is genuinely
+         ambiguous.
+
+      The three sub-problems share a common requirement
+      structure: the system reads available signals (source
+      content, parse outcomes, bundle metadata), surfaces
+      disagreements between the chosen type and what the
+      content suggests, and offers a recovery path that
+      preserves the user's work.
+    priority: medium

@@ -1544,9 +1544,9 @@ process_diagram:
 parser_diagnostics:
   SR-126:
     function: "Cross-type parse diagnosis — when the active parser fails, suggest switching to another registered model type that parses the same source cleanly"
-    parent: [UR-009, UR-002]
+    parent: [UR-016]
     component: src/services/crossTypeDiagnosis.ts + modelStore.parseSuggestion + SourceEditor banner
-    status: implemented  # v7.7 (Stage A; Stages B/C are separate future SRs)
+    status: implemented  # v7.7 (UR-016 sub-problem (a) only; (b) and (c) are separate future SRs)
     notes: |
       Stage A of the model-type auto-detection plan
       (project_model_type_auto_detection.md, 2026-04-24). With three

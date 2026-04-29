@@ -70,7 +70,9 @@ This document defines requirements for ModelLogue, a model review platform for s
 | UR-011 | Convert between state machine source and state transition table / 状態マシンソースと状態遷移表を相互変換する | Medium / 中 |
 | UR-012 | Refer to the target requirements text alongside the model / モデルと並べて要求仕様文を参照する | Medium / 中 |
 | UR-013 | Review N-switch coverage test cases derived from the current model / 現在のモデルから導かれる N-switch カバレッジ用テストケースをレビューする | Medium / 中 |
-| UR-014 | Review a requirement diagram / 要求図をレビューする **(v7.5 planned)** | High / 高 |
+| UR-014 | Review a requirement diagram / 要求図をレビューする **(v7.5)** | High / 高 |
+| UR-015 | Review a business process / workflow diagram / 業務プロセス図をレビューする **(v7.6)** | High / 高 |
+| UR-016 | Establish the correct model type for the session, even when type is unstated or initially miscued / 型未指定／誤選択時にもセッションを正しいモデル型で確立する **(v7.7)** | Medium / 中 |
 
 > **Note 1**: UR-009とUR-010の前後（初版生成手段、終了後フィードバック先）はn8nワークフローで現場ごとに構成する。ModelLogue本体は入出力の境界に専念する。詳細は [ADR-008](../adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) を参照。
 >
@@ -820,18 +822,26 @@ BPMN / Activity の形式仕様から派生した「レビュー目的では必�
 
 ---
 
-### 3.16 Cross-type Parse Diagnosis / モデル型横断パース診断 (v7.7)
+### 3.16 Model-type Setup Robustness / モデル型セットアップの堅牢性 (UR-016, v7.7+)
 
-モデル型が増える（state-machine / requirement / process / 将来の class / sequence / …）ほど、ユーザがセッション seed 時に**間違った型を選ぶ**事故が増える。**SR-126** は、active な parser がパース失敗したときに**他のモデル型 parser でも試す**ことで、型違いを検出してヒントを出す機能（[`project_model_type_auto_detection.md`](../../memory/) の Stage A）。
+UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保持、(c) 型未指定からの起動。これに対応する SR は段階的に展開する：
 
-#### 3.16.1 動作
+| Sub-problem | 対応 SR | 状態 |
+|---|---|---|
+| (a) 型ミスマッチの早期検知 | **SR-126** Cross-type parse diagnosis（active parser fail 時に他型 parser も試して suggestion を出す） | 部分的に対応（v7.7 実装済） |
+| (b) 切替時の情報保持 | **未割り当て** ── 専用 SR が要るか、setModelTypeIdKeepingSource を独立 SR として書き起こすか要検討 | 未着手 |
+| (c) 型未指定 bundle からの起動 | **未割り当て** ── n8n 由来の bundle に modelTypeId が無い場合の自動判定。Stage B/C 系 | 未着手 |
+
+#### 3.16.1 SR-126: cross-type parse diagnosis（実装済、UR-016(a) の一部のみ対応）
+
+**動作**:
 
 1. `modelStore.parseSource(source)` で active parser がエラーを返す
 2. 入力が trivial（trim 後 ≤ 30 文字）でなければ、登録済みの他の `ModelTypeDefinition` の `parse(source)` を全て実行
 3. ある alternative が **エラー 0 件かつ非自明モデル**を返したら、その型 ID を「推奨」として `parseSuggestion` 状態に格納
 4. 0 エラー alternative が複数ある場合は曖昧として推奨せず（ユーザに任せる）
 
-#### 3.16.2 UI（SourceEditor のエラー帯下）
+**UI**（SourceEditor のエラー帯下）:
 
 ```
 Line 5: unrecognised line: `:申込;` (see grammars/...)
@@ -843,12 +853,11 @@ process としてエラー 0 件で解釈できます。 [Switch]
 
 `Switch` クリックで `setModelTypeIdKeepingSource(suggestedTypeId)` を呼び出し、**現在の `currentSource` を保ったまま型を切り替えて再 parse**。これは header dropdown の `setModelTypeId` とは別アクション（後者は新型の `defaultSeedSource` で source をリセットする）。
 
-#### 3.16.3 Stage B / C は別フェーズ
+**SR-126 が UR-016 の (a) を完全に解決しないこと**: SR-126 のトリガは「parse 失敗後」。ユーザは既にソース投入の労力を払い、active parser でエラー一覧を見せられた段階。**早期検知という言葉の本来の意味（投入直後 / paste 時 / bundle 取り込み時）ではない**。完全な (a) 解決は paste / bundle import 時の自動判定が必要で、それは (c) と重なる別 SR となる。
 
-- **Stage B**（自動判定 on paste / bundle 取り込み）：active な型がそもそも未指定の場合に最善の型を選ぶ。スコアリング関数が必要。
-- **Stage C**（信頼度しきい値で完全自動）：Stage B の精度が実証されてから。
+#### 3.16.2 残作業
 
-両者とも別 SR / 別 ADR で着手する。Stage A は SR-126 単体で完結。
+(b) と (c) は SR が立っていない。立てる順序や ADR 必要性を別途議論したうえで、UR-016 の完成度を上げていく。
 
 ---
 

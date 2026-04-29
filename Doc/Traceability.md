@@ -20,6 +20,7 @@ flowchart LR
         UR013["UR-013<br/>Review N-switch test cases<br/>N-switchテストケースをレビューする<br/>(補助サービス tools/nswitch<br/>ADR-010)"]
         UR014["UR-014<br/>Review requirement diagram<br/>要求図をレビューする<br/>(ADR-012 モデル型プラグイン)"]
         UR015["UR-015<br/>Review process diagram<br/>業務プロセス図をレビューする<br/>(BPMN + Activity のゆるい共通部分)"]
+        UR016["UR-016<br/>Establish the correct model type for the session<br/>型未指定／誤選択時にもセッションを正しいモデル型で確立する"]
     end
 
     subgraph SE["Source Editing / ソース編集"]
@@ -181,8 +182,9 @@ flowchart LR
     UR009 --> SR080
     UR009 --> SR082
     UR009 --> SR083
-    UR009 --> SR126
-    UR002 --> SR126
+
+    %% UR-016: Establish the correct model type for the session
+    UR016 --> SR126
 
     %% UR-010: Close the review session with an outcome
     UR010 --> SR040
@@ -229,78 +231,78 @@ flowchart LR
 
 ## 2. Traceability Matrix / トレーサビリティマトリクス
 
-| System Requirement / システム要件 | UR-001 | UR-002 | UR-003 | UR-004 | UR-005 | UR-006 | UR-007 | UR-008 | UR-009 | UR-010 | UR-011 | UR-012 | UR-013 | UR-014 | UR-015 |
-|----------------------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
+| System Requirement / システム要件 | UR-001 | UR-002 | UR-003 | UR-004 | UR-005 | UR-006 | UR-007 | UR-008 | UR-009 | UR-010 | UR-011 | UR-012 | UR-013 | UR-014 | UR-015 | UR-016 |
+|----------------------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
 | **Source Editing / ソース編集** |
-| SR-001 ソースを読み取り専用で表示（seed時のみ編集可）|  | x |  |  |  |  |  |  | x |  |  |  |  | x | x |
-| SR-002 PlantUMLサブセットを解析する (state-machine) | x | x | x |  |  |  |  |  | x |  |  |  |  |  |  |
-| ~~SR-003~~ モデルをPlantUMLに変換する（**Removed**） |  |  |  |  |  | — |  |  |  |  |  |  |  |  |  |
+| SR-001 ソースを読み取り専用で表示（seed時のみ編集可）|  | x |  |  |  |  |  |  | x |  |  |  |  | x | x |  |
+| SR-002 PlantUMLサブセットを解析する (state-machine) | x | x | x |  |  |  |  |  | x |  |  |  |  |  |  |  |
+| ~~SR-003~~ モデルをPlantUMLに変換する（**Removed**） |  |  |  |  |  | — |  |  |  |  |  |  |  |  |  |  |
 | **Diagram Display / 図の表示** |
-| SR-010 SVGをパン・ズーム付きで表示する | x |  |  |  |  |  |  |  |  |  |  |  |  | x | x |
-| SR-011 SVG座標を抽出する | x |  |  | x |  |  |  |  |  |  |  |  |  | x | x |
-| SR-012 マーカーツールを選択する（default=pan） |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
-| SR-013 ドラッグでマーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
-| SR-014 マーカー色を管理する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
-| SR-015 マーカーを選択・移動・リサイズする |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
-| SR-016 マーカーを削除する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
-| SR-017 マーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
+| SR-010 SVGをパン・ズーム付きで表示する | x |  |  |  |  |  |  |  |  |  |  |  |  | x | x |  |
+| SR-011 SVG座標を抽出する | x |  |  | x |  |  |  |  |  |  |  |  |  | x | x |  |
+| SR-012 マーカーツールを選択する（default=pan） |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-013 ドラッグでマーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-014 マーカー色を管理する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-015 マーカーを選択・移動・リサイズする |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-016 マーカーを削除する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-017 マーカーを描画する |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
 | **State Transition Table / 状態遷移表 (state-machine)** |
-| SR-020 状態×イベント表を生成する (state-machine) |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
-| SR-021 遷移前×遷移後表を生成する (state-machine) |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-020 状態×イベント表を生成する (state-machine) |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SR-021 遷移前×遷移後表を生成する (state-machine) |  |  | x |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | **AI Chat / AI対話** |
-| SR-022 マーカー情報＋EBNFをAIコンテキストに渡す |  |  |  | x | x |  |  | x |  |  |  |  |  |  |  |
-| SR-030 n8n経由でメッセージを送信する |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
-| SR-031 チャット一覧を表示する |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
-| SR-032 AI応答からPlantUMLを抽出する |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
-| SR-033 モデル before/after 並置 + 差分ハイライト (v7.1 redefined) |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
-| SR-034 提案された修正を適用する |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
-| SR-035 ソース修正を元に戻す |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
+| SR-022 マーカー情報＋EBNFをAIコンテキストに渡す |  |  |  | x | x |  |  | x |  |  |  |  |  |  |  |  |
+| SR-030 n8n経由でメッセージを送信する |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
+| SR-031 チャット一覧を表示する |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
+| SR-032 AI応答からPlantUMLを抽出する |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
+| SR-033 モデル before/after 並置 + 差分ハイライト (v7.1 redefined) |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
+| SR-034 提案された修正を適用する |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
+| SR-035 ソース修正を元に戻す |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
 | **Session Management / セッション管理** |
-| SR-040 セッション状態を管理する |  | x |  |  | x |  | x |  |  | x |  |  |  |  |  |
-| SR-041 セッションをJSONで出力する（requirementsText を含む） |  |  |  |  |  |  | x |  |  | x |  |  |  |  |  |
+| SR-040 セッション状態を管理する |  | x |  |  | x |  | x |  |  | x |  |  |  |  |  |  |
+| SR-041 セッションをJSONで出力する（requirementsText を含む） |  |  |  |  |  |  | x |  |  | x |  |  |  |  |  |  |
 | **Grammar / 文法** |
-| ~~SR-050~~ EBNFタブ（**Removed** in v7.1、SR-081 に置換）|  |  |  |  |  |  |  | — |  |  |  |  |  |  |  |
+| ~~SR-050~~ EBNFタブ（**Removed** in v7.1、SR-081 に置換）|  |  |  |  |  |  |  | — |  |  |  |  |  |  |  |  |
 | **Infrastructure / インフラ** |
-| SR-060 PlantUML Server稼働確認 | x |  |  |  |  |  |  |  |  |  |  |  |  | x | x |
-| SR-061 n8n接続確認 |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
+| SR-060 PlantUML Server稼働確認 | x |  |  |  |  |  |  |  |  |  |  |  |  | x | x |  |
+| SR-061 n8n接続確認 |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |  |
 | **UI Layout / UI構成** |
-| SR-070 図をプライマリビューとして表示する | x |  |  |  |  |  |  |  |  |  |  |  |  | x | x |
-| SR-071 タブ付き解析パネル（型固有タブセット、v7.5 ADR-012）|  | x | x |  |  |  |  |  |  |  |  | x | x | x | x |
-| SR-072 チャットパネル + ProposalView |  |  |  |  | x | x |  |  |  |  |  |  |  |  |  |
-| SR-073 セッションseed時にモデル型を選択 (v7.5) |  |  |  |  |  |  |  |  | x |  |  |  |  | x | x |
+| SR-070 図をプライマリビューとして表示する | x |  |  |  |  |  |  |  |  |  |  |  |  | x | x |  |
+| SR-071 タブ付き解析パネル（型固有タブセット、v7.5 ADR-012）|  | x | x |  |  |  |  |  |  |  |  | x | x | x | x |  |
+| SR-072 チャットパネル + ProposalView |  |  |  |  | x | x |  |  |  |  |  |  |  |  |  |  |
+| SR-073 セッションseed時にモデル型を選択 (v7.5) |  |  |  |  |  |  |  |  | x |  |  |  |  | x | x |  |
 | **Requirements & Seeding / 要求仕様＆シード (v7.1)** |
-| SR-080 要求仕様タブ（レビュー中は読み取り専用）|  |  |  |  |  |  |  |  | x |  |  | x |  |  |  |
-| SR-081 EBNFファイルをダウンロード |  |  |  |  |  |  |  | x |  |  |  |  |  |  |  |
-| SR-082 要求仕様から初版モデルを生成（チャット shortcut） |  |  |  |  |  |  |  |  | x |  |  |  |  |  |  |
-| SR-083 外部シードバンドル `{requirementsText, plantUmlSource}` を受け取る |  |  |  |  |  |  |  |  | x |  |  |  |  |  |  |
+| SR-080 要求仕様タブ（レビュー中は読み取り専用）|  |  |  |  |  |  |  |  | x |  |  | x |  |  |  |  |
+| SR-081 EBNFファイルをダウンロード |  |  |  |  |  |  |  | x |  |  |  |  |  |  |  |  |
+| SR-082 要求仕様から初版モデルを生成（チャット shortcut） |  |  |  |  |  |  |  |  | x |  |  |  |  |  |  |  |
+| SR-083 外部シードバンドル `{requirementsText, plantUmlSource}` を受け取る |  |  |  |  |  |  |  |  | x |  |  |  |  |  |  |  |
 | **Model Diff / モデル差分 (v7.1)** |
-| SR-090 モデルレベル差分を計算（SR-033 が利用）|  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
+| SR-090 モデルレベル差分を計算（SR-033 が利用）|  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |  |
 | **Artifact Export / 個別エクスポート (v7.2–v7.3)** |
-| SR-100 PlantUML ソース Copy / Save .puml |  |  |  |  |  |  | x |  |  |  |  |  |  |  |  |
-| SR-101 状態遷移表を正規 CSV で出力 (v7.3, state-machine) |  |  |  |  |  |  | x |  |  |  |  |  |  |  |  |
-| SR-102 テストケース Copy / Save (v7.4, state-machine) |  |  |  |  |  |  | x |  |  |  |  |  | x |  |  |
+| SR-100 PlantUML ソース Copy / Save .puml |  |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
+| SR-101 状態遷移表を正規 CSV で出力 (v7.3, state-machine) |  |  |  |  |  |  | x |  |  |  |  |  |  |  |  |  |
+| SR-102 テストケース Copy / Save (v7.4, state-machine) |  |  |  |  |  |  | x |  |  |  |  |  | x |  |  |  |
 | **Test Case Display / テストケース表示 (v7.4, state-machine)** |
-| SR-103 N-switch テストケースをリアクティブに表示 (v7.4, state-machine) |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-103 N-switch テストケースをリアクティブに表示 (v7.4, state-machine) |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |  |
 | **Requirement Diagram / 要求図 (v7.5)** |
-| SR-110 要求図入力（macro + 半構造）を解析 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-111 トレーサビリティマトリクスを生成 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-112 孤立要求を抽出 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-113 要求リスト表 + soft-delete UI + Copy/Save .csv (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-114 Renderer filter: hidden/deleted を描画から除外 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-115 `!procedure` preamble を edit buffer に同梱 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-116 CSV AI 応答を apply（regen + auto-apply、モーダル無し） (v7.5) |  |  |  |  |  | x |  |  |  |  |  |  |  | x |  |
-| SR-117 自動マーカー（added=緑 / changed=オレンジ） (v7.5) |  |  |  | x |  | x |  |  |  |  |  |  |  | x | x |
-| SR-118 level / group 分類軸を要求モデルに追加 (v7.7, ADR-015) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
-| SR-119 視覚的グルーピング軸の選択（type / level / group） (v7.7, ADR-015) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-110 要求図入力（macro + 半構造）を解析 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-111 トレーサビリティマトリクスを生成 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-112 孤立要求を抽出 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-113 要求リスト表 + soft-delete UI + Copy/Save .csv (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-114 Renderer filter: hidden/deleted を描画から除外 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-115 `!procedure` preamble を edit buffer に同梱 (v7.5) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-116 CSV AI 応答を apply（regen + auto-apply、モーダル無し） (v7.5) |  |  |  |  |  | x |  |  |  |  |  |  |  | x |  |  |
+| SR-117 自動マーカー（added=緑 / changed=オレンジ） (v7.5) |  |  |  | x |  | x |  |  |  |  |  |  |  | x | x |  |
+| SR-118 level / group 分類軸を要求モデルに追加 (v7.7, ADR-015) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
+| SR-119 視覚的グルーピング軸の選択（type / level / group） (v7.7, ADR-015) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |  |
 | **Process Diagram / プロセス図 (v7.6)** |
-| SR-120 Scenarios タブ (start→end 経路列挙) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-121 Events タブ (timer/message/error 一覧) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-122 Roles タブ (レーン別タスク + 引渡点) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-123 Artifacts タブ (矢印ラベル伝票インベントリ, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-124 プロセス図入力 (PlantUML activity サブセット) を解析 (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
-| SR-125 Externals タブ (note 内 **外部:** から外部 IT システム抽出, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-120 Scenarios タブ (start→end 経路列挙) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-121 Events タブ (timer/message/error 一覧) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-122 Roles タブ (レーン別タスク + 引渡点) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-123 Artifacts タブ (矢印ラベル伝票インベントリ, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-124 プロセス図入力 (PlantUML activity サブセット) を解析 (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
+| SR-125 Externals タブ (note 内 **外部:** から外部 IT システム抽出, 任意) (v7.6) |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  |
 | **Parser Diagnostics / パース診断 (v7.7)** |
-| SR-126 Cross-type parse diagnosis (v7.7) |  | x |  |  |  |  |  |  | x |  |  |  |  |  |  |
+| SR-126 Cross-type parse diagnosis (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 
