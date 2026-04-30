@@ -1658,6 +1658,57 @@ parser_diagnostics:
       - "After the switch, the new type's parser runs on the preserved source automatically (the user immediately sees whether the new type accepts their existing input)"
       - "autoMarkers from the previous type's diff are cleared as a side-effect of the re-parse; the active analysis tab falls back to 'requirements'"
 
+  SR-129:
+    function: "Auto-detect modelTypeId on bootstrapFromBundle when the bundle does not carry one — run every registered parser on bundle.plantUmlSource and adopt the unique 0-error winner; fall back to default if none or ambiguous"
+    parent: [UR-016]
+    component: src/services/crossTypeDiagnosis.ts (pickBestType helper) + src/stores/sessionStore.bootstrapFromBundle
+    status: planned
+    notes: |
+      Closes UR-016 sub-problem (c). External producers (n8n
+      workflows, CI pipelines, GitHub bots, etc.) seed sessions
+      via SeedBundle but cannot reasonably be required to declare
+      the model type — that classification is what ModelLogue
+      should handle. Currently bootstrapFromBundle calls
+      resolveModelTypeId(undefined) which falls back to the
+      hardcoded default (state-machine), which silently misclassifies
+      requirement / process bundles.
+
+      Mechanism (shared with SR-126):
+        - A pure helper `pickBestType(source, registry?)` runs every
+          registered parser. Returns the type id when EXACTLY ONE
+          parser returns 0 errors with a non-trivial model; null
+          otherwise (no candidates, or multiple 0-error candidates).
+        - bootstrapFromBundle calls pickBestType only when
+          bundle.modelTypeId is undefined AND bundle.plantUmlSource
+          is non-trivial. If a winner is found, modelTypeId is set
+          to it. Otherwise the existing default fallback kicks in,
+          and SR-126's parse-time banner will catch the mismatch.
+
+      Why no ADR:
+        - The decision rule (unique 0-error winner) is decision-
+          theoretically simple and aligns with ADR-011 (mechanical
+          conversion is deterministic). No tie-break heuristic,
+          no confidence threshold, no scoring function — the
+          ambiguous case (which would warrant heuristics) is
+          handled trivially by falling back to default and letting
+          SR-126's banner flag it. No new architectural decision
+          worth recording separately.
+
+      Why no notification UI:
+        - When auto-detection succeeds (unique winner), the chosen
+          type matches the source and the user sees the analysis
+          tabs populate normally. A "we auto-picked X" toast would
+          be noise — the user does not need confirmation that a
+          deterministic rule produced the obvious answer.
+        - When auto-detection fails or is ambiguous, default
+          fallback applies and SR-126 fires when the source fails
+          to parse under default. That banner is the notification.
+    acceptance_criteria:
+      - "When the bundle carries a modelTypeId, that value is respected (auto-detection does not run)"
+      - "When the bundle has no modelTypeId AND has a non-trivial plantUmlSource, every registered parser is tried; the unique 0-error winner with non-trivial content is adopted as the session's modelTypeId"
+      - "When auto-detection has no unique winner (no clean candidate, or multiple clean candidates), the existing default fallback applies; SR-126's banner mechanism is then expected to nudge correction at parse time"
+      - "Empty / trivial bundle.plantUmlSource (≤ 30 chars after trim) skips auto-detection and uses default — same trivial-floor as SR-126"
+
 # =============================================================================
 # Data Model
 # =============================================================================

@@ -830,7 +830,7 @@ UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保�
 |---|---|---|
 | (a) 型ミスマッチの早期検知 | **SR-126** Cross-type parse diagnosis | 実装済（v7.7） |
 | (b) 切替時の情報保持 | **SR-128** Source-preserving model-type switch | 実装済（v7.7、SR-126 から先行投入） |
-| (c) 型未指定 bundle からの起動 | **SR-129** Auto-detect on bundle without modelTypeId | 未着手 |
+| (c) 型未指定 bundle からの起動 | **SR-129** Auto-detect on bundle without modelTypeId | 計画済（v7.7） |
 
 #### 3.16.1 SR-126：cross-type parse diagnosis
 
@@ -882,9 +882,35 @@ process としてエラー 0 件で解釈できます。 [Switch]
 
 **再 parse トリガ**：`MainLayout` の `parseSource` useEffect が `modelTypeId` 変更を検知して新型で parse を走らせる。SR-128 のアクション + SR-126 の banner（呼び出し元）= UR-016 (a) と (b) の連携 UX 全体。
 
-#### 3.16.3 SR-129：未着手
+#### 3.16.3 SR-129：型未指定 bundle からの自動判定
 
-(c) の自動判定は未実装。bundle に `modelTypeId` が無い場合の信頼度しきい値・タイブレーク方針は ADR 級の判断を含むため、別途設計フェーズを設ける。
+外部 producer（n8n / CI / GitHub bot など）は SeedBundle 経由でセッションを seed するが、`modelTypeId` を含めるとは限らない（その分類こそ ModelLogue が引き受けるべき領域）。**SR-129** は `bootstrapFromBundle` で `modelTypeId` が未指定のとき、`bundle.plantUmlSource` を全 parser にかけて唯一の 0-error 勝者を採用する。タイ局面（複数 0-error）や全敗の場合は既存の default フォールバックに任せ、誤った default なら SR-126 の banner が parse 時に気づかせる。
+
+**判定ロジック**：
+
+```typescript
+// crossTypeDiagnosis.ts に追加（SR-126 と内部機構を共有）
+function pickBestType(source: string, registry?): string | null {
+  // trim 後 ≤ 30 文字の trivial source は対象外
+  // 各 ModelTypeDefinition.parse(source) を実行
+  // エラー 0 件 + 非自明モデル の候補を集める
+  // 唯一の候補 → その型 ID を返す
+  // 0 個 or 2 個以上 → null（曖昧、default フォールバックに任せる）
+}
+```
+
+```typescript
+// sessionStore.bootstrapFromBundle 内
+let resolvedType = resolveModelTypeId(bundle.modelTypeId);
+if (bundle.modelTypeId === undefined && bundle.plantUmlSource) {
+  const detected = pickBestType(bundle.plantUmlSource);
+  if (detected !== null) resolvedType = detected;
+}
+```
+
+**ADR 不要**：判定ルール（unique 0-error winner）は ADR-011（機械的変換は決定論的に）の枠内。タイ・全敗の扱いは「default フォールバック → SR-126 がフォローアップ」で十分シンプル、別 ADR 級の意思決定は無い。
+
+**通知 UI 不要**：判定が成功したら期待通りの解析タブが populate されるので「auto-pick しました」のトーストは雑音。判定失敗（誤判定 or タイ）は SR-126 の banner で post-hoc に補正される。
 
 ---
 
