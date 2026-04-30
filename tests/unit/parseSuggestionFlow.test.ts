@@ -130,3 +130,59 @@ describe('parseSuggestion flow (SR-126)', () => {
     expect(useSessionStore.getState().modelTypeId).toBe('state-machine');
   });
 });
+
+describe('bootstrapFromBundle SR-129 auto-detect', () => {
+  beforeEach(resetStores);
+
+  it('respects bundle.modelTypeId when set (no auto-detect runs)', () => {
+    useSessionStore.getState().bootstrapFromBundle({
+      modelTypeId: 'requirement',
+      plantUmlSource: PROCESS_SOURCE, // process-shaped, but bundle says requirement
+    });
+    // Bundle's explicit type wins, even when content disagrees. The
+    // mismatch will be flagged by SR-126's banner at parse time.
+    expect(useSessionStore.getState().modelTypeId).toBe('requirement');
+  });
+
+  it('auto-detects modelTypeId when bundle has no type and a process source', () => {
+    useSessionStore.getState().bootstrapFromBundle({
+      plantUmlSource: PROCESS_SOURCE,
+    });
+    expect(useSessionStore.getState().modelTypeId).toBe('process');
+  });
+
+  it('auto-detects requirement type from a requirement-shaped bundle', () => {
+    const reqSource = `@startuml
+$fReq("R1", "first requirement")
+$fReq("R2", "second requirement")
+$contain("R1", "R2")
+@enduml`;
+    useSessionStore.getState().bootstrapFromBundle({
+      plantUmlSource: reqSource,
+    });
+    expect(useSessionStore.getState().modelTypeId).toBe('requirement');
+  });
+
+  it('falls back to default when bundle has no type and no source', () => {
+    useSessionStore.getState().bootstrapFromBundle({});
+    // Default is state-machine.
+    expect(useSessionStore.getState().modelTypeId).toBe('state-machine');
+  });
+
+  it('falls back to default when source is non-trivial but no parser fits', () => {
+    const garbage = `Plain English prose, not PlantUML at all.
+This will fail every registered parser.
+None of them will accept this kind of input as a valid model.`;
+    useSessionStore.getState().bootstrapFromBundle({
+      plantUmlSource: garbage,
+    });
+    expect(useSessionStore.getState().modelTypeId).toBe('state-machine');
+  });
+
+  it('falls back to default when source is trivial (skips auto-detect)', () => {
+    useSessionStore.getState().bootstrapFromBundle({
+      plantUmlSource: '@startuml\n@enduml',
+    });
+    expect(useSessionStore.getState().modelTypeId).toBe('state-machine');
+  });
+});

@@ -15,6 +15,7 @@ import {
   DEFAULT_MODEL_TYPE_ID,
   getModelTypeDefinition,
 } from '../modelTypes/registry';
+import { pickBestType } from '../services/crossTypeDiagnosis';
 
 // v7.1: session starts empty. Source is seeded via manual paste, bundle
 // import (SR-083), or the Generate Model shortcut (SR-082). Once source
@@ -144,7 +145,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     // SR-073 (v7.5): the incoming bundle / saved session MAY carry a
     // modelTypeId; pre-v7.5 files don't. Resolve defensively so unknown
     // ids fall back to the default rather than leaving the UI stuck.
-    const resolvedType = resolveModelTypeId(bundle.modelTypeId);
+    let resolvedType = resolveModelTypeId(bundle.modelTypeId);
+    // SR-129 (v7.7): when the bundle carries no modelTypeId AND has a
+    // plantUmlSource, run every registered parser and adopt the
+    // unique 0-error winner. Falls through to the default fallback
+    // when ambiguous or all-failed; SR-126's banner is then expected
+    // to flag the mismatch at parse time.
+    if (bundle.modelTypeId === undefined && bundle.plantUmlSource) {
+      const detected = pickBestType(bundle.plantUmlSource);
+      if (detected !== null) resolvedType = detected;
+    }
     if (resolvedType !== get().modelTypeId) {
       // Changing types invalidates the previously-active analysis tab id.
       useUiStore.getState().setActiveAnalysisTab('requirements');

@@ -1662,7 +1662,7 @@ parser_diagnostics:
     function: "Auto-detect modelTypeId on bootstrapFromBundle when the bundle does not carry one — run every registered parser on bundle.plantUmlSource and adopt the unique 0-error winner; fall back to default if none or ambiguous"
     parent: [UR-016]
     component: src/services/crossTypeDiagnosis.ts (pickBestType helper) + src/stores/sessionStore.bootstrapFromBundle
-    status: planned
+    status: implemented  # v7.7
     notes: |
       Closes UR-016 sub-problem (c). External producers (n8n
       workflows, CI pipelines, GitHub bots, etc.) seed sessions

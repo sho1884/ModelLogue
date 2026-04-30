@@ -106,3 +106,38 @@ export function diagnoseAlternativeTypes(
     suggestedErrorCount: winner.errorCount,
   };
 }
+
+/**
+ * SR-129 — pick the best-fitting model type for a source when no
+ * active type has been chosen yet (e.g. a SeedBundle from n8n
+ * without a modelTypeId). Runs every registered parser and returns
+ * the unique 0-error winner with non-trivial content. Returns null
+ * for ambiguous (≥ 2 clean alternatives) or all-failed inputs —
+ * the caller falls back to the registry default in that case, and
+ * SR-126's banner mechanism is expected to flag the mismatch later.
+ *
+ * Same trivial-floor as SR-126: skip near-empty sources.
+ *
+ * Registry is injectable for testability (matches diagnoseAlternativeTypes).
+ */
+export function pickBestType(
+  source: string,
+  registry: ReadonlyArray<ModelTypeDefinition> = MODEL_TYPE_REGISTRY
+): string | null {
+  if (source.trim().length < MIN_SOURCE_LENGTH_FOR_DIAGNOSIS) return null;
+
+  const cleanCandidates: string[] = [];
+  for (const def of registry) {
+    let result;
+    try {
+      result = def.parse(source);
+    } catch {
+      continue;
+    }
+    if (result.errors.length === 0 && modelHasContent(result.model)) {
+      cleanCandidates.push(def.id);
+    }
+  }
+
+  return cleanCandidates.length === 1 ? cleanCandidates[0] : null;
+}

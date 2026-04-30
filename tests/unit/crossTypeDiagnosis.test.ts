@@ -9,7 +9,10 @@
 //   - active fail + >1 alternatives clean → no suggestion (ambiguous)
 
 import { describe, it, expect } from 'vitest';
-import { diagnoseAlternativeTypes } from '../../src/services/crossTypeDiagnosis';
+import {
+  diagnoseAlternativeTypes,
+  pickBestType,
+} from '../../src/services/crossTypeDiagnosis';
 
 describe('diagnoseAlternativeTypes (SR-126)', () => {
   it('returns null when active parse had no errors', () => {
@@ -181,5 +184,78 @@ $contain("R1", "R2")
       stubRegistry
     );
     expect(r).toBeNull(); // thrower is skipped, no clean candidates → null
+  });
+});
+
+describe('pickBestType (SR-129)', () => {
+  it('returns process for a process source', () => {
+    const processSource = `@startuml
+|顧客|
+start
+:申込書を提出;
+:本人確認を行う;
+if (本人確認 OK?) then (yes)
+  :口座を開設する;
+else (no)
+  :申し込みを差し戻す;
+endif
+stop
+@enduml`;
+    expect(pickBestType(processSource)).toBe('process');
+  });
+
+  it('returns state-machine for a state-machine source', () => {
+    const stateSource = `@startuml
+[*] --> Idle
+Idle --> Active : start
+Active --> Idle : stop
+@enduml`;
+    expect(pickBestType(stateSource)).toBe('state-machine');
+  });
+
+  it('returns requirement for a requirement source', () => {
+    const reqSource = `@startuml
+$fReq("R1", "light up the room")
+$fReq("R2", "emit visible light")
+$contain("R1", "R2")
+@enduml`;
+    expect(pickBestType(reqSource)).toBe('requirement');
+  });
+
+  it('returns null for trivial source (≤ 30 chars)', () => {
+    expect(pickBestType('@startuml')).toBeNull();
+  });
+
+  it('returns null when every parser fails', () => {
+    const garbage = `Plain English prose, not PlantUML at all.
+This will fail every registered parser.
+None of them will accept this kind of input.`;
+    expect(pickBestType(garbage)).toBeNull();
+  });
+
+  it('returns null when more than one parser produces a clean result (ambiguous)', () => {
+    // Reuse the stub-registry pattern from the diagnoseAlternativeTypes
+    // ambiguous test — two pretend-parsers both return non-empty models.
+    const stubRegistry = [
+      {
+        id: 'fake-A',
+        label: '',
+        description: '',
+        analysisTabs: [],
+        parse: () => ({ model: { states: ['s'] }, errors: [] }),
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+      {
+        id: 'fake-B',
+        label: '',
+        description: '',
+        analysisTabs: [],
+        parse: () => ({ model: { requirements: ['r'] }, errors: [] }),
+        renderPlantUml: (s: string) => s,
+        defaultSeedSource: '',
+      },
+    ] as const;
+    expect(pickBestType('x'.repeat(50), stubRegistry)).toBeNull();
   });
 });
