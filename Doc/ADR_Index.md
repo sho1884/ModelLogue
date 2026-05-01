@@ -1,6 +1,6 @@
 # ADR Index / アーキテクチャ決定記録一覧
 
-> **このファイルは自動生成です** (`Doc/adr/*.yaml` から生成 / 2026-04-29 17:15)。手動編集は次回再生成時に失われます。変更は対応する YAML を編集し、`adr` スキルで再生成してください。
+> **このファイルは自動生成です** (`Doc/adr/*.yaml` から生成 / 2026-05-01 12:30)。手動編集は次回再生成時に失われます。変更は対応する YAML を編集し、`adr` スキルで再生成してください。
 
 ## 一覧表
 
@@ -21,6 +21,8 @@
 | [ADR-013](#adr-013) | 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う | 2026-04-22 | 承認済 | v7.5 の要求図サポートは要求 ↔ 要求の関係（derive / contain / refine / copy）に限定し、要求 ↔ 外部（satisfy / verify / trace）は別フェーズの別機能として後日設計する |
 | [ADR-014](#adr-014) | レビュー過程の削除は soft-delete + reason 必須でエビデンスとして残す | 2026-04-22 | 承認済 | レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする。表現形式は PlantUML コメント（`' @modellogue ...`）にして、source を直接 PlantUML に送っても妥当なまま保つ |
 | [ADR-015](#adr-015) | 要求図の分類軸（type / level / group）と一図一軸の規律 | 2026-04-29 | 承認済 | Requirement に level（user/system/design/null）と group（自由文字列）を追加し、生成側は type/level/group のいずれか一軸を選んで package ブロックに射影する。一図一軸を入力側の規律として明文化する |
+| [ADR-016](#adr-016) | 複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない） | 2026-05-01 | 提案中 | UR-017 の複数人参加チャットは、社内チャット venue（最初は Slack）と ModelLogue チャットペインを n8n 経由で双方向中継して実現することにした。ModelLogue 内部に多人数チャットクライアントは構築しない |
+| [ADR-017](#adr-017) | Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用） | 2026-05-01 | 提案中 | ModelLogue 側が n8n の HTTP endpoint を一定間隔で polling する方式を採る。SSE / WebSocket は MVP では不採用とし、cadence が不足した場合に置き換える |
 
 ---
 
@@ -1334,5 +1336,175 @@ auto-layout が 2D 配置のアンカーを失って図がフラットに展開�
 - level の値域（user/system/design）が業種によっては足りない可能性（domain / hardware / interface 等）。最初は厳密に始めて、必要になれば別 ADR で拡張する
 - AI が level に書くべき内容を group 列に書く誤用が起きうる。プロンプトに明確な例示が必須
 - 現在の dogfood 図（Doc/requirements/diagrams/*.csv）は新列を使った 11 列形に書き直す必要がある。README.md の比較考察も合わせて更新する
+
+---
+
+## ADR-016
+
+**複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない）**
+
+- **日付**: 2026-05-01
+- **ステータス**: 提案中
+- **最終更新**: 2026-05-01
+- **関連**: UR-017 / SR-132〜135 / NFR-080・NFR-081 / ADR-001 / ADR-002 / ADR-017
+
+### 背景
+
+UR-017 のニーズは単純で、レビューに複数人がチャットで参加できる
+ようにすること。ModelLogue v7.7 時点でチャットペインに参加できる
+のは進行役 1 人と AI のみで、他のレビューアは会話に入れない。
+
+これを満たす実装には複数の経路がある：
+
+- ModelLogue 内部に多人数チャットを構築する：認証、リアルタイム
+  配信（WebSocket / SSE）、競合解決、履歴永続化、ユーザ管理が
+  一気に必要になる。MVP のスコープを大きく超える。
+- 既存の社内チャット venue（Slack / Teams / 等）を借りて、
+  ModelLogue のチャットペインと中継する：チームが既に使っている
+  会話の場をそのままレビュー会場として活用できる。ModelLogue は
+  認証もユーザ管理も持たない SPA のままでよい。
+
+意思決定の場面：v7.7 までで MVP の他の機能はほぼ揃っており、
+UR-017 を MVP に含めるかどうかが当面のスコープ判断。中継方式なら
+MVP に乗る規模、内蔵方式なら MVP から外れる規模。
+
+**主な判断要因:**
+
+- MVP に乗せるための実装規模の上限
+- ModelLogue が SPA でサーバを持たないという前提（ADR-001）
+- 既にチームが Slack を会話の場として使っているという現実
+- 「ModelLogue は機能を抱え込まずオーケストレーションする」という Lean Architecture 原則（ADR-002）
+- 将来 Teams / Discord などへ拡張可能であること
+
+### 決定
+
+**要約:** UR-017 の複数人参加チャットは、社内チャット venue（最初は Slack）と ModelLogue チャットペインを n8n 経由で双方向中継して実現することにした。ModelLogue 内部に多人数チャットクライアントは構築しない
+
+複数人レビューチャットは以下の構造で実現する：
+
+1. **ModelLogue は SPA のまま**：認証・ユーザ管理・リアルタイム配信を持たない。チャットペインは facilitator + AI + 中継経由の参加者発言を一律に表示する場として振る舞う。
+2. **n8n が中継器**：読み（Slack → ModelLogue）は n8n が Slack Trigger で発言を受信し ring buffer に保持して HTTP endpoint として公開、書き（ModelLogue → Slack）は n8n が ModelLogue からの POST を受け Slack `chat.postMessage` で投稿。
+3. **AI も両方を見る**：中継された Slack 発言は AI への history にも入る（SR-133）。複数人レビューにおいて AI は mediator として振る舞う。
+4. **進行役の体験は単一画面**：facilitator は ModelLogue だけ見ればよい（NFR-080）。Slack を直接見る必要はない。
+5. **参加者の体験も単一画面**：参加者は Slack だけ見ればよい。ModelLogue にアクセスする必要はない。
+
+Slack だけが対応 venue というわけではない。同じ relay contract を満たす n8n ワークフローを足せば、Teams / Discord / 別の venue にも展開できる。MVP は Slack のみで開始する。
+
+配信方式（polling / SSE / WebSocket）の選択は本 ADR の subordinate な実装判断として ADR-017 で扱う。
+
+### 検討したが採用しなかった選択肢
+
+- **ModelLogue 内部に多人数チャットクライアントを構築する** — 認証、WebSocket / SSE 配信、競合解決、履歴永続化、ユーザ管理を新規に抱える必要があり、MVP ほぼ完成段階の追加工数として大きすぎる。ADR-001 の前提も崩れる
+- **ModelLogue 側に「Slack へ投稿する」アクションだけ用意し、参加者発言は中継しない（一方向のみ）** — 参加者の発言が ModelLogue 側に流れないと、進行役は結局 Slack を直接見ることになり UR-017 を満たせない（NFR-080 不成立）
+- **Slack ではなく Discord / Teams を最初の venue として選ぶ** — チームが既に Slack を使っているのが意思決定時点での現実。relay contract 共通化により後付けは妨げない
+- **後発の汎用 chat 連携 SaaS（Cord, TalkJS など）を埋め込む** — 参加者は「ModelLogue 用のもう一つのチャット」を覚えなければならない。日常的に使っていない場所を導入する摩擦は MVP 妨害要因
+
+### 結果・影響
+
+**メリット:**
+
+- ModelLogue は SPA のままでよい（ADR-001 / ADR-002 と整合）
+- MVP の追加工数が n8n ワークフロー 2 本 + ModelLogue 側の薄い拡張で済む
+- 既にチームが使っている会話の場をそのままレビュー会場として活用できる
+- relay contract を介して Teams / Discord などへ後付け拡張可能
+- 認証・ユーザ管理・履歴永続化を Slack 側に委譲できる
+
+**受け入れる負債・制約:**
+
+- Slack を使っていないチームは、別 venue 用の n8n ワークフローを書くまで UR-017 を享受できない
+- 中継経路が増える分、リアルタイム性は内蔵 WebSocket より劣る（NFR-081 で許容範囲を定義）
+- Slack 側の障害・レート制限・配信遅延が ModelLogue のレビュー体験に直接影響する
+- 中継メッセージのフォーマットを Slack 側で人間が読む形にも揃える必要があり、両側 UX の整合を保つ追加コストがある
+
+**リスク:**
+
+- Slack の API 仕様変更に追随する保守コスト（中長期）
+- n8n のセルフホスト障害が中継停止に直結する（NFR-081 のフォールバック契約で軽減）
+- Teams / Discord への展開時に relay contract が想定外の差異で破綻する可能性
+- 多人数チャットを後で内蔵方式に切り替えたくなった場合の移行コスト（中継履歴と内蔵履歴の整合）
+
+---
+
+## ADR-017
+
+**Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用）**
+
+- **日付**: 2026-05-01
+- **ステータス**: 提案中
+- **最終更新**: 2026-05-01
+- **関連**: ADR-001 / ADR-002 / ADR-016 / SR-132 / NFR-081
+
+### 背景
+
+ADR-016 で UR-017 を Slack 中継方式で実現することが決まった。
+その内部実装として、Slack で発生したメッセージを ModelLogue
+（ブラウザ上の SPA）にどう届けるかという配信方式の選択が残っている。
+
+候補となる配信方式：
+
+- **HTTP polling**：ModelLogue 側が一定間隔で n8n の HTTP endpoint を叩き、新着分を取得する
+- **Server-Sent Events (SSE)**：n8n 側が単方向ストリームをブラウザに維持し、新着発生時に即時 push する
+- **WebSocket**：n8n またはリレーサーバが双方向ソケットを維持し、新着を即時 push する
+
+制約：
+
+- ModelLogue は SPA でサーバを持たない（ADR-001）。push を受ける常駐コンポーネントを ModelLogue 側に置けない
+- n8n の Webhook ノードは標準的な HTTP リクエスト/レスポンスモデルが基本で、長時間ストリームや WebSocket サーバとしての動作は想定外
+- SSE / WebSocket を導入する場合、Pusher / Ably などの SaaS を経由するか、自前で常駐 Node サーバを立てる必要がある
+- レビューは秒単位の即時応答までは要求されない（人間同士の議論ペース）
+
+意思決定ポイント：MVP のリアルタイム性として「会話として feel が成立する遅延」を満たせる最小の方式を採る。
+
+**主な判断要因:**
+
+- MVP に追加するインフラを最小に抑える
+- ModelLogue が SPA / no server であるという ADR-001 の前提
+- n8n の標準ノード機能だけで済ませる（追加 SaaS / 常駐サーバを増やさない）
+- レビュー会話としての end-to-end 4 秒以内（NFR-081）
+- 将来 cadence が足りなくなった場合の置き換えやすさ
+
+### 決定
+
+**要約:** ModelLogue 側が n8n の HTTP endpoint を一定間隔で polling する方式を採る。SSE / WebSocket は MVP では不採用とし、cadence が不足した場合に置き換える
+
+Slack → ModelLogue 方向の配信は HTTP polling で実装する：
+
+1. n8n の Slack Trigger ワークフローが受信メッセージを ring buffer（Static Data, 直近 100 件）に積む
+2. 同ワークフローは `GET /webhook/slack-relay?since=<ts>` を公開する
+3. ModelLogue 側の `slackRelay` サービスが、REVIEW phase 中のセッションでこの endpoint を polling する。MVP 初期の既定間隔は 1.5 秒（NFR-081 の end-to-end 4 秒予算に対する配分：Slack 配信遅延 ~1〜2 秒 + polling 間隔 1.5 秒）
+4. ModelLogue は最後に取得した `ts` をクライアント側に保持し、次回の polling で `since=<ts>` を渡して差分のみ取得する
+5. 中継 endpoint が不達の場合はクライアントが warning ログを出し、ChatPanel は通常動作を続ける（NFR-081 の failure contract）
+
+ModelLogue → Slack 方向は polling ではなく POST（fire-and-forget）を使う。書き方向は ModelLogue 側からのトリガで完結し、リアルタイム配信問題は無い。
+
+本 ADR は MVP 向けの判断で、cadence が実用上不足する／polling 負荷が n8n のセルフホスト構成で問題になる、などの実運用知見が出た時点で再評価する。再評価で SSE / WebSocket に切り替える場合は別 ADR を起こす（本 ADR を superseded にする）。
+
+### 検討したが採用しなかった選択肢
+
+- **Server-Sent Events (SSE) で push 配信する** — n8n の標準ノードは長時間ストリームを維持する設計ではなく、SSE エンドポイントを n8n 単独で安定運用するのは現実的ではない。Pusher / Ably / 自前 Node サーバを噛ませる必要があり、MVP の追加運用コストが大きい
+- **WebSocket で双方向 push 配信する** — SSE と同じ理由でインフラ追加が必要。さらに本ユースケースで必要なのは Slack → ModelLogue の単方向配信であって、WebSocket の双方向性は過剰スペック
+- **Slack の Socket Mode を ModelLogue が直接使う** — Slack Socket Mode はサーバ側コンポーネント向けの機能で、ブラウザから直接接続するのは認証情報の露出につながる。NFR-030 / ADR-001 と相容れない
+- **polling 間隔を 5 秒以上にしてさらにインフラ負荷を下げる** — end-to-end 遅延が 6〜7 秒に達し、NFR-081 の 4 秒予算を超過する
+
+### 結果・影響
+
+**メリット:**
+
+- MVP の追加インフラが n8n の Webhook ノード 1 個で済む
+- ADR-001（SPA / no server）と ADR-002（n8n がオーケストレータ）の前提を崩さない
+- クライアント側状態（最後に見た ts）が単純で、再接続・再ロードに強い
+- 将来 SSE / WebSocket に置き換える際、ModelLogue 側の `slackRelay` サービスを差し替えるだけで済む
+
+**受け入れる負債・制約:**
+
+- polling 間隔分のリアルタイム性低下（end-to-end 約 2.5〜3.5 秒）を受け入れる
+- REVIEW phase 中ずっと一定間隔の HTTP リクエストが発生する（n8n 側の負荷とログが増える）
+- ring buffer のサイズ（100 件）を超えるメッセージ突発時、クライアント再接続後に取りこぼす可能性がある
+
+**リスク:**
+
+- 実運用で会話量が想定を超えると、ring buffer が溢れる頻度が上がる
+- polling 間隔を縮めて低遅延化すると n8n 負荷が線形に増え、別の方式への移行圧力になる
+- n8n のセルフホスト構成（CPU / メモリ）次第では polling 負荷が他のワークフローに干渉する
 
 ---

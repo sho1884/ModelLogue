@@ -1,0 +1,145 @@
+id: ADR-017
+title: "Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用）"
+date: "2026-05-01"
+status: proposed
+superseded_by: null
+
+participants:
+  author: ""
+  approver: ""
+  last_updated: "2026-05-01"
+
+context:
+  problem: |
+    ADR-016 で UR-017 を Slack 中継方式で実現することが決まった。
+    その内部実装として、Slack で発生したメッセージを ModelLogue
+    （ブラウザ上の SPA）にどう届けるかという配信方式の選択が
+    残っている。
+
+    候補となる配信方式：
+
+    - **HTTP polling**：ModelLogue 側が一定間隔で n8n の HTTP
+      endpoint を叩き、新着分を取得する
+    - **Server-Sent Events (SSE)**：n8n 側が単方向ストリームを
+      ブラウザに維持し、新着発生時に即時 push する
+    - **WebSocket**：n8n またはリレーサーバが双方向ソケットを
+      維持し、新着を即時 push する
+
+    制約：
+
+    - ModelLogue は SPA でサーバを持たない（ADR-001）。push を
+      受ける常駐コンポーネントを ModelLogue 側に置けない
+    - n8n の Webhook ノードは標準的な HTTP リクエスト/レスポンス
+      モデルが基本で、長時間ストリームや WebSocket サーバとして
+      の動作は想定外
+    - SSE / WebSocket を導入する場合、Pusher / Ably などの SaaS
+      を経由するか、自前で常駐 Node サーバを立てる必要がある
+    - レビューは秒単位の即時応答までは要求されない（人間同士の
+      議論ペース）
+
+    意思決定ポイント：MVP のリアルタイム性として「会話として
+    feel が成立する遅延」を満たせる最小の方式を採る。
+
+  drivers:
+    - MVP に追加するインフラを最小に抑える
+    - ModelLogue が SPA / no server であるという ADR-001 の前提
+    - n8n の標準ノード機能だけで済ませる（追加 SaaS / 常駐サーバを増やさない）
+    - レビュー会話としての end-to-end 4 秒以内（NFR-081）
+    - 将来 cadence が足りなくなった場合の置き換えやすさ
+
+decision:
+  summary: "ModelLogue 側が n8n の HTTP endpoint を一定間隔で polling する方式を採る。SSE / WebSocket は MVP では不採用とし、cadence が不足した場合に置き換える"
+
+  detail: |
+    Slack → ModelLogue 方向の配信は HTTP polling で実装する：
+
+    1. n8n の Slack Trigger ワークフローが受信メッセージを ring
+       buffer（Static Data, 直近 100 件）に積む
+    2. 同ワークフローは `GET /webhook/slack-relay?since=<ts>` を
+       公開する
+    3. ModelLogue 側の `slackRelay` サービスが、REVIEW phase 中
+       のセッションでこの endpoint を polling する。MVP 初期の
+       既定間隔は 1.5 秒（NFR-081 の end-to-end 4 秒予算に対する
+       配分：Slack 配信遅延 ~1〜2 秒 + polling 間隔 1.5 秒）
+    4. ModelLogue は最後に取得した `ts` をクライアント側に保持し、
+       次回の polling で `since=<ts>` を渡して差分のみ取得する
+    5. 中継 endpoint が不達の場合はクライアントが warning ログを
+       出し、ChatPanel は通常動作を続ける（NFR-081 の failure
+       contract）
+
+    ModelLogue → Slack 方向は polling ではなく POST（fire-and-
+    forget）を使う。書き方向は ModelLogue 側からのトリガで完結
+    し、リアルタイム配信問題は無い。
+
+    本決定の根拠：
+
+    - **インフラ最小**：polling は n8n の Webhook ノード 1 個で
+      完結し、Pusher / Ably / 自前 Node サーバなどを増やさない。
+      MVP の追加運用コストが最小。
+    - **ADR-001 / ADR-002 との整合**：ModelLogue は SPA のまま、
+      n8n が中継器という構造を崩さない。
+    - **NFR-081 の予算内**：1.5 秒 polling + Slack 配信 ~1〜2 秒
+      で end-to-end 約 2.5〜3.5 秒。NFR-081 の 4 秒以内を満たす。
+    - **置き換えやすさ**：HTTP endpoint を介する関係は変えず、
+      将来 cadence が不足した場合に SSE / WebSocket への置き換え
+      が可能（ModelLogue 側の `slackRelay` サービスを差し替える
+      だけで済む）。
+
+    本 ADR は MVP 向けの判断で、cadence が実用上不足する／
+    polling 負荷が n8n のセルフホスト構成で問題になる、などの
+    実運用知見が出た時点で再評価する。再評価で SSE / WebSocket
+    に切り替える場合は別 ADR を起こす（本 ADR を superseded
+    にする）。
+
+neglected:
+  - option: "Server-Sent Events (SSE) で push 配信する"
+    because: |
+      n8n の標準ノードは長時間ストリームを維持する設計ではなく、
+      SSE エンドポイントを n8n 単独で安定運用するのは現実的では
+      ない。Pusher / Ably / 自前 Node サーバを噛ませる必要があり、
+      MVP の追加運用コストが大きい。MVP のリアルタイム性として
+      は polling で足りる。
+
+  - option: "WebSocket で双方向 push 配信する"
+    because: |
+      SSE と同じ理由でインフラ追加が必要。さらに WebSocket は
+      双方向ストリームだが、本ユースケースで必要なのは Slack →
+      ModelLogue の単方向配信であって、WebSocket の双方向性は
+      過剰スペック。実装と運用の複雑度に見合わない。
+
+  - option: "Slack の Socket Mode を ModelLogue が直接使う"
+    because: |
+      Slack Socket Mode はサーバ側コンポーネント向けの機能で、
+      ブラウザから直接接続するのは認証情報の露出につながる。
+      ModelLogue が SPA で秘匿情報を持たないという設計
+      （NFR-030 / ADR-001）と相容れない。
+
+  - option: "polling 間隔を 5 秒以上にしてさらにインフラ負荷を下げる"
+    because: |
+      end-to-end 遅延が 6〜7 秒に達し、NFR-081 の 4 秒予算を
+      超過する。会話としての feel が成立しなくなり、UR-017 の
+      実用性が落ちる。
+
+consequences:
+  positive:
+    - "MVP の追加インフラが n8n の Webhook ノード 1 個で済む"
+    - "ADR-001（SPA / no server）と ADR-002（n8n がオーケストレータ）の前提を崩さない"
+    - "クライアント側状態（最後に見た ts）が単純で、再接続・再ロードに強い"
+    - "将来 SSE / WebSocket に置き換える際、ModelLogue 側の `slackRelay` サービスを差し替えるだけで済む"
+
+  negative:
+    - "polling 間隔分のリアルタイム性低下（end-to-end 約 2.5〜3.5 秒）を受け入れる"
+    - "REVIEW phase 中ずっと一定間隔の HTTP リクエストが発生する（n8n 側の負荷とログが増える）"
+    - "ring buffer のサイズ（100 件）を超えるメッセージ突発時、クライアント再接続後に取りこぼす可能性がある"
+
+  risks:
+    - "実運用で会話量が想定を超えると、ring buffer が溢れる頻度が上がる"
+    - "polling 間隔を縮めて低遅延化すると n8n 負荷が線形に増え、別の方式への移行圧力になる"
+    - "n8n のセルフホスト構成（CPU / メモリ）次第では polling 負荷が他のワークフローに干渉する"
+
+references:
+  - "ADR-001 frontend-is-pure-ui（SPA / no server 前提）"
+  - "ADR-002 n8n-as-orchestrator（Lean Architecture）"
+  - "ADR-016 multi-participant-chat-via-slack-relay（本 ADR の上位判断）"
+  - "SR-132（双方向中継の実装）"
+  - "NFR-081（中継リアルタイム性予算）"
