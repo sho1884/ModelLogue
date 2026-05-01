@@ -1947,8 +1947,8 @@ parser_diagnostics:
   SR-135:
     function: "Bind the Slack relay to a single channel via the SLACK_RELAY_CHANNEL_ID environment variable, and cleanly disable the relay when the variable is unset"
     parent: [UR-017]
-    component: n8n/workflows/modellogue-slack-relay.json (env var SLACK_RELAY_CHANNEL_ID) + Doc/architecture.md (Phase A vs B note)
-    status: planned  # v7.8 (Phase A)
+    component: src/services/slackRelay.ts (VITE_SLACK_RELAY_BASE_URL) + n8n/workflows/modellogue-slack-relay.json (SLACK_RELAY_CHANNEL_ID) + Doc/architecture.md §7.4 / §8.2 (Phase A vs B note)
+    status: implemented  # v7.8 (Phase A — config scaffolding; n8n workflow body lands in SR-132)
     notes: |
       Phase A — MVP scope, this SR:
         - The bridged channel id is set via environment variable

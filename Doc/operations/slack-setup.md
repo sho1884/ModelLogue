@@ -115,7 +115,22 @@ export SLACK_RELAY_CHANNEL_ID=CXXXXXXXX
 n8n start
 ```
 
-> **無効化**: `SLACK_RELAY_CHANNEL_ID` を未設定（または空）にすると、ModelLogue 側の中継は自動的に無効化されます（SR-135 の AC）。
+### ModelLogue 側 (.env)
+
+ModelLogue（Vite）にも n8n の base URL を渡します。`.env` に追加：
+
+```
+VITE_SLACK_RELAY_BASE_URL=http://localhost:5678
+```
+
+設定すると ModelLogue が REVIEW phase 中に polling を開始します。
+**未設定（または空）なら中継は無効化** され、ChatPanel は facilitator
++ AI のみで通常動作します（SR-135 の AC）。
+
+> **無効化の双方向**: n8n 側 `SLACK_RELAY_CHANNEL_ID` と ModelLogue 側
+> `VITE_SLACK_RELAY_BASE_URL` のどちらか一方が未設定なら中継は走り
+> ません。`SLACK_RELAY_CHANNEL_ID` を消せば n8n の Slack Trigger が
+> 発火しないので、ModelLogue 側がpolling しても空配列のみが返ります。
 
 ## 9. Slack Event Subscription を設定する（Slack Trigger 用）
 

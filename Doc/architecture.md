@@ -501,6 +501,56 @@ Response (Phase 2 目標):
 - `n8n/workflows/` ディレクトリにテンプレートを同梱
 - ユーザーはインポート → APIキー設定で利用開始
 
+### 7.4 Slack 中継ワークフロー (UR-017, v7.8 planned)
+
+UR-017 の複数人レビューチャットは、社内チャット venue（Phase A は
+Slack）と ModelLogue チャットペインを n8n で双方向中継する設計
+（[ADR-016](adr/ADR-016-multi-participant-chat-via-slack-relay.yaml)）。
+
+実装は 2 本の n8n ワークフローで構成する：
+
+```
+Slack channel
+    │ (Slack Events API)
+    ▼
+n8n workflow #1 (slack-relay)
+    - Slack Trigger node が new message を受信
+    - {ts, user, username, text, source: 'slack:<username>'} に正規化
+    - Static Data の ring buffer (直近 100 件) に積む
+    - GET /webhook/slack-relay?since=<ts> を提供
+    ▲
+    │ (1.5 秒間隔の polling, ADR-017)
+ModelLogue SPA
+    - slackRelay サービスが REVIEW phase 中に polling
+    - 取得分を chatStore に append (source = 'slack:<name>')
+    │
+    │ (facilitator / AI 発言を fire-and-forget)
+    ▼
+n8n workflow #2 (chat-to-slack)
+    - POST /webhook/chat-to-slack を受け
+    - "[facilitator] " or "[AI] " を prefix
+    - Slack chat.postMessage で投稿
+```
+
+**Phase A vs Phase B**:
+
+| 項目 | Phase A (v7.8 MVP) | Phase B (deferred) |
+|------|-------------------|-------------------|
+| 対応チャンネル | 1 ワークスペース × 1 チャンネル固定 | セッションごとに選択 |
+| チャンネル ID 解決 | n8n 側 env `SLACK_RELAY_CHANNEL_ID` | seed 時 UI で選択、n8n 側に session × channel mapping |
+| Bot のチャンネル参加 | 運用者が手動招待 | `channels:join` で on-demand |
+| ModelLogue 側 UI | 既存 ChatPanel に source ラベル追加（SR-134）のみ | チャンネル選択 UI 追加 |
+
+詳細手順は [Doc/operations/slack-setup.md](operations/slack-setup.md)。
+
+**配信方式**: polling 1.5 秒間隔（[ADR-017](adr/ADR-017-slack-relay-via-polling.yaml)）。
+SSE / WebSocket は MVP では不採用。実運用 cadence が不足したら別 ADR で
+切り替え検討。
+
+**無効化**: ModelLogue 側 `VITE_SLACK_RELAY_BASE_URL` または n8n 側
+`SLACK_RELAY_CHANNEL_ID` のいずれかが未設定なら中継は無効化される
+（SR-135）。ChatPanel は通常通り（facilitator + AI のみ）動作する。
+
 ## 8. 外部サービス連携
 
 ### 8.1 Docker Compose構成
@@ -535,7 +585,19 @@ Gemini APIキーはn8n UI内のCredentials設定で管理する。環境変数�
 ```
 VITE_PLANTUML_SERVER_URL=http://localhost:8080
 VITE_N8N_BASE_URL=http://localhost:5678
+# Optional — UR-017 Slack relay (SR-135). Unset = relay disabled,
+# ChatPanel runs facilitator + AI only as today.
+VITE_SLACK_RELAY_BASE_URL=http://localhost:5678
 ```
+
+n8n 側（docker-compose の n8n service `environment:`）に必要な追加 env
+は UR-017 を有効化する場合のみ：
+
+```
+SLACK_RELAY_CHANNEL_ID=CXXXXXXXX  # Phase A: 1 channel fixed
+```
+
+設定手順は [Doc/operations/slack-setup.md](operations/slack-setup.md)。
 
 ## 9. ディレクトリ構造
 
