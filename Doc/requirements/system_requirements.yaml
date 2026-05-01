@@ -1758,7 +1758,7 @@ parser_diagnostics:
     function: "Strengthen requirement-type AI prompt: add ID-stability rule, reference-integrity rule, and worked examples for the three common review operations (merge / hide / add)"
     parent: [UR-014, UR-016]
     component: n8n/workflows/modellogue-chat.json (requirement-type system prompt)
-    status: planned
+    status: implemented  # v7.7
     notes: |
       The n8n requirement-type prompt already encodes the basic
       ADR-014 review semantics (soft-delete with reason, hidden vs
