@@ -108,6 +108,7 @@ flowchart LR
         SR128["SR-128<br/>Source-preserving model-type switch (v7.7)<br/>currentSource / chat / markers を保ったまま型を切替<br/>sessionStore.setModelTypeIdKeepingSource"]
         SR129["SR-129<br/>Auto-detect on bundle without modelTypeId (v7.7)<br/>bundle に型が無いとき plantUmlSource から判定<br/>crossTypeDiagnosis.pickBestType + bootstrapFromBundle"]
         SR130["SR-130<br/>Apply-time review-evidence guardrail (v7.7, ADR-014 補強)<br/>AI csv reply で id が消えていたら apply 前に確認モーダル<br/>applyGuardrail.ts + ApplyGuardrailModal"]
+        SR131["SR-131<br/>Requirement prompt reinforcement (v7.7)<br/>ID 安定性 / 参照整合性 / worked examples を AI プロンプトに追加<br/>n8n/workflows/modellogue-chat.json"]
     end
 
     subgraph IN["Infrastructure / インフラ"]
@@ -192,6 +193,8 @@ flowchart LR
     UR016 --> SR129
     UR016 --> SR130
     UR014 --> SR130
+    UR016 --> SR131
+    UR014 --> SR131
 
     %% UR-010: Close the review session with an outcome
     UR010 --> SR040
@@ -313,6 +316,7 @@ flowchart LR
 | SR-128 Source-preserving model-type switch (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-129 Auto-detect on bundle without modelTypeId (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-130 Apply-time review-evidence guardrail (v7.7, ADR-014 補強) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  | x |
+| SR-131 Requirement prompt reinforcement (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 

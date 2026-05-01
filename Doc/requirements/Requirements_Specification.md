@@ -831,7 +831,8 @@ UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保�
 | (a) 型ミスマッチの早期検知 | **SR-126** Cross-type parse diagnosis | 実装済（v7.7） |
 | (b) 切替時の情報保持 | **SR-128** Source-preserving model-type switch | 実装済（v7.7、SR-126 から先行投入） |
 | (c) 型未指定 bundle からの起動 | **SR-129** Auto-detect on bundle without modelTypeId | 実装済（v7.7） |
-| 補強：apply 境界での要求行 drop 検知（UR-014 / UR-016 を支える） | **SR-130** Apply-time review-evidence guardrail | 計画済（v7.7） |
+| 補強：apply 境界での要求行 drop 検知（UR-014 / UR-016 を支える） | **SR-130** Apply-time review-evidence guardrail | 実装済（v7.7） |
+| 補強：要求型 AI プロンプトの強化（UR-014 / UR-016 を支える） | **SR-131** Prompt reinforcement (ID-stability / reference-integrity / worked examples) | 計画済（v7.7） |
 
 #### 3.16.1 SR-126：cross-type parse diagnosis
 
@@ -943,6 +944,24 @@ AI csv reply
 **UI 文言**：易しい英語で統一（チャット応答の言語フラグはモデル提案テキスト用、UI ラベルには適用しない）。
 
 **ADR 不要**：ADR-014 の原則を apply 境界で物理的に守らせる実装手段。新たな architectural decision は無い。
+
+#### 3.16.5 SR-131：要求型 AI プロンプトの強化（UR-014 / UR-016 補強）
+
+n8n の requirement-type プロンプトは既に ADR-014 のレビュー意味論（soft-delete with reason、hidden vs deleted、CSV is canonical）を encode している。**SR-131** は SR-130 計画時に浮き上がった 3 つの追加強化を **AI への few-shot 学習効果**を兼ねて 1 つの SR として束ねる：
+
+| 強化 | 内容 |
+|---|---|
+| **ID 安定性**（B） | 「既存 id を絶対にリネームしない。リネームは "旧 id を deleted=Y で残す + 新 id で新規行" の 2 ステップ操作」 |
+| **参照整合性**（C） | 「`contained_in` / `derives_from` の id は同 CSV 内の他行 id を参照すること（dangling reference は parser が黙って落とす）」 |
+| **Worked examples**（A） | merge / hide / add の 3 パターンについて「正しい応答 CSV の見本」を inline で例示（few-shot prompting） |
+
+**SR-130 との関係**：SR-131 は AI が間違いを犯しにくくする上流対策、SR-130 は犯した間違いを apply 境界で catch する下流対策。両者は belt-and-suspenders。
+
+**実装範囲**：`n8n/workflows/modellogue-chat.json` の requirement-type 節 1 文字列の追記のみ。コード側に影響無し。
+
+**ADR 不要**：ADR-014 の原則を運用面で強化するプロンプト編集。新たな architectural decision は無い。
+
+**トークン経済**：3 つの worked examples を加えて約 +250-400 トークン。Gemini context（1M+）に対して微々たる量、プロンプトキャッシュも効くので latency 影響ほぼゼロ。
 
 ---
 

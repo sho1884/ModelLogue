@@ -1754,6 +1754,51 @@ parser_diagnostics:
       - "deleted=Y rows in the new csv do not trigger the guardrail — the id is still present, the guardrail leaves them alone"
       - "The guardrail does NOT fire for initial generation (empty before-model) or for non-requirement type sessions (state-machine, process)"
 
+  SR-131:
+    function: "Strengthen requirement-type AI prompt: add ID-stability rule, reference-integrity rule, and worked examples for the three common review operations (merge / hide / add)"
+    parent: [UR-014, UR-016]
+    component: n8n/workflows/modellogue-chat.json (requirement-type system prompt)
+    status: planned
+    notes: |
+      The n8n requirement-type prompt already encodes the basic
+      ADR-014 review semantics (soft-delete with reason, hidden vs
+      deleted, CSV is canonical). SR-131 adds three reinforcements
+      that came up while planning SR-130:
+
+      - **ID-stability (B)** — "existing id MUST NOT be renamed;
+        treat a rename as: keep the old id with deleted=Y plus a
+        reason, and add a new row with a fresh id." Without this
+        rule the AI may silently re-letter ids (e.g. R1 → R001 to
+        normalise), breaking row continuity and tripping the
+        SR-130 guardrail unnecessarily.
+      - **Reference integrity (C)** — "every id in contained_in
+        and derives_from MUST be the id of another row in the
+        same CSV reply." Dangling references currently parse
+        silently (the relation is just dropped), which means a
+        typo can quietly lose a relation.
+      - **Worked examples (A)** — three concrete (user-prompt,
+        correct-csv-response) pairs covering the three common
+        review operations: merge two requirements, hide a
+        requirement temporarily, add a new requirement. Few-shot
+        examples raise compliance noticeably with negligible token
+        cost (each example ~80–130 tokens; the existing
+        REQUIREMENT section is ~500–600 tokens, so the full
+        addition stays under 1k tokens — negligible against
+        Gemini's 1M context).
+
+      Pairs with SR-130: prompt-side reinforcement reduces the
+      mistake rate; SR-130 catches the residual mistakes at
+      apply-boundary. Belt-and-suspenders.
+
+      No code changes outside n8n/workflows/modellogue-chat.json.
+      No new ADR (these are prompt-level refinements of ADR-014's
+      principles).
+    acceptance_criteria:
+      - "The prompt explicitly states that existing ids MUST NOT be renamed; rename = old id with deleted=Y plus a reason + new row with fresh id"
+      - "The prompt explicitly states that contained_in / derives_from MUST reference ids present in the same CSV reply"
+      - "The prompt includes at least three worked examples showing correct CSV responses for: merging two requirements, marking a requirement hidden, and adding a new requirement"
+      - "The pre-existing REVIEW SEMANTICS and ONE-AXIS DISCIPLINE rules are unchanged — SR-131 is additive reinforcement, not a rewrite"
+
 # =============================================================================
 # Data Model
 # =============================================================================
