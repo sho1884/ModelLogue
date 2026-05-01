@@ -2,8 +2,8 @@
 # Format: Task expression (Value Engineering)
 # Writing convention: Short verb phrase describing user task
 
-version: "7.6"
-last_updated: "2026-04-24"
+version: "7.7"
+last_updated: "2026-05-01"
 
 # Version 7.0 highlights:
 #   - Reframed as a review tool where PlantUML source and requirements text
@@ -317,3 +317,30 @@ requirements:
       content suggests, and offers a recovery path that
       preserves the user's work.
     priority: medium
+
+  UR-017:
+    task: "Have multiple participants take part in the review chat"
+    background: >
+      A review is, by definition, a multi-person activity.
+      ModelLogue v7.7 only allows the facilitator and the AI on
+      the chat pane, so other reviewers have no way to take part
+      in the conversation that drives the model. UR-017 is the
+      simple user-side need: multiple people should be able to
+      participate in the review chat.
+
+      Implementation strategy is intentionally NOT specified
+      here. The architectural decision (how the multi-participant
+      chat is realised) is recorded as an ADR; the resulting
+      derived functions are SR-132–135; the corresponding quality
+      bar is NFR-080 / NFR-081. UR-017 itself stands as the user
+      need.
+
+      Out-of-scope:
+        - The previous Future-Extensions line "Slack/Teams/
+          Discord feedback via n8n" referred to one-shot post-
+          session notifications, not in-session dialogue. UR-017
+          replaces that line.
+        - Real-time multi-user marker / source collaboration is
+          a separate concern; if pursued it belongs to its own
+          UR.
+    priority: high

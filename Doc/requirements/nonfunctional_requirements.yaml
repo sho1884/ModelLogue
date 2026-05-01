@@ -1,7 +1,7 @@
 # ModelLogue Non-Functional Requirements
 
-version: "5.0"
-last_updated: "2026-04-08"
+version: "5.1"
+last_updated: "2026-05-01"
 
 requirements:
   NFR-001:
@@ -123,3 +123,47 @@ requirements:
         standard: "GPL, LGPL, AGPL (copyleft incompatible with MIT)"
       - item: "Infrastructure services"
         standard: "GPL/fair-code acceptable for separate Docker services (not bundled)"
+
+  NFR-080:
+    parent: [UR-017]
+    category: usability
+    name: "Multi-participant chat — single-pane operation"
+    rationale: |
+      UR-017 is implemented via a Slack relay (see SR-132–135 and the
+      forthcoming ADR on the relay design). That choice introduces a
+      derived risk: the facilitator could end up watching two surfaces
+      (ModelLogue + Slack) and translating between them, which breaks
+      concentration on the diagram and the AI conversation. The same
+      risk exists symmetrically for remote participants — being asked
+      to also load ModelLogue would defeat the point of bridging into
+      the venue they already use. NFR-080 fixes the quality bar that
+      the relay must clear so it actually delivers UR-017 instead of
+      just nominally satisfying it.
+    criteria:
+      - item: "Facilitator single-pane completeness"
+        standard: "The facilitator can run a multi-participant review using only the ModelLogue chat pane — every relayed Slack message is surfaced there"
+      - item: "Participant single-pane completeness"
+        standard: "Remote participants can follow the whole review (facilitator turns + AI replies) using only Slack — every ModelLogue chat turn is surfaced there"
+      - item: "Speaker disambiguation"
+        standard: "Each surfaced message carries a source identifier (facilitator / AI / Slack participant) that the consumer's UI can render distinguishably"
+
+  NFR-081:
+    parent: [UR-017]
+    category: performance
+    name: "Multi-participant chat — relay latency"
+    rationale: |
+      For UR-017's multi-participant chat to feel like a live
+      conversation, the bridge must surface messages quickly enough
+      that participants do not lose the thread. The relay design uses
+      polling (see SR-132 and the forthcoming ADR), so Slack →
+      ModelLogue picks up the polling interval and Slack's own
+      delivery delay; ModelLogue → Slack is push-based and only pays
+      network + Slack API cost. NFR-081 sets the latency budget for
+      both directions and the failure-mode contract.
+    criteria:
+      - item: "Slack → ModelLogue surfacing latency"
+        standard: "≤ 4 seconds end-to-end from Slack post to appearance in the ModelLogue chat pane"
+      - item: "ModelLogue → Slack surfacing latency"
+        standard: "≤ 2 seconds from chat send (or AI reply receipt) to appearance in the Slack channel"
+      - item: "Relay failure mode"
+        standard: "If the relay endpoint is unreachable, the local ModelLogue chat continues to function; failures are logged but do not break the chat pane"

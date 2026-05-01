@@ -73,6 +73,7 @@ This document defines requirements for ModelLogue, a model review platform for s
 | UR-014 | Review a requirement diagram / 要求図をレビューする **(v7.5)** | High / 高 |
 | UR-015 | Review a business process / workflow diagram / 業務プロセス図をレビューする **(v7.6)** | High / 高 |
 | UR-016 | Establish the correct model type for the session, even when type is unstated or initially miscued / 型未指定／誤選択時にもセッションを正しいモデル型で確立する **(v7.7)** | Medium / 中 |
+| UR-017 | Have multiple participants take part in the review chat / 複数人がチャットでレビューに参加する **(v7.8 planned, Slack 中継で実現)** | High / 高 |
 
 > **Note 1**: UR-009とUR-010の前後（初版生成手段、終了後フィードバック先）はn8nワークフローで現場ごとに構成する。ModelLogue本体は入出力の境界に専念する。詳細は [ADR-008](../adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) を参照。
 >
@@ -965,6 +966,62 @@ n8n の requirement-type プロンプトは既に ADR-014 のレビュー意味�
 
 ---
 
+### 3.17 Multi-Participant Review Chat / 複数人レビューチャット (UR-017, v7.8 planned)
+
+UR-017 のニーズは単純：**レビューに複数人がチャットで参加できるようにする**。レビューは本来複数人で行うものであり、ModelLogue v7.7 が進行役 1 人 + AI しかチャットさせないのは構造的な欠落。
+
+#### 3.17.1 設計判断（ADR）
+
+実装方針は ModelLogue 内に多人数チャットを抱える（認証・WebSocket・競合解決・履歴永続化が一気に増える）ことを避け、**チームが既に使っている Slack を借り、双方向の中継を入れる** 設計を取る。これは v7.8 の architectural decision として ADR で別途記録する。
+
+#### 3.17.2 導出機能（SR）
+
+設計判断から導出される機能：
+
+| 区分 | SR | 概要 |
+|---|---|---|
+| 中継インフラ | **SR-132** | Slack ⇄ ModelLogue 双方向中継（n8n 2 ワークフロー + ring buffer + polling） |
+| AI 取り込み | **SR-133** | 履歴に `[Slack:<name>]` prefix 付与 + system prompt に mediator 指示を追加 |
+| 表示 | **SR-134** | source ラベル付与（facilitator / AI / Slack 参加者）＋ 各クラスの視覚的区別 |
+| 構成 | **SR-135** | `SLACK_RELAY_CHANNEL_ID` でチャンネル binding、未設定時は中継無効 |
+
+各 SR は「システムが何をするか」のみを記述する。**ユーザがそこから何を享受できるか**（進行役の単一画面操作・参加者の Slack 単独閲覧・リアルタイム性）は SR ではなく次の NFR に分離している。
+
+#### 3.17.3 品質要求（NFR）
+
+中継機能を介して UR-017 が **実際に成立する** ための品質バー：
+
+- **[NFR-080](./nonfunctional_requirements.yaml)** — 単一画面で完結すること
+  - 進行役は ModelLogue だけで複数人レビューを駆動できる（Slack 発言が ChatPanel に surface する）
+  - 参加者は Slack だけでレビューを追える（進行役発言と AI 発言が Slack に surface する）
+  - 各メッセージに source 識別子が乗っていて UI 側で見分けて描画できる
+  - 理由：両方を見比べると図と AI 対話への集中が切れる／参加者を ModelLogue に呼ぶと中継の意味が消える
+- **[NFR-081](./nonfunctional_requirements.yaml)** — 中継のリアルタイム性
+  - Slack → ModelLogue: end-to-end 4 秒以内
+  - ModelLogue → Slack: 2 秒以内
+  - 中継 endpoint 不達時は ChatPanel をクラッシュさせず警告ログのみ
+  - 理由：会話として feel 成立する閾値、failure mode は MVP 縮退の契約
+
+#### 3.17.4 各 SR の補足
+
+**SR-132**：n8n workflow #1 が Slack Trigger → ring buffer (Static Data, 100 件) → `GET /webhook/slack-relay?since=<ts>`。ModelLogue 側は `slackRelay` サービスが REVIEW phase 中に polling。書き方向は workflow #2 が `POST /webhook/chat-to-slack` を提供し、`[facilitator] ` または `[AI] ` を prefix して Slack に投稿。バッファに Redis を立てない（MVP）。ポーリング採用の理由（vs SSE/WS）は ADR で扱う。
+
+**SR-133**：`{role: 'user', content: '[Slack: alice] ...'}` のように prefix で source を保ち、system prompt に「複数人レビューにおける mediator」という 1 段落を追加。既存の ADR-014 / SR-131 prompt 規則は不変。
+
+**SR-134**：`ChatMessage.source` フィールドを `'facilitator' | 'ai' | 'slack:<name>'` で持つ。ラベル文言は易しい英語（"You" / "AI" / "Slack · alice"）。視覚的に AI と Slack 参加者を区別する（具体的な配色は実装で）。
+
+**SR-135**：Phase A は環境変数 `SLACK_RELAY_CHANNEL_ID` で 1 チャンネル固定、Bot は手動招待。Phase B（per-session 選択 + on-demand join）は別 SR で先送り。`SLACK_RELAY_CHANNEL_ID` 未設定時は workflow #1 が発火せず、ModelLogue の polling は空配列のみで ChatPanel は通常動作。
+
+#### 3.17.5 設計判断のサマリ（次セッションへ）
+
+- UR-017 = 純粋な複数人参加ニーズ
+- 設計判断（ADR）= Slack 中継方式
+- 導出機能（SR-132〜135）= 中継・AI 取り込み・表示・binding
+- 品質要求（NFR-080 / NFR-081）= 単一画面性 + リアルタイム性
+- Teams / Discord は UR-017 の MVP 外、同じ relay contract で後付け可能
+
+---
+
 ## 4. Non-Functional Requirements / 非機能要件
 
 > Source / 出典: [nonfunctional_requirements.yaml](./nonfunctional_requirements.yaml)
@@ -980,6 +1037,8 @@ n8n の requirement-type プロンプトは既に ADR-014 のレビュー意味�
 | NFR-050 | Maintainability / 保守性 | TypeScript strict, modular (parser, model, diagram, table) |
 | NFR-060 | Availability / 可用性 | Static SPA, Docker Compose (PlantUML + n8n) |
 | NFR-070 | Licensing / ライセンス | MIT project, permissive deps only (no GPL/LGPL/AGPL) |
+| NFR-080 | Usability / ユーザビリティ (UR-017) | 進行役は ModelLogue 単独画面で複数人レビューを駆動、参加者は Slack 単独でレビューを追える、各メッセージは source 識別子付き |
+| NFR-081 | Performance / パフォーマンス (UR-017) | Slack→ModelLogue ≤ 4s、ModelLogue→Slack ≤ 2s、relay 不達時も ChatPanel 通常動作 |
 
 ---
 

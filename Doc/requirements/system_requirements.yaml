@@ -1799,6 +1799,202 @@ parser_diagnostics:
       - "The prompt includes at least three worked examples showing correct CSV responses for: merging two requirements, marking a requirement hidden, and adding a new requirement"
       - "The pre-existing REVIEW SEMANTICS and ONE-AXIS DISCIPLINE rules are unchanged — SR-131 is additive reinforcement, not a rewrite"
 
+  SR-132:
+    function: "Bridge a Slack channel and the session's chat pane bidirectionally via n8n, so messages flow in both directions while the session is in REVIEW phase"
+    parent: [UR-017]
+    component: n8n/workflows/modellogue-slack-relay.json + src/services/slackRelay.ts + chatStore + ChatPanel
+    status: planned  # v7.8
+    notes: |
+      Architectural setting (subject of an upcoming ADR): UR-017's
+      multi-participant chat is implemented by relaying messages
+      between Slack and the ModelLogue chat pane, rather than by
+      hosting a multi-user chat client inside ModelLogue itself. This
+      SR is the relay function. The corresponding quality bar (that
+      the facilitator can drive the review using only the ModelLogue
+      pane, that participants can follow it using only Slack, and that
+      latency stays within review-room thresholds) is captured in
+      NFR-080 / NFR-081.
+
+      Function structure — two n8n workflows + one client-side
+      polling hook. ModelLogue stays a SPA with no server of its own;
+      Slack credentials and message buffering live entirely in n8n.
+
+      Slack → ModelLogue (read direction):
+        - n8n workflow #1 has a Slack Trigger node listening to
+          new messages on the bridged channel.
+        - Each message is normalised to {ts, user, username,
+          text, source: 'slack:<username>'} and pushed onto a
+          ring buffer of the last 100 messages held in n8n
+          Static Data.
+        - The same workflow exposes GET /webhook/slack-relay
+          ?since=<ts>, which returns all buffered messages
+          newer than the supplied ts.
+        - ModelLogue's slackRelay service polls this endpoint
+          while a session is in REVIEW phase and appends new
+          messages to chatStore.
+
+      ModelLogue → Slack (write direction):
+        - n8n workflow #2 exposes POST /webhook/chat-to-slack
+          with body {source: 'facilitator' | 'ai', text}.
+        - It posts to Slack chat.postMessage, prefixing the text
+          with "[facilitator] " or "[AI] " so the source is
+          preserved as part of the Slack-side message.
+        - The facilitator's outgoing message in ModelLogue
+          triggers this workflow; the AI's reply (after arriving
+          at ModelLogue) also triggers it.
+
+      Buffer choice:
+        n8n Static Data ring buffer of the last 100 messages.
+        Avoids standing up Redis just for the MVP. Older
+        messages drop off; the polling client tolerates gaps
+        because it tracks only the latest seen ts.
+
+      Out of scope for this SR (covered separately):
+        - AI awareness of relayed messages (SR-133)
+        - Source labelling in the chat UI (SR-134)
+        - Channel binding / Phase A vs Phase B (SR-135)
+        - Latency budget and single-pane quality (NFR-080 / NFR-081)
+    acceptance_criteria:
+      - "A message posted in the bridged Slack channel during a REVIEW-phase session is appended to chatStore via the read-direction workflow"
+      - "A chat send by the facilitator and an AI reply in ModelLogue both invoke the write-direction workflow and result in a Slack post via chat.postMessage"
+      - "Each Slack-side post carries a source prefix ('[facilitator] ' or '[AI] ') so the speaker is preserved in the Slack message text"
+      - "Polling uses the latest seen ts so that page reload does not produce duplicates in the chat pane"
+
+  SR-133:
+    function: "Include relayed Slack messages in the chat history sent to the AI, with a per-message source prefix and a mediator instruction in the system prompt"
+    parent: [UR-017]
+    component: src/services/n8nClient.ts (history serialisation) + n8n/workflows/modellogue-chat.json (history rendering in prompt)
+    status: planned  # v7.8
+    notes: |
+      Today the n8n chat workflow receives a history array of
+      {role, content} pairs, where role is 'user' (the
+      facilitator) or 'assistant' (the AI). With Slack relay,
+      three speaker classes coexist: facilitator, AI, and
+      slack:<username>.
+
+      Decision (planned):
+        - Slack-origin messages keep role='user' so the AI
+          continues to treat them as inputs to respond to.
+        - Their content is prefixed with a source tag at history
+          serialisation time, e.g. "[Slack: alice] We could
+          combine these two requirements".
+        - The system prompt gains one short paragraph explaining
+          that this is a multi-participant review, that messages
+          prefixed with "[Slack: <name>]" are remote
+          participants, and that the AI should mediate — i.e.
+          weave the points together rather than answering only
+          the latest speaker.
+
+      What this SR does NOT change:
+        - The assistant role (AI replies remain a single voice).
+        - The existing requirement / state-machine / process
+          system prompts at the structural level — only one
+          mediation paragraph is added at the top.
+
+      Pairs with SR-132: SR-132 carries Slack messages into the
+      session's chat history; SR-133 makes the AI actually use
+      them. Without SR-133, relayed Slack messages would appear
+      in the chat pane (good for visibility) but would not
+      influence AI responses.
+    acceptance_criteria:
+      - "Slack-origin messages are included in the history array sent to the n8n chat webhook, with a content prefix like '[Slack: <username>]'"
+      - "The system prompt explicitly tells the AI that prefixed messages come from remote participants and that the AI should mediate across participants"
+      - "When the facilitator asks the AI about a remote participant's earlier point (e.g. 'What does Alice mean by combining these?'), the AI's reply demonstrates awareness of the remote participant's content"
+      - "The change is additive — the existing ADR-014 / SR-131 prompt rules for requirement-type sessions are not weakened or removed"
+
+  SR-134:
+    function: "Render each chat message with a source label and visually distinct styling per source class (facilitator / AI / Slack participant)"
+    parent: [UR-017]
+    component: src/components/ChatPanel/MessageBubble.tsx + chatStore message schema (source field)
+    status: planned  # v7.8
+    notes: |
+      Each ChatMessage gains a `source` field with one of:
+        - 'facilitator' — the local user typing in ModelLogue
+        - 'ai'          — the AI assistant
+        - 'slack:<name>' — a relayed Slack participant; <name> is
+                           the Slack profile display name (or
+                           username fallback) supplied by SR-132
+
+      MessageBubble renders a small label above each bubble
+      using easy English, consistent with SR-126 / SR-130:
+        - facilitator → "You"
+        - ai          → "AI"
+        - slack:alice → "Slack · alice"
+
+      Visual distinction:
+        - Facilitator bubbles align right (as today).
+        - AI and Slack participants both align left, but Slack
+          participants are visually distinct from the AI (e.g.
+          a different bubble accent / left border colour) so
+          the facilitator does not mistake a participant for
+          the AI.
+        - Concrete colour / spacing decisions land in the
+          implementation diff; this SR fixes the contract, not
+          the pixels.
+
+      Why a `source` field rather than a boolean isAI:
+        - Three speaker classes already; UR-017's Phase B will
+          add per-session channels which keep using slack:<name>.
+        - Future Teams / Discord support (out of scope here)
+          would use teams:<name> / discord:<name> with no schema
+          change.
+    acceptance_criteria:
+      - "Each chat message in the pane shows a source label so the reader can distinguish facilitator, AI, and individual Slack participants"
+      - "AI messages remain visually distinct from human messages (no regression from current behaviour)"
+      - "Slack participants are visually distinct from the AI"
+      - "The chat history serialiser used by SR-133 reads the same `source` field — there is one source-of-truth for who said what"
+
+  SR-135:
+    function: "Bind the Slack relay to a single channel via the SLACK_RELAY_CHANNEL_ID environment variable, and cleanly disable the relay when the variable is unset"
+    parent: [UR-017]
+    component: n8n/workflows/modellogue-slack-relay.json (env var SLACK_RELAY_CHANNEL_ID) + Doc/architecture.md (Phase A vs B note)
+    status: planned  # v7.8 (Phase A)
+    notes: |
+      Phase A — MVP scope, this SR:
+        - The bridged channel id is set via environment variable
+          SLACK_RELAY_CHANNEL_ID on the n8n container.
+        - One channel for the whole MVP — every ModelLogue
+          session bridges to the same channel
+          (e.g. #modellogue-dev).
+        - The Slack Bot is invited to that channel manually by
+          the operator when the workspace is set up.
+        - Sufficient for the MVP because the team running the
+          MVP test is small and runs reviews serially; a single
+          shared channel is acceptable.
+
+      Phase B — deferred, separate UR/SR pass:
+        - At session start, the facilitator picks a channel from
+          a list (or pastes a channel id).
+        - The Bot is invited to the chosen channel on demand
+          (or the operator pre-invites a set of candidate
+          channels).
+        - n8n's relay state must then be keyed by
+          session × channel rather than global.
+        - A UI for channel selection is added to the seed-time
+          flow.
+
+      Why the two-phase split:
+        - Phase A's technical risk is low (one env var, one
+          workflow) and delivers UR-017's value end-to-end for
+          the team running the MVP test.
+        - Phase B requires session ↔ channel bookkeeping in n8n
+          state and a session-start UI for selection, both of
+          which deserve a separate review pass once Phase A is
+          settled.
+
+      Disable path:
+        - If SLACK_RELAY_CHANNEL_ID is unset, n8n workflow #1's
+          trigger never fires; ModelLogue's polling hook gets
+          empty results and does not append anything. The chat
+          pane behaves exactly as today (facilitator + AI only).
+          Cleanly disabling the relay must NOT crash the chat
+          pane.
+    acceptance_criteria:
+      - "A single SLACK_RELAY_CHANNEL_ID env var on the n8n side determines the bridged channel for every session in Phase A"
+      - "Doc/architecture.md (or an inline note in the n8n workflow) clearly states this is Phase A and that per-session selection is deferred"
+      - "Removing or unsetting SLACK_RELAY_CHANNEL_ID cleanly disables the relay — the local chat continues to work without errors"
+      - "The Phase B follow-up (per-session channel selection) is captured as a documented future SR rather than left implicit"
+
 # =============================================================================
 # Data Model
 # =============================================================================
@@ -2022,6 +2218,49 @@ external_interfaces:
       initial PlantUML source). ModelLogue consumes the bundle at
       session start per SR-083 and then locks seed editing.
 
+  slack_relay_read:
+    endpoint: "{n8n_base_url}/webhook/slack-relay?since=<ts>"
+    method: GET
+    input: "since: Slack message ts (decimal string) of the last message already seen by the client"
+    output: |
+      JSON array of relayed messages newer than `since`:
+      [{ ts: string, user: string, username: string, text: string,
+         source: "slack:<username>" }, ...]
+    note: |
+      Read direction of UR-017's Slack relay (SR-132). ModelLogue polls
+      this endpoint every ~1.5 seconds while the session is in REVIEW
+      phase. The endpoint is implemented by an n8n workflow whose Slack
+      Trigger node feeds a ring-buffer of the last 100 messages held in
+      n8n Static Data. Empty array is returned when there are no new
+      messages.
+
+  slack_relay_write:
+    endpoint: "{n8n_base_url}/webhook/chat-to-slack"
+    method: POST
+    input: |
+      JSON body: { source: "facilitator" | "ai", text: string }
+    output: "204 No Content on success; 4xx on bad request; 5xx on Slack API failure"
+    note: |
+      Write direction of UR-017's Slack relay (SR-132). n8n's workflow
+      prefixes the text with "[facilitator] " or "[AI] " and posts to
+      Slack chat.postMessage on the channel configured by
+      SLACK_RELAY_CHANNEL_ID (SR-135). Fire-and-forget from
+      ModelLogue's perspective — relay failures log a warning but do
+      not block the local chat experience.
+
+  slack_app:
+    channel: "Slack App with Bot Token (registered in n8n Credentials, never in the frontend)"
+    bot_scopes:
+      - "channels:history"   # read channel messages for the read-direction trigger
+      - "channels:read"      # list channels for Phase B selection
+      - "chat:write"         # post relayed facilitator/AI messages
+      - "users:read"         # resolve user ids to display names for source labels
+    note: |
+      Phase A operating model: the operator creates a Slack App, adds
+      the Bot to the bridged channel manually, and stores the Bot Token
+      in n8n's Credentials store. Phase B (deferred, see SR-135) adds
+      on-demand channel join via channels:join.
+
 # =============================================================================
 # Future Extensions (not in current scope)
 # =============================================================================
@@ -2045,5 +2284,9 @@ external_interfaces:
 # - Classification tree support
 # - Real-time multi-user marker collaboration (shared marker store via WebSocket)
 # - AI-initiated markers (AI places a marker to point at something it's discussing)
-# - Slack/Teams/Discord feedback via n8n
+# - Teams / Discord parity for the chat relay (UR-017 covers Slack only;
+#   parity would be a new n8n workflow targeting the same chat-relay contract)
+# - Phase B of UR-017: per-session Slack channel selection at seed time
+# - SSE / WebSocket migration for the Slack relay if 1.5s polling cadence
+#   proves insufficient (currently captured in SR-132 notes)
 # - GitHub auto-commit via n8n
