@@ -1,7 +1,7 @@
 id: ADR-016
 title: "複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない）"
 date: "2026-05-01"
-status: proposed
+status: accepted
 superseded_by: null
 
 participants:

@@ -1,7 +1,7 @@
 id: ADR-017
 title: "Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用）"
 date: "2026-05-01"
-status: proposed
+status: accepted
 superseded_by: null
 
 participants:

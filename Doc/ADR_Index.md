@@ -21,8 +21,8 @@
 | [ADR-013](#adr-013) | 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う | 2026-04-22 | 承認済 | v7.5 の要求図サポートは要求 ↔ 要求の関係（derive / contain / refine / copy）に限定し、要求 ↔ 外部（satisfy / verify / trace）は別フェーズの別機能として後日設計する |
 | [ADR-014](#adr-014) | レビュー過程の削除は soft-delete + reason 必須でエビデンスとして残す | 2026-04-22 | 承認済 | レビュー過程で削除と判断された要素は hard-delete せず、deleted フラグ + reason（備考）を併記して保持する。エクスポート artifact にも含めて将来参照可能にする。表現形式は PlantUML コメント（`' @modellogue ...`）にして、source を直接 PlantUML に送っても妥当なまま保つ |
 | [ADR-015](#adr-015) | 要求図の分類軸（type / level / group）と一図一軸の規律 | 2026-04-29 | 承認済 | Requirement に level（user/system/design/null）と group（自由文字列）を追加し、生成側は type/level/group のいずれか一軸を選んで package ブロックに射影する。一図一軸を入力側の規律として明文化する |
-| [ADR-016](#adr-016) | 複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない） | 2026-05-01 | 提案中 | UR-017 の複数人参加チャットは、社内チャット venue（最初は Slack）と ModelLogue チャットペインを n8n 経由で双方向中継して実現することにした。ModelLogue 内部に多人数チャットクライアントは構築しない |
-| [ADR-017](#adr-017) | Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用） | 2026-05-01 | 提案中 | ModelLogue 側が n8n の HTTP endpoint を一定間隔で polling する方式を採る。SSE / WebSocket は MVP では不採用とし、cadence が不足した場合に置き換える |
+| [ADR-016](#adr-016) | 複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない） | 2026-05-01 | 承認済 | UR-017 の複数人参加チャットは、社内チャット venue（最初は Slack）と ModelLogue チャットペインを n8n 経由で双方向中継して実現することにした。ModelLogue 内部に多人数チャットクライアントは構築しない |
+| [ADR-017](#adr-017) | Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用） | 2026-05-01 | 承認済 | ModelLogue 側が n8n の HTTP endpoint を一定間隔で polling する方式を採る。SSE / WebSocket は MVP では不採用とし、cadence が不足した場合に置き換える |
 
 ---
 
@@ -1344,7 +1344,7 @@ auto-layout が 2D 配置のアンカーを失って図がフラットに展開�
 **複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない）**
 
 - **日付**: 2026-05-01
-- **ステータス**: 提案中
+- **ステータス**: 承認済
 - **最終更新**: 2026-05-01
 - **関連**: UR-017 / SR-132〜135 / NFR-080・NFR-081 / ADR-001 / ADR-002 / ADR-017
 
@@ -1430,7 +1430,7 @@ Slack だけが対応 venue というわけではない。同じ relay contract 
 **Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用）**
 
 - **日付**: 2026-05-01
-- **ステータス**: 提案中
+- **ステータス**: 承認済
 - **最終更新**: 2026-05-01
 - **関連**: ADR-001 / ADR-002 / ADR-016 / SR-132 / NFR-081
 
