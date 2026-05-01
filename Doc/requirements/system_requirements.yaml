@@ -1906,7 +1906,7 @@ parser_diagnostics:
     function: "Render each chat message with a source label and visually distinct styling per source class (facilitator / AI / Slack participant)"
     parent: [UR-017]
     component: src/components/ChatPanel/MessageBubble.tsx + chatStore message schema (source field)
-    status: planned  # v7.8
+    status: implemented  # v7.8
     notes: |
       Each ChatMessage gains a `source` field with one of:
         - 'facilitator' — the local user typing in ModelLogue
