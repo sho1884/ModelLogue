@@ -1,10 +1,25 @@
 // Review session types
 
+// SR-134 (v7.8 planned): identifies who said this message so the chat
+// pane can render a distinguishable label (`facilitator` → "You",
+// `ai` → "AI", `slack:alice` → "Slack · alice"). Three classes today;
+// future Teams / Discord support uses `teams:<name>` / `discord:<name>`
+// without a schema change. `role` is kept separate because the AI
+// history serialiser still works in `'user' | 'assistant'` space.
+export type ChatMessageSource =
+  | 'facilitator'
+  | 'ai'
+  | `slack:${string}`;
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string; // ISO 8601
+  // SR-134 (v7.8 planned): optional for backward compatibility with
+  // pre-v7.8 saved sessions. When absent, derive from `role`
+  // (user → facilitator, assistant → ai).
+  source?: ChatMessageSource;
   suggestedSource?: string;
   applied?: boolean;
   // SR-033 (v7.2): snapshot of the source that was live the moment this
@@ -13,6 +28,14 @@ export interface ChatMessage {
   // re-derived from this source on render, not snapshotted, to guarantee
   // (svg, source) consistency for coordinate extraction.
   frozenBeforeSource?: string;
+}
+
+// SR-134 (v7.8 planned): derive a definite source from a possibly-
+// pre-v7.8 message. Use this whenever the rendering / serialisation
+// layer needs a non-undefined source.
+export function effectiveSource(message: ChatMessage): ChatMessageSource {
+  if (message.source) return message.source;
+  return message.role === 'user' ? 'facilitator' : 'ai';
 }
 
 export interface SourceSnapshot {

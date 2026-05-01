@@ -16,6 +16,7 @@ function parseForActiveType(source: string) {
   return def.parse(source);
 }
 import type { ChatMessage } from '../../types/session';
+import { effectiveSource } from '../../types/session';
 import { ProposalView } from './ProposalView';
 import { ApplyGuardrailModal } from './ApplyGuardrailModal';
 
@@ -147,8 +148,23 @@ function PendingGuardrailHandler() {
   );
 }
 
+// SR-134 (v7.8 planned): label + accent per source class. Slack
+// participants share the assistant side (left) but get a green accent
+// so they aren't mistaken for the AI.
+function sourceLabel(source: ReturnType<typeof effectiveSource>): string {
+  if (source === 'facilitator') return 'You';
+  if (source === 'ai') return 'AI';
+  if (source.startsWith('slack:')) {
+    const name = source.slice('slack:'.length);
+    return `Slack · ${name || 'unknown'}`;
+  }
+  return source;
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
-  const isUser = message.role === 'user';
+  const source = effectiveSource(message);
+  const isFacilitator = source === 'facilitator';
+  const isSlack = source.startsWith('slack:');
   const applyProposal = useSessionStore((s) => s.applyProposal);
   const markApplied = useChatStore((s) => s.markApplied);
 
@@ -236,25 +252,48 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Visual classes by source (SR-134):
+  //   facilitator  → right-aligned, indigo
+  //   ai           → left-aligned, gray
+  //   slack:<name> → left-aligned, gray bubble with green left border
+  const bubbleClass = isFacilitator
+    ? 'bg-indigo-600 text-white px-3 py-2'
+    : isSlack
+      ? 'bg-gray-100 text-gray-800 border border-gray-200 border-l-4 border-l-emerald-500'
+      : 'bg-gray-100 text-gray-800 border border-gray-200';
+
+  const labelClass = isFacilitator
+    ? 'text-[10px] uppercase tracking-wide text-indigo-200 mb-0.5'
+    : isSlack
+      ? 'text-[10px] uppercase tracking-wide text-emerald-700 px-3 pt-1'
+      : 'text-[10px] uppercase tracking-wide text-gray-500 px-3 pt-1';
+
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[85%] rounded-lg text-sm ${
-          isUser
-            ? 'bg-indigo-600 text-white px-3 py-2'
-            : 'bg-gray-100 text-gray-800 border border-gray-200'
-        }`}
-      >
-        {isUser ? (
-          <div className="whitespace-pre-wrap break-words">
-            {message.content}
-          </div>
+    <div className={`flex ${isFacilitator ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[85%] rounded-lg text-sm ${bubbleClass}`}>
+        {isFacilitator ? (
+          <>
+            <div className={labelClass}>{sourceLabel(source)}</div>
+            <div className="whitespace-pre-wrap break-words">
+              {message.content}
+            </div>
+          </>
+        ) : isSlack ? (
+          <>
+            <div className={labelClass}>{sourceLabel(source)}</div>
+            <div className="px-3 pb-2 whitespace-pre-wrap break-words">
+              {message.content}
+            </div>
+          </>
         ) : (
-          <AssistantContent
-            message={message}
-            isApplied={isApplied}
-            onApply={handleApply}
-          />
+          <>
+            <div className={labelClass}>{sourceLabel(source)}</div>
+            <AssistantContent
+              message={message}
+              isApplied={isApplied}
+              onApply={handleApply}
+            />
+          </>
         )}
       </div>
     </div>

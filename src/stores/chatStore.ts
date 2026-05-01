@@ -177,6 +177,7 @@ async function sendAndAutoReask(
   const assistantMessage: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
+    source: 'ai',
     content: response.text,
     timestamp: now(),
     suggestedSource: typedSuggestedSource ?? response.suggestedSource,
@@ -223,6 +224,7 @@ async function sendAndAutoReask(
       const retryUser: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'user',
+        source: 'facilitator',
         content: retryContent,
         timestamp: now(),
       };
@@ -249,6 +251,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
+      source: 'facilitator',
       content: trimmed,
       timestamp: now(),
     };
