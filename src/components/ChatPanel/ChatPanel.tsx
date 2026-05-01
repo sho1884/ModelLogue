@@ -9,6 +9,10 @@ import {
 } from '../../modelTypes/registry';
 import { detectDroppedRequirementIds } from '../../modelTypes/requirement/applyGuardrail';
 import type { RequirementModel } from '../../modelTypes/requirement/model';
+import {
+  fetchSlackMessages,
+  isSlackRelayEnabled,
+} from '../../services/slackRelay';
 
 function parseForActiveType(source: string) {
   const id = useSessionStore.getState().modelTypeId;
@@ -20,12 +24,19 @@ import { effectiveSource } from '../../types/session';
 import { ProposalView } from './ProposalView';
 import { ApplyGuardrailModal } from './ApplyGuardrailModal';
 
+// SR-132c: polling cadence for the Slack relay (Slack → ModelLogue
+// direction). 1.5 seconds is the upper-bound polling interval that
+// keeps end-to-end delivery under NFR-081's 4-second budget once
+// Slack's own delivery delay (~1–2s) is added.
+const SLACK_RELAY_POLL_MS = 1500;
+
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages);
   const isSending = useChatStore((s) => s.isSending);
   const lastError = useChatStore((s) => s.lastError);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const pendingGuardrail = useChatStore((s) => s.pendingGuardrail);
+  const hasEstablishedModel = useSessionStore((s) => s.hasEstablishedModel);
 
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -36,6 +47,52 @@ export function ChatPanel() {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [messages.length, isSending]);
+
+  // SR-132c: poll the Slack relay while the session is in REVIEW
+  // phase and the relay is enabled. Each tick fetches messages
+  // newer than the latest seen ts and feeds them into chatStore.
+  // Failures are logged via fetchSlackMessages's own try/catch
+  // surface — we never tear down the chat pane on relay failure
+  // (NFR-081).
+  useEffect(() => {
+    if (!hasEstablishedModel) return;
+    if (!isSlackRelayEnabled()) return;
+
+    let cancelled = false;
+    let lastSeenTs: string | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const incoming = await fetchSlackMessages(lastSeenTs);
+        for (const m of incoming) {
+          useChatStore.getState().appendRelayedSlackMessage(m);
+          // Track the highest ts observed so the next poll fetches
+          // strictly the delta. Slack ts is monotonic per channel.
+          if (
+            lastSeenTs === null ||
+            parseFloat(m.ts) > parseFloat(lastSeenTs)
+          ) {
+            lastSeenTs = m.ts;
+          }
+        }
+      } catch (err) {
+        console.warn('Slack relay poll failed:', err);
+      }
+    };
+
+    // Fire one immediate poll so the first batch lands without
+    // waiting a full interval, then settle into the cadence.
+    void tick();
+    const handle = setInterval(() => {
+      void tick();
+    }, SLACK_RELAY_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [hasEstablishedModel]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

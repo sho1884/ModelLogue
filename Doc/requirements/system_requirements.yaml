@@ -1802,8 +1802,8 @@ parser_diagnostics:
   SR-132:
     function: "Bridge a Slack channel and the session's chat pane bidirectionally via n8n, so messages flow in both directions while the session is in REVIEW phase"
     parent: [UR-017]
-    component: n8n/workflows/modellogue-slack-relay.json + src/services/slackRelay.ts + chatStore + ChatPanel
-    status: planned  # v7.8
+    component: n8n/workflows/modellogue-slack-relay.json + n8n/workflows/modellogue-chat-to-slack.json + src/services/slackRelay.ts + chatStore + ChatPanel
+    status: implemented  # v7.8 (a: client + chatStore append entry, b: n8n workflow scaffolds, c: ChatPanel polling hook)
     notes: |
       Architectural setting (subject of an upcoming ADR): UR-017's
       multi-participant chat is implemented by relaying messages
