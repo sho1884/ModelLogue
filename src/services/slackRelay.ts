@@ -62,3 +62,108 @@ export function getSlackRelayConfig(): SlackRelayConfig | null {
 export function isSlackRelayEnabled(): boolean {
   return getSlackRelayConfig() !== null;
 }
+
+// SR-132 — Relay client.
+//
+// fetchSlackMessages(): GET /webhook/slack-relay[?since=<ts>] on the
+// configured n8n base URL. Returns the buffered Slack messages newer
+// than `since`. When the relay is disabled (no config) returns an
+// empty list — callers do not need to special-case the disabled
+// state.
+//
+// postToSlack(): POST /webhook/chat-to-slack with the speaker source
+// and text. Fire-and-forget from the caller's perspective: when the
+// relay is disabled or the request fails, the function logs and
+// resolves cleanly so the local chat experience is never blocked
+// (NFR-081 failure-mode contract).
+
+/** Shape of one buffered Slack message returned by the read endpoint. */
+export interface RelayedSlackMessage {
+  /** Slack message ts (e.g. "1709000000.123456"). Used as the dedup key. */
+  ts: string;
+  /** Slack user id (e.g. "U01ABCDE"). Useful for future avatar lookup. */
+  user: string;
+  /** Display name resolved by the relay workflow. */
+  username: string;
+  /** Message body text. */
+  text: string;
+}
+
+const READ_PATH = '/webhook/slack-relay';
+const WRITE_PATH = '/webhook/chat-to-slack';
+
+/**
+ * Polls the relay for messages newer than `since`. Pass `null` for the
+ * first call to receive the current buffer; pass the latest seen ts on
+ * subsequent calls to fetch only the delta. When the relay is disabled
+ * (config null), returns [] without making a request.
+ *
+ * Throws on transport / non-2xx so the caller can decide whether to
+ * back off or surface a status. Polling consumers SHOULD log and
+ * continue on error — never tear down the chat pane (NFR-081).
+ */
+export async function fetchSlackMessages(
+  since: string | null
+): Promise<RelayedSlackMessage[]> {
+  const config = getSlackRelayConfig();
+  if (config === null) return [];
+  const url = new URL(config.baseUrl + READ_PATH);
+  if (since !== null && since !== '') {
+    url.searchParams.set('since', since);
+  }
+  const res = await fetch(url.toString(), { method: 'GET' });
+  if (!res.ok) {
+    throw new Error(
+      `Slack relay read failed: ${res.status} ${res.statusText}`
+    );
+  }
+  const data = (await res.json()) as unknown;
+  if (!Array.isArray(data)) {
+    throw new Error('Slack relay read returned a non-array payload');
+  }
+  // Only keep entries that have the four required string fields.
+  // Anything malformed is dropped silently — the relay is the source
+  // of truth for shape, but we do not want one bad entry to poison
+  // the whole batch.
+  return data.filter(
+    (m): m is RelayedSlackMessage =>
+      typeof m === 'object' &&
+      m !== null &&
+      typeof (m as RelayedSlackMessage).ts === 'string' &&
+      typeof (m as RelayedSlackMessage).user === 'string' &&
+      typeof (m as RelayedSlackMessage).username === 'string' &&
+      typeof (m as RelayedSlackMessage).text === 'string'
+  );
+}
+
+/**
+ * Posts a facilitator or AI message to the bridged Slack channel via
+ * the relay. Fire-and-forget: when the relay is disabled or the
+ * request fails, this function logs and resolves cleanly. The local
+ * chat continues to function regardless (NFR-081 failure-mode).
+ */
+export async function postToSlack(
+  source: 'facilitator' | 'ai',
+  text: string
+): Promise<void> {
+  const config = getSlackRelayConfig();
+  if (config === null) return;
+  const url = config.baseUrl + WRITE_PATH;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, text }),
+    });
+    if (!res.ok) {
+      console.warn(
+        `Slack relay post failed: ${res.status} ${res.statusText}`
+      );
+    }
+  } catch (err) {
+    console.warn(
+      'Slack relay post failed: ' +
+        (err instanceof Error ? err.message : String(err))
+    );
+  }
+}

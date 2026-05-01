@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import type { ChatMessage } from '../types/session';
 import type { DroppedRequirement } from '../modelTypes/requirement/applyGuardrail';
 import { chat as callChat } from '../services/n8nService';
+import {
+  postToSlack,
+  type RelayedSlackMessage,
+} from '../services/slackRelay';
 import { useSessionStore } from './sessionStore';
 import { useModelStore } from './modelStore';
 import { useMarkerStore } from './markerStore';
@@ -56,6 +60,10 @@ interface ChatStore {
     snapshot?: { beforeSource: string }
   ) => void;
   setPendingGuardrail: (pending: PendingApplyGuardrail | null) => void;
+  // SR-132: append a Slack-origin message into the chat pane. Called
+  // by the polling consumer (SR-132c) when the relay returns a new
+  // batch. Dedups on `slack:<ts>` so reloads do not duplicate.
+  appendRelayedSlackMessage: (msg: RelayedSlackMessage) => void;
   clear: () => void;
 }
 
@@ -188,6 +196,11 @@ async function sendAndAutoReask(
     isSending: false,
   });
 
+  // SR-132: relay the AI's reply to Slack so remote participants
+  // see it. Fire-and-forget — postToSlack is a no-op when the relay
+  // is disabled, and logs without throwing on failure (NFR-081).
+  void postToSlack('ai', response.text);
+
   // Auto-reask is for ONE case only:
   //   - the AI returned a code block AND our parser rejects it.
   //
@@ -262,6 +275,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       lastError: null,
     });
 
+    // SR-132: relay the facilitator's turn to Slack so remote
+    // participants see it. The auto-reask follow-up message
+    // (sendAndAutoReask -> retryUser) is intentionally NOT relayed
+    // because it is system-injected, not human-spoken — Slack
+    // participants would otherwise see noise that no human typed.
+    void postToSlack('facilitator', trimmed);
+
     try {
       await sendAndAutoReask(trimmed, MAX_AUTO_RETRIES, set, get);
     } catch (e) {
@@ -288,6 +308,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setPendingGuardrail: (pending) => set({ pendingGuardrail: pending }),
+
+  // SR-132: ingest a Slack-origin message. Dedup key is `slack:<ts>`
+  // so reload / replay does not produce duplicates. Slack ts is in
+  // seconds.microseconds form ("1709000000.123456"), converted to
+  // ISO 8601 for the message timestamp.
+  appendRelayedSlackMessage: (msg) => {
+    const id = `slack:${msg.ts}`;
+    const existing = get().messages;
+    if (existing.some((m) => m.id === id)) return;
+    const tsSeconds = parseFloat(msg.ts);
+    const timestamp = Number.isFinite(tsSeconds)
+      ? new Date(tsSeconds * 1000).toISOString()
+      : now();
+    const slackMessage: ChatMessage = {
+      id,
+      role: 'user',
+      source: `slack:${msg.username}`,
+      content: msg.text,
+      timestamp,
+    };
+    set({ messages: [...existing, slackMessage] });
+  },
 
   clear: () =>
     set({ messages: [], lastError: null, pendingGuardrail: null }),
