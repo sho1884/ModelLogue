@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useModelStore } from '../../stores/modelStore';
 import { stashAutoMarkerBeforeIfApplicable } from '../../stores/autoMarkerApply';
 import {
   getDefaultModelTypeDefinition,
   getModelTypeDefinition,
 } from '../../modelTypes/registry';
+import { detectDroppedRequirementIds } from '../../modelTypes/requirement/applyGuardrail';
+import type { RequirementModel } from '../../modelTypes/requirement/model';
 
 function parseForActiveType(source: string) {
   const id = useSessionStore.getState().modelTypeId;
@@ -14,12 +17,14 @@ function parseForActiveType(source: string) {
 }
 import type { ChatMessage } from '../../types/session';
 import { ProposalView } from './ProposalView';
+import { ApplyGuardrailModal } from './ApplyGuardrailModal';
 
 export function ChatPanel() {
   const messages = useChatStore((s) => s.messages);
   const isSending = useChatStore((s) => s.isSending);
   const lastError = useChatStore((s) => s.lastError);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const pendingGuardrail = useChatStore((s) => s.pendingGuardrail);
 
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -97,7 +102,48 @@ export function ChatPanel() {
           </button>
         </div>
       </form>
+
+      {pendingGuardrail && <PendingGuardrailHandler />}
     </div>
+  );
+}
+
+// SR-130: render the modal and own the resolution logic. Keeping this
+// as a separate child component keeps the ChatPanel tree shallow and
+// the modal's effects scoped to when it's actually open.
+function PendingGuardrailHandler() {
+  const pendingGuardrail = useChatStore((s) => s.pendingGuardrail);
+  const setPendingGuardrail = useChatStore((s) => s.setPendingGuardrail);
+  const messages = useChatStore((s) => s.messages);
+  const markApplied = useChatStore((s) => s.markApplied);
+  const applyProposal = useSessionStore((s) => s.applyProposal);
+
+  if (!pendingGuardrail) return null;
+  const message = messages.find((m) => m.id === pendingGuardrail.messageId);
+  // If the message vanished (e.g. session cleared), drop the modal.
+  if (!message || !message.suggestedSource) {
+    setPendingGuardrail(null);
+    return null;
+  }
+
+  const handleApplyAnyway = () => {
+    const beforeSource = useSessionStore.getState().currentSource;
+    stashAutoMarkerBeforeIfApplicable();
+    applyProposal(message.id, message.suggestedSource!);
+    markApplied(message.id, { beforeSource });
+    setPendingGuardrail(null);
+  };
+
+  const handleCancel = () => {
+    setPendingGuardrail(null);
+  };
+
+  return (
+    <ApplyGuardrailModal
+      dropped={pendingGuardrail.dropped}
+      onApplyAnyway={handleApplyAnyway}
+      onCancel={handleCancel}
+    />
   );
 }
 
@@ -162,6 +208,29 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     if (!shouldAutoApply) return;
     const { model, errors } = parseForActiveType(message.suggestedSource);
     if (!model || errors.length > 0) return;
+
+    // SR-130: apply-time review-evidence guardrail (requirement-type
+    // only). If the AI's csv reply silently drops a row that was in
+    // the previous model, pause the apply and route through the
+    // confirmation modal instead of completing immediately.
+    if (sessionModelTypeId === 'requirement') {
+      const beforeModel = useModelStore.getState().model as
+        | RequirementModel
+        | null;
+      const newRequirementModel = model as RequirementModel;
+      const dropped = detectDroppedRequirementIds(
+        beforeModel,
+        newRequirementModel
+      );
+      if (dropped.length > 0) {
+        useChatStore.getState().setPendingGuardrail({
+          messageId: message.id,
+          dropped,
+        });
+        return;
+      }
+    }
+
     handleApply();
     // Run only when this message first mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps

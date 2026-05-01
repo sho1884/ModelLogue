@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ChatMessage } from '../types/session';
+import type { DroppedRequirement } from '../modelTypes/requirement/applyGuardrail';
 import { chat as callChat } from '../services/n8nService';
 import { useSessionStore } from './sessionStore';
 import { useModelStore } from './modelStore';
@@ -33,16 +34,28 @@ function parseForActiveType(source: string): {
 // covers the common case.
 const MAX_AUTO_RETRIES = 2;
 
+// SR-130: pending apply that has been paused on the review-evidence
+// guardrail. messageId identifies the proposed AI csv reply; dropped
+// is the (id, statement) list the modal renders. The apply pipeline
+// reads this state to decide whether to show the modal; "Apply
+// anyway" / "Cancel" actions clear it.
+export interface PendingApplyGuardrail {
+  messageId: string;
+  dropped: DroppedRequirement[];
+}
+
 interface ChatStore {
   messages: ChatMessage[];
   isSending: boolean;
   lastError: string | null;
+  pendingGuardrail: PendingApplyGuardrail | null;
 
   sendMessage: (content: string) => Promise<void>;
   markApplied: (
     messageId: string,
     snapshot?: { beforeSource: string }
   ) => void;
+  setPendingGuardrail: (pending: PendingApplyGuardrail | null) => void;
   clear: () => void;
 }
 
@@ -226,6 +239,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   isSending: false,
   lastError: null,
+  pendingGuardrail: null,
 
   sendMessage: async (content) => {
     const trimmed = content.trim();
@@ -270,5 +284,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
-  clear: () => set({ messages: [], lastError: null }),
+  setPendingGuardrail: (pending) => set({ pendingGuardrail: pending }),
+
+  clear: () =>
+    set({ messages: [], lastError: null, pendingGuardrail: null }),
 }));

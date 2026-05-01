@@ -1712,8 +1712,8 @@ parser_diagnostics:
   SR-130:
     function: "Apply-time review-evidence guardrail — when an AI csv reply omits an id that was present in the previous requirement model, surface it for explicit user confirmation before applying"
     parent: [UR-014, UR-016]
-    component: src/modelTypes/requirement/applyGuardrail.ts (new) + chatStore.pendingGuardrail + ApplyGuardrailModal
-    status: planned
+    component: src/modelTypes/requirement/applyGuardrail.ts + chatStore.pendingGuardrail + ApplyGuardrailModal
+    status: implemented  # v7.7
     notes: |
       ADR-014 establishes "soft-delete with reason as evidence" — when
       a requirement is removed / merged / decided-out, its row must
