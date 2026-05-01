@@ -1863,8 +1863,8 @@ parser_diagnostics:
   SR-133:
     function: "Include relayed Slack messages in the chat history sent to the AI, with a per-message source prefix and a mediator instruction in the system prompt"
     parent: [UR-017]
-    component: src/services/n8nClient.ts (history serialisation) + n8n/workflows/modellogue-chat.json (history rendering in prompt)
-    status: planned  # v7.8
+    component: src/services/n8nService.ts (serializeHistoryForPrompt) + n8n/workflows/modellogue-chat.json (mediator paragraph in systemMessage)
+    status: implemented  # v7.8
     notes: |
       Today the n8n chat workflow receives a history array of
       {role, content} pairs, where role is 'user' (the

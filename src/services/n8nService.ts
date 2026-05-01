@@ -4,6 +4,8 @@
 // n8n owns the system prompt, the Gemini API credentials, and the response
 // shaping (including PlantUML code-block extraction for future phases).
 
+import { effectiveSource, type ChatMessage } from '../types/session';
+
 const N8N_BASE_URL =
   import.meta.env.VITE_N8N_BASE_URL ?? 'http://localhost:5678';
 
@@ -14,6 +16,29 @@ const CHAT_WEBHOOK_PATH = '/webhook/modellogue-chat';
 export interface ChatHistoryEntry {
   role: 'user' | 'assistant';
   content: string;
+}
+
+/**
+ * SR-133: turn the chatStore's ChatMessage[] into the {role, content}
+ * shape n8n / Gemini consume, with Slack-origin messages prefixed by
+ * [Slack: <name>] so the AI can mediate across participants. The
+ * system prompt in n8n is what instructs the AI to read those
+ * prefixes; this function only adds them.
+ *
+ * Facilitator and AI messages pass through unchanged. The role stays
+ * 'user' / 'assistant' regardless of source — Slack participants are
+ * inputs the AI responds to, same as the facilitator.
+ */
+export function serializeHistoryForPrompt(
+  messages: ChatMessage[]
+): ChatHistoryEntry[] {
+  return messages.map((m) => {
+    const source = effectiveSource(m);
+    const content = source.startsWith('slack:')
+      ? `[Slack: ${source.slice('slack:'.length)}] ${m.content}`
+      : m.content;
+    return { role: m.role, content };
+  });
 }
 
 export interface ChatRequest {

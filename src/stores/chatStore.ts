@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import type { ChatMessage } from '../types/session';
 import type { DroppedRequirement } from '../modelTypes/requirement/applyGuardrail';
-import { chat as callChat } from '../services/n8nService';
+import {
+  chat as callChat,
+  serializeHistoryForPrompt,
+} from '../services/n8nService';
 import {
   postToSlack,
   type RelayedSlackMessage,
@@ -141,9 +144,13 @@ async function sendAndAutoReask(
       ? modelToRequirementsCsv(model as RequirementModel)
       : undefined;
 
-  const history = get()
-    .messages.slice(0, -1) // drop the just-inserted user message itself
-    .map((m) => ({ role: m.role, content: m.content }));
+  // SR-133: history is fed through serializeHistoryForPrompt so Slack-
+  // origin messages arrive at the AI prefixed with [Slack: <name>].
+  // The system prompt in n8n teaches the AI what those prefixes mean
+  // and how to mediate across participants.
+  const history = serializeHistoryForPrompt(
+    get().messages.slice(0, -1) // drop the just-inserted user message itself
+  );
 
   const responseLanguage = detectResponseLanguage(
     requirementsText,
