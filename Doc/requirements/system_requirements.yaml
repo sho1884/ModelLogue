@@ -1709,6 +1709,51 @@ parser_diagnostics:
       - "When auto-detection has no unique winner (no clean candidate, or multiple clean candidates), the existing default fallback applies; SR-126's banner mechanism is then expected to nudge correction at parse time"
       - "Empty / trivial bundle.plantUmlSource (≤ 30 chars after trim) skips auto-detection and uses default — same trivial-floor as SR-126"
 
+  SR-130:
+    function: "Apply-time review-evidence guardrail — when an AI csv reply omits an id that was present in the previous requirement model, surface it for explicit user confirmation before applying"
+    parent: [UR-014, UR-016]
+    component: src/modelTypes/requirement/applyGuardrail.ts (new) + chatStore.pendingGuardrail + ApplyGuardrailModal
+    status: planned
+    notes: |
+      ADR-014 establishes "soft-delete with reason as evidence" — when
+      a requirement is removed / merged / decided-out, its row must
+      stay in the CSV with deleted=Y and a non-empty note. The n8n
+      requirement-type prompt instructs the AI to follow this rule
+      (REVIEW SEMANTICS section), but prompt compliance is best-effort.
+      When the AI silently drops a row entirely from its csv reply,
+      the apply pipeline currently lets it through — the row's
+      evidence vanishes with no audit signal.
+
+      SR-130 is the defense-in-depth backstop. At apply time:
+        - Compare the before-apply model's id set with the new csv's id set
+        - Detect ids present in before but missing from new (true drops,
+          NOT deleted=Y rows which still carry the id)
+        - When drops exist, pause the apply and show a confirmation
+          modal listing the dropped (id, statement) pairs
+        - User chooses "Apply anyway" (accept the drop, last-resort
+          override) or "Cancel" (abort apply, return to chat to re-prompt)
+
+      Scope:
+        - Only fires for requirement-type sessions
+        - Only fires when the before-model is non-empty (initial
+          generation has nothing to drop)
+        - deleted=Y rows in the new csv are NOT drops (the id is still
+          present, just flagged) — the guardrail leaves them alone
+        - state-machine and process types do not have ADR-014's
+          soft-delete principle and are out of scope
+
+      No new ADR — SR-130 implements ADR-014's principle at the apply
+      boundary; no new architectural decision is captured.
+
+      UI text in easy English (consistent with the rest of the UI;
+      response-language guidance applies to AI chat content, not
+      modal labels).
+    acceptance_criteria:
+      - "In a requirement-type session with a non-empty before-apply model, the apply pauses and shows a confirmation modal listing the dropped (id, statement) pairs whenever the AI's csv reply omits an existing id"
+      - "User can choose 'Apply anyway' (proceeds with the drop, evidence is lost) or 'Cancel' (apply aborted, the proposed message stays unapplied so the user can re-prompt)"
+      - "deleted=Y rows in the new csv do not trigger the guardrail — the id is still present, the guardrail leaves them alone"
+      - "The guardrail does NOT fire for initial generation (empty before-model) or for non-requirement type sessions (state-machine, process)"
+
 # =============================================================================
 # Data Model
 # =============================================================================

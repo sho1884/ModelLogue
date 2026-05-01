@@ -830,7 +830,8 @@ UR-016 は 3 つの sub-problem を束ねる：(a) 早期検知、(b) 情報保�
 |---|---|---|
 | (a) 型ミスマッチの早期検知 | **SR-126** Cross-type parse diagnosis | 実装済（v7.7） |
 | (b) 切替時の情報保持 | **SR-128** Source-preserving model-type switch | 実装済（v7.7、SR-126 から先行投入） |
-| (c) 型未指定 bundle からの起動 | **SR-129** Auto-detect on bundle without modelTypeId | 計画済（v7.7） |
+| (c) 型未指定 bundle からの起動 | **SR-129** Auto-detect on bundle without modelTypeId | 実装済（v7.7） |
+| 補強：apply 境界での要求行 drop 検知（UR-014 / UR-016 を支える） | **SR-130** Apply-time review-evidence guardrail | 計画済（v7.7） |
 
 #### 3.16.1 SR-126：cross-type parse diagnosis
 
@@ -911,6 +912,37 @@ if (bundle.modelTypeId === undefined && bundle.plantUmlSource) {
 **ADR 不要**：判定ルール（unique 0-error winner）は ADR-011（機械的変換は決定論的に）の枠内。タイ・全敗の扱いは「default フォールバック → SR-126 がフォローアップ」で十分シンプル、別 ADR 級の意思決定は無い。
 
 **通知 UI 不要**：判定が成功したら期待通りの解析タブが populate されるので「auto-pick しました」のトーストは雑音。判定失敗（誤判定 or タイ）は SR-126 の banner で post-hoc に補正される。
+
+#### 3.16.4 SR-130：apply 時のレビュー証跡ガードレール（UR-014 / UR-016 補強）
+
+ADR-014 が定める「削除と判断されたものは soft-delete + reason として残す（hard-delete しない）」原則は、現在 n8n の requirement-type プロンプト（`REVIEW SEMANTICS` 節）で AI に指示されている。しかしプロンプト遵守は best-effort で、AI が稀に行を黙って drop する可能性が残る。**SR-130** は apply 境界に置く defense-in-depth の保険：
+
+```
+AI csv reply
+   ↓ extractSuggestedSource → new RequirementModel
+   ↓
+   apply guardrail（SR-130）
+   ↓ before-model.id 集合 と new.id 集合 の差分
+   ├─ drop 無し → そのまま applyProposal
+   └─ drop あり → modal 表示
+        「Some requirements would be lost
+           R5 — light up the room
+           R8 — outdoor use
+         Applying will remove these without an audit record. To preserve
+         them as evidence, ask the AI to mark them deleted=Y with a reason.」
+        [Apply anyway]  [Cancel]
+        ├─ Apply anyway → applyProposal（drop を許容）
+        └─ Cancel → 何もしない（提案メッセージは未 apply のまま、ユーザは AI に再 prompt する）
+```
+
+**発動条件**：
+- requirement 型セッション（state-machine / process は ADR-014 の soft-delete 方針を持たないので対象外）
+- before-apply の model に少なくとも 1 つの requirement が存在（初回生成では発動しない）
+- new csv に **deleted=Y で残っている**行は drop ではない（id は存在する、フラグだけ立っている）
+
+**UI 文言**：易しい英語で統一（チャット応答の言語フラグはモデル提案テキスト用、UI ラベルには適用しない）。
+
+**ADR 不要**：ADR-014 の原則を apply 境界で物理的に守らせる実装手段。新たな architectural decision は無い。
 
 ---
 

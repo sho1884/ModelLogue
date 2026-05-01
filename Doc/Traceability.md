@@ -107,6 +107,7 @@ flowchart LR
         SR126["SR-126<br/>Cross-type parse diagnosis (v7.7)<br/>currentSource 入力時に他型 parser も試して提案<br/>crossTypeDiagnosis.ts + parseSuggestion + SourceEditor banner"]
         SR128["SR-128<br/>Source-preserving model-type switch (v7.7)<br/>currentSource / chat / markers を保ったまま型を切替<br/>sessionStore.setModelTypeIdKeepingSource"]
         SR129["SR-129<br/>Auto-detect on bundle without modelTypeId (v7.7)<br/>bundle に型が無いとき plantUmlSource から判定<br/>crossTypeDiagnosis.pickBestType + bootstrapFromBundle"]
+        SR130["SR-130<br/>Apply-time review-evidence guardrail (v7.7, ADR-014 補強)<br/>AI csv reply で id が消えていたら apply 前に確認モーダル<br/>applyGuardrail.ts + ApplyGuardrailModal"]
     end
 
     subgraph IN["Infrastructure / インフラ"]
@@ -189,6 +190,8 @@ flowchart LR
     UR016 --> SR126
     UR016 --> SR128
     UR016 --> SR129
+    UR016 --> SR130
+    UR014 --> SR130
 
     %% UR-010: Close the review session with an outcome
     UR010 --> SR040
@@ -309,6 +312,7 @@ flowchart LR
 | SR-126 Cross-type parse diagnosis (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-128 Source-preserving model-type switch (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
 | SR-129 Auto-detect on bundle without modelTypeId (v7.7) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | x |
+| SR-130 Apply-time review-evidence guardrail (v7.7, ADR-014 補強) |  |  |  |  |  |  |  |  |  |  |  |  |  | x |  | x |
 
 > **UR-011 について**: 列がすべて空欄なのは、ModelLogue本体のSRではなく、同一リポジトリ内の補助サービス（ADR-010）として実装するため。Future Extensions として system_requirements.yaml の末尾に記載されている。
 
