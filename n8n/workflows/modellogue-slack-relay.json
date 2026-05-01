@@ -1,0 +1,108 @@
+{
+  "name": "modellogue-slack-relay",
+  "nodes": [
+    {
+      "parameters": {
+        "trigger": "message",
+        "channel": "={{ $env.SLACK_RELAY_CHANNEL_ID }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [400, 300],
+      "id": "9b2a14a0-0001-0001-0001-000000000001",
+      "name": "Slack Trigger",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_SLACK_CREDENTIAL_ID",
+          "name": "ModelLogue Slack Relay"
+        }
+      },
+      "notes": "Listens for new messages on the channel given by SLACK_RELAY_CHANNEL_ID. Bot Scopes required: channels:history, users:read."
+    },
+    {
+      "parameters": {
+        "jsCode": "// SR-132 read-direction buffer push.\n// Normalises the Slack event into the relay's RelayedSlackMessage\n// shape and pushes onto a ring buffer of the last 100 messages\n// in workflow-global Static Data.\nconst BUF_KEY = 'slackRelayBuffer';\nconst BUF_MAX = 100;\nconst sd = $getWorkflowStaticData('global');\nif (!Array.isArray(sd[BUF_KEY])) sd[BUF_KEY] = [];\n\n// Slack event payload shape varies by event subtype. We only relay\n// plain messages from real users; bot/edits/deletes are ignored to\n// keep the chat pane uncluttered.\nconst evt = $json;\nconst subtype = evt.subtype || null;\nif (subtype && subtype !== 'thread_broadcast') {\n  return [];\n}\nif (!evt.ts || !evt.text || !evt.user) return [];\n\n// Display name resolution: Slack returns a user id (UXXX). The\n// trigger node may include user_profile depending on settings; if\n// not, the relay's polling consumer can fall back to the bare id.\nconst username =\n  evt.user_profile?.display_name ||\n  evt.user_profile?.real_name ||\n  evt.user_profile?.name ||\n  evt.user;\n\nconst entry = {\n  ts: String(evt.ts),\n  user: String(evt.user),\n  username: String(username),\n  text: String(evt.text),\n};\nsd[BUF_KEY].push(entry);\nif (sd[BUF_KEY].length > BUF_MAX) {\n  sd[BUF_KEY] = sd[BUF_KEY].slice(-BUF_MAX);\n}\nreturn [{ json: entry }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300],
+      "id": "9b2a14a0-0001-0001-0001-000000000002",
+      "name": "Push to Buffer"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "slack-relay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [400, 600],
+      "id": "9b2a14a0-0001-0001-0001-000000000003",
+      "name": "Webhook GET slack-relay",
+      "webhookId": "9b2a14a0-0001-0001-0001-aaaaaaaaaaaa",
+      "notes": "GET /webhook/slack-relay?since=<ts>. ModelLogue's slackRelay service polls this every 1.5s while a session is in REVIEW phase (ADR-017)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// SR-132 read-direction buffer read.\n// Returns ring-buffer entries with ts strictly greater than ?since.\n// When ?since is omitted or empty, returns the whole buffer (the\n// client treats that as 'first poll, get current snapshot').\nconst BUF_KEY = 'slackRelayBuffer';\nconst sd = $getWorkflowStaticData('global');\nconst buf = Array.isArray(sd[BUF_KEY]) ? sd[BUF_KEY] : [];\n\nconst input = $input.first()?.json || {};\nconst sinceRaw = input.query?.since ?? '';\nconst since = parseFloat(String(sinceRaw));\n\nconst filtered = Number.isFinite(since)\n  ? buf.filter((m) => parseFloat(m.ts) > since)\n  : buf;\n\nreturn [{ json: { messages: filtered } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 600],
+      "id": "9b2a14a0-0001-0001-0001-000000000004",
+      "name": "Read Buffer"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.messages }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [840, 600],
+      "id": "9b2a14a0-0001-0001-0001-000000000005",
+      "name": "Respond GET"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Trigger": {
+      "main": [
+        [
+          { "node": "Push to Buffer", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Webhook GET slack-relay": {
+      "main": [
+        [
+          { "node": "Read Buffer", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Read Buffer": {
+      "main": [
+        [
+          { "node": "Respond GET", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["modellogue", "slack-relay", "ur-017"]
+}

@@ -1,0 +1,105 @@
+{
+  "name": "modellogue-chat-to-slack",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-to-slack",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [400, 300],
+      "id": "9b2a14a0-0002-0001-0001-000000000001",
+      "name": "Webhook POST chat-to-slack",
+      "webhookId": "9b2a14a0-0002-0001-0001-aaaaaaaaaaaa",
+      "notes": "POST /webhook/chat-to-slack with body {source: 'facilitator'|'ai', text}. ModelLogue's chatStore invokes this fire-and-forget on facilitator turns and AI replies (SR-132)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// SR-132 write-direction prefix.\n// Decorates the relayed text with [facilitator] / [AI] so Slack\n// readers can tell who is speaking. Validates the source field;\n// unknown values are rejected with an error so an upstream typo\n// shows up at smoke time rather than as silently-mislabelled\n// posts in Slack.\nconst body = $json.body || {};\nconst source = body.source;\nconst text = body.text;\n\nif (typeof text !== 'string' || text === '') {\n  throw new Error('chat-to-slack: missing or empty text');\n}\nlet prefix;\nif (source === 'facilitator') prefix = '[facilitator] ';\nelse if (source === 'ai') prefix = '[AI] ';\nelse throw new Error('chat-to-slack: invalid source ' + JSON.stringify(source));\n\nreturn [{ json: { decoratedText: prefix + text } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300],
+      "id": "9b2a14a0-0002-0001-0001-000000000002",
+      "name": "Prefix Source"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.SLACK_RELAY_CHANNEL_ID }}"
+        },
+        "text": "={{ $json.decoratedText }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [840, 300],
+      "id": "9b2a14a0-0002-0001-0001-000000000003",
+      "name": "Slack Post Message",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_SLACK_CREDENTIAL_ID",
+          "name": "ModelLogue Slack Relay"
+        }
+      },
+      "notes": "Posts to the channel given by SLACK_RELAY_CHANNEL_ID. Bot Scope required: chat:write. Bot must already be a member of the channel."
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 204,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type" }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1060, 300],
+      "id": "9b2a14a0-0002-0001-0001-000000000004",
+      "name": "Respond 204"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook POST chat-to-slack": {
+      "main": [
+        [
+          { "node": "Prefix Source", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Prefix Source": {
+      "main": [
+        [
+          { "node": "Slack Post Message", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Slack Post Message": {
+      "main": [
+        [
+          { "node": "Respond 204", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["modellogue", "slack-relay", "ur-017"]
+}

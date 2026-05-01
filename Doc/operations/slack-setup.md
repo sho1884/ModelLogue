@@ -132,36 +132,73 @@ VITE_SLACK_RELAY_BASE_URL=http://localhost:5678
 > ません。`SLACK_RELAY_CHANNEL_ID` を消せば n8n の Slack Trigger が
 > 発火しないので、ModelLogue 側がpolling しても空配列のみが返ります。
 
-## 9. Slack Event Subscription を設定する（Slack Trigger 用）
+## 9. n8n ワークフローを import する
+
+ModelLogue リポジトリには UR-017 の中継機構を構成する 2 本の n8n ワークフロー雛形が含まれます：
+
+| ファイル | 役割 |
+|---|---|
+| `n8n/workflows/modellogue-slack-relay.json` | Slack → ModelLogue（読み）。Slack Trigger でメッセージ受信 → ring buffer に push、`GET /webhook/slack-relay?since=<ts>` で差分提供 |
+| `n8n/workflows/modellogue-chat-to-slack.json` | ModelLogue → Slack（書き）。`POST /webhook/chat-to-slack` を受けて `[facilitator] ` または `[AI] ` 付きで Slack に投稿 |
+
+> **これらは雛形です**。n8n の credential ID やノード id は実機の値に差し替える必要があります。import 後に動作確認 → 必要に応じて手で調整 → 動くものを export して repo にコミットしてもらえると、次回以降の構築が楽になります。
+
+### 9.1 import の手順
+
+1. n8n UI 左メニュー **"Workflows"** → 右上 **"Add workflow"** → **"Import from File…"**
+2. `modellogue-slack-relay.json` を選択して import
+3. 同様に `modellogue-chat-to-slack.json` も import
+4. それぞれのワークフローを開き、以下を設定：
+
+#### 9.2 modellogue-slack-relay の調整
+
+- **Slack Trigger ノード**：手順 7 で登録した Slack Credential（`ModelLogue Slack Relay`）を選択
+- **Channel** フィールドが `={{ $env.SLACK_RELAY_CHANNEL_ID }}` のまま使えるか確認（n8n のバージョンによっては `={{ $env.SLACK_RELAY_CHANNEL_ID }}` を入力欄に貼り直す必要あり）
+- 画面右上の **Save** → **Active** トグル ON
+
+#### 9.3 modellogue-chat-to-slack の調整
+
+- **Slack Post Message ノード**：同じ Slack Credential を選択
+- Channel フィールド：`={{ $env.SLACK_RELAY_CHANNEL_ID }}`
+- **Save** → **Active** トグル ON
+
+### 9.4 各ワークフローの Webhook URL を控える
+
+両ワークフローを Active にすると、それぞれの Webhook ノードに **Production URL** が出ます：
+
+- `slack-relay`: `https://<n8n-host>/webhook/slack-relay`
+- `chat-to-slack`: `https://<n8n-host>/webhook/chat-to-slack`
+
+ModelLogue の `VITE_SLACK_RELAY_BASE_URL` には **base URL のみ**（`https://<n8n-host>`）を設定します。パス部分はクライアント側が組み立てます。
+
+## 10. Slack Event Subscription を設定する
 
 n8n の Slack Trigger ノードがメッセージを受信できるよう、Slack App 側に Event Subscription を登録します。
 
-> **先に n8n のワークフローを import しておく必要があります**。ModelLogue リポジトリの `n8n/workflows/modellogue-slack-relay.json`（SR-132 実装で追加予定）を import し、Slack Trigger ノードの **Webhook URL** をコピーしておいてください。
-
 1. Slack App ページの左メニュー **"Event Subscriptions"** を開く
 2. **"Enable Events"** を On に切り替え
-3. **"Request URL"** に n8n の Slack Trigger Webhook URL を貼り付け
+3. **"Request URL"** に手順 9.4 で控えた **slack-relay の Production URL** を貼り付け
    - n8n が外部から到達可能である必要があります（ngrok / Cloudflare Tunnel / セルフホスト URL）
-   - Slack 側で URL の検証 challenge が走るので、n8n ワークフローが Active になっている状態で行う
+   - Slack 側で URL の検証 challenge が走るので、modellogue-slack-relay ワークフローが Active になっている状態で行う
 4. 検証成功（Verified ✓）を確認
 5. **"Subscribe to bot events"** に以下を追加：
    - `message.channels` — 公開チャンネルのメッセージを受信
 6. **"Save Changes"**
 7. 画面上部のバナーに **"You've changed your bot scopes... reinstall your app"** と出たら、Reinstall to Workspace
 
-## 10. 動作確認
+## 11. 動作確認
 
-### 10.1 読み方向（Slack → ModelLogue）
+### 11.1 読み方向（Slack → ModelLogue）
 
-1. n8n の slack-relay ワークフローを Active 状態にする
+1. modellogue-slack-relay ワークフローを Active 状態にする
 2. Slack の開発チャンネルに何か発言を投稿
 3. n8n の Executions タブに該当 workflow の実行ログが流れることを確認
-4. （SR-132 実装後）ModelLogue を REVIEW phase で開き、ChatPanel に Slack 発言が `Slack · <username>` として 4 秒以内に流れることを確認
+4. ModelLogue を REVIEW phase で開き（SR-132c の polling フックが起動）、ChatPanel に Slack 発言が `Slack · <username>` として 4 秒以内に流れることを確認（NFR-081）
 
-### 10.2 書き方向（ModelLogue → Slack）
+### 11.2 書き方向（ModelLogue → Slack）
 
-1. （SR-132 実装後）ModelLogue で進行役として発言
-2. Slack の開発チャンネルに `[facilitator] ...` が 2 秒以内に投稿されることを確認
+1. ModelLogue で進行役として発言
+2. Slack の開発チャンネルに `[facilitator] ...` が 2 秒以内に投稿されることを確認（NFR-081）
 3. AI 応答も `[AI] ...` として投稿されることを確認
 
 ## トラブルシューティング
