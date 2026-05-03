@@ -1147,16 +1147,28 @@ Marker geometry is in the SVG coordinate space (the space of the PlantUML SVG). 
 | N-switch coverage generator / Nスイッチカバレッジ生成器 | PlantUMLソース → テストケースCSV。複合状態にはレイヤード戦略を適用 | UR-003 (将来), ADR-009, ADR-010 |
 | State-table converter / 状態遷移表変換器 | PlantUMLソース ↔ 状態遷移表CSVの双方向変換。決定論的、CSV形式は厳密定義 | UR-011, ADR-010, ADR-011 |
 
-### 8.2 その他の拡張（位置づけ未定）
+### 8.2 Mermaid 経路で実装する新モデル型（v7.9 以降, ADR-018）
+
+シーケンス図・DFD・C4 モデルは **Mermaid をフロントで直接 render** して実装する。Docker サーバは増やさず、`npm install mermaid` で SPA に取り込む。SVG → DiagramView の流れは既存と同じだが、座標抽出（ADR-007）は Mermaid SVG の DOM 構造に合わせて別実装する。
+
+| Extension / 拡張 | 図エンジン | 想定 UR |
+|---|---|---|
+| Sequence diagram / シーケンス図 | Mermaid `sequenceDiagram` | 新 UR（メッセージレビュー用途） |
+| DFD（Data Flow Diagram） | Mermaid `flowchart` 流用 | 新 UR（プロセス／データストア／外部実体の確認） |
+| C4 model / C4 モデル | Mermaid C4 | 新 UR（コンテキスト〜コンポーネント階層レビュー） |
+
+シーケンス図を最初の Mermaid 採用モデル型として実装し、Mermaid 統合の reference 実装を確立する。DFD・C4 はその後に続く。既存 3 モデル型（状態遷移図・要求図・プロセス図）は ADR-014 / ADR-015 / プロセス図 EBNF の表現力要件のため、引き続き PlantUML を維持する（ADR-018）。
+
+### 8.3 その他の拡張（位置づけ未定）
 
 | Extension / 拡張 | Description / 説明 |
 |---|---|
-| Activity diagram / アクティビティ図 | BPMN-style activity diagram support / BPMN風アクティビティ図対応 |
 | Requirements tree / 要求系統図 | Requirements derivation tree / 要求帰納系統図 |
-| Classification tree / 分類ツリー | Classification tree method / クラシフィケーションツリー法 |
+| Classification tree / 分類ツリー | 無期限保留。再開時は因子・水準表ベースで設計し直す方針（プロジェクトメモリ参照） |
 | Real-time marker collaboration / マーカーのリアルタイム共有 | Multi-user marker sharing via WebSocket / WebSocket経由のマルチユーザー共有 |
 | AI-initiated markers / AI起点のマーカー | AI places a marker to point at something it's discussing / AIが議論対象を指すためにマーカーを配置 |
-| Chat app integration / チャットアプリ連携 | Slack/Teams/Discord feedback via n8n / n8n経由のフィードバック |
+| Teams / Discord chat relay parity | UR-017 の relay contract を流用した Teams / Discord 経路（Slack 一本以外への展開） |
+| Slack relay Phase B | セッション開始時の per-session チャンネル選択（UR-017 Phase B、UR/SR 別途） |
 | GitHub integration / GitHub連携 | Auto-commit review evidence via n8n / n8n経由のレビュー証跡自動コミット |
 
 ---

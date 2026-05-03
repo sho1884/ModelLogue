@@ -711,6 +711,13 @@ ModelLogue/
 | [ADR-009](./adr/ADR-009-composite-states-minimal-subset.yaml) | 複合状態は1階層限定の最小サブセットでサポートする |
 | [ADR-010](./adr/ADR-010-external-services-for-heavy-or-domain-specific-work.yaml) | 重い処理や領域固有の生成処理は外部サービスとして同一リポジトリ内に分離する |
 | [ADR-011](./adr/ADR-011-strict-formats-and-deterministic-conversion.yaml) | サービス間のフォーマットは厳密に定義し、機械的な変換は決定論的に実装する |
+| [ADR-012](./adr/ADR-012-model-type-plugin-architecture.yaml) | モデル型プラグインアーキテクチャ（ModelTypeDefinition） |
+| [ADR-013](./adr/ADR-013-requirement-review-scope-boundary.yaml) | 要求図のレビューとダウンストリームトレーサビリティは別フェーズとして扱う |
+| [ADR-014](./adr/ADR-014-soft-delete-with-reason.yaml) | レビュー過程の削除は soft-delete + reason 必須でエビデンスとして残す |
+| [ADR-015](./adr/ADR-015-requirement-diagram-classification-axes.yaml) | 要求図の分類軸（type / level / group）と一図一軸の規律 |
+| [ADR-016](./adr/ADR-016-multi-participant-chat-via-slack-relay.yaml) | 複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない） |
+| [ADR-017](./adr/ADR-017-slack-relay-via-polling.yaml) | Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用） |
+| [ADR-018](./adr/ADR-018-mermaid-for-new-model-types-frontend-rendered.yaml) | 新モデル型（シーケンス・DFD・C4）はフロント render の Mermaid を採用する（既存 3 型は PlantUML 維持） |
 
 ## 12. 将来拡張
 
@@ -725,13 +732,30 @@ ModelLogue本体ではなく、同一リポジトリ内の独立した補助サ�
 
 ### 12.2 ModelLogue本体の拡張
 
-他のモデル図種への対応は、パーサーとモデルとテーブル生成器を差し替えることで実現する。
+他のモデル図種への対応は、パーサーとモデルとテーブル生成器を差し替えることで実現する（ADR-012 のモデル型プラグイン枠組み）。
+
+#### 12.2.1 Mermaid 経路を併設する新モデル型（v7.9 以降、ADR-018）
+
+シーケンス図・DFD・C4 モデルは **Mermaid をフロントで直接 render** して実装する。Docker サーバは増やさず、`npm install mermaid` で SPA に取り込む。SVG 文字列を `DiagramView` に渡す形は既存と同じだが、座標抽出は Mermaid 用に別実装する（`src/services/mermaidCoordinates.ts` 仮称）。
+
+| 拡張 | パーサー追加 | 図エンジン | 解析タブ候補 |
+|------|-----------|----------|------------|
+| シーケンス図 | SequenceDiagramParser | Mermaid sequenceDiagram | メッセージ一覧、参加者一覧 |
+| DFD | DfdParser | Mermaid flowchart 流用 | プロセス／データストア／外部実体一覧 |
+| C4 モデル | C4Parser | Mermaid C4 | コンテキスト／コンテナ／コンポーネント階層 |
+
+シーケンス図を最初の Mermaid 採用モデル型として実装し、Mermaid 統合の reference 実装を確立する。DFD・C4 はその後に続く。
+
+#### 12.2.2 PlantUML 経路を引き続き使う既存モデル型
+
+既存 3 モデル型（状態遷移図・要求図・プロセス図）は PlantUML を維持する。ADR-014（soft-delete with reason）/ ADR-015（type/level/group の package グルーピング）/ プロセス図 EBNF（lanes・partitions・event ステレオタイプ）の表現力が PlantUML class / activity 図に依存しているため、Mermaid への移行は実装コスト > 描画品質の差。詳細は ADR-018。
+
+#### 12.2.3 検討中だが未決の拡張
 
 | 拡張 | パーサー追加 | モデル追加 | テーブル追加 |
 |------|-----------|----------|------------|
-| アクティビティ図（BPMN風） | ActivityDiagramParser | ActivityModel | DecisionTable |
 | 要求帰納系統図 | RequirementsTreeParser | RequirementsModel | DerivationMatrix |
-| クラシフィケーションツリー | ClassificationTreeParser | ClassificationModel | FactorLevelTable |
+| クラシフィケーションツリー | （無期限保留。再開時は因子・水準表ベースで設計し直す） | — | — |
 
 拡張時のアーキテクチャへの影響は最小限（パーサー＋モデル＋テーブルの差し替えのみ）。各図種にも対応する補助サービス（テスト生成器、CSV変換器など）が並ぶ可能性がある。
 

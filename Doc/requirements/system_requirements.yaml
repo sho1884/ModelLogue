@@ -2278,10 +2278,20 @@ external_interfaces:
 #   - Deterministic conversion (no LLM), strict CSV format definition
 #   - See ADR-011
 #
+# Mermaid-rendered new model types (v7.9 onwards, ADR-018):
+# - Sequence diagram (Mermaid sequenceDiagram, frontend-rendered)
+# - DFD (Mermaid flowchart subset, frontend-rendered)
+# - C4 model (Mermaid C4, frontend-rendered)
+# All three are implemented under the ADR-012 plugin framework with
+# Mermaid as the rendering engine — no Docker server is added. Existing
+# 3 model types (state-machine / requirement / process) keep PlantUML
+# (see ADR-018 for why neither side moves).
+#
 # Other extensions, not yet placed:
-# - Activity diagram (BPMN-style) support
 # - Requirements derivation tree support
-# - Classification tree support
+# - Classification tree support (indefinitely deferred — when resumed,
+#   start from factor/level tables, not the tree notation; see project
+#   memory)
 # - Real-time multi-user marker collaboration (shared marker store via WebSocket)
 # - AI-initiated markers (AI places a marker to point at something it's discussing)
 # - Teams / Discord parity for the chat relay (UR-017 covers Slack only;

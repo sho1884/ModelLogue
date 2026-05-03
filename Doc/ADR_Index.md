@@ -1,6 +1,6 @@
 # ADR Index / アーキテクチャ決定記録一覧
 
-> **このファイルは自動生成です** (`Doc/adr/*.yaml` から生成 / 2026-05-01 12:30)。手動編集は次回再生成時に失われます。変更は対応する YAML を編集し、`adr` スキルで再生成してください。
+> **このファイルは自動生成です** (`Doc/adr/*.yaml` から生成 / 2026-05-03 16:50)。手動編集は次回再生成時に失われます。変更は対応する YAML を編集し、`adr` スキルで再生成してください。
 
 ## 一覧表
 
@@ -23,6 +23,7 @@
 | [ADR-015](#adr-015) | 要求図の分類軸（type / level / group）と一図一軸の規律 | 2026-04-29 | 承認済 | Requirement に level（user/system/design/null）と group（自由文字列）を追加し、生成側は type/level/group のいずれか一軸を選んで package ブロックに射影する。一図一軸を入力側の規律として明文化する |
 | [ADR-016](#adr-016) | 複数人レビューチャットは Slack 中継方式で実現する（多人数 chat を内蔵しない） | 2026-05-01 | 承認済 | UR-017 の複数人参加チャットは、社内チャット venue（最初は Slack）と ModelLogue チャットペインを n8n 経由で双方向中継して実現することにした。ModelLogue 内部に多人数チャットクライアントは構築しない |
 | [ADR-017](#adr-017) | Slack 中継のリアルタイム配信は polling 方式（SSE / WebSocket は不採用） | 2026-05-01 | 承認済 | ModelLogue 側が n8n の HTTP endpoint を一定間隔で polling する方式を採る。SSE / WebSocket は MVP では不採用とし、cadence が不足した場合に置き換える |
+| [ADR-018](#adr-018) | 新モデル型（シーケンス・DFD・C4）はフロント render の Mermaid を採用する（既存 3 型は PlantUML 維持） | 2026-05-03 | 承認済 | シーケンス図・DFD・C4 を Mermaid で実装しフロントで直接 render する（Docker サーバを増やさない）。状態遷移図・要求図・プロセス図は ADR-014 / ADR-015 等の仕様要件のため PlantUML を維持する |
 
 ---
 
@@ -1506,5 +1507,103 @@ ModelLogue → Slack 方向は polling ではなく POST（fire-and-forget）を
 - 実運用で会話量が想定を超えると、ring buffer が溢れる頻度が上がる
 - polling 間隔を縮めて低遅延化すると n8n 負荷が線形に増え、別の方式への移行圧力になる
 - n8n のセルフホスト構成（CPU / メモリ）次第では polling 負荷が他のワークフローに干渉する
+
+---
+
+## ADR-018
+
+**新モデル型（シーケンス・DFD・C4）はフロント render の Mermaid を採用する（既存 3 型は PlantUML 維持）**
+
+- **日付**: 2026-05-03
+- **ステータス**: 承認済
+- **最終更新**: 2026-05-03
+- **関連**: ADR-001 / ADR-002 / ADR-006 / ADR-007 / ADR-012 / ADR-013 / ADR-014 / ADR-015
+
+### 背景
+
+ModelLogue は ADR-012 のモデル型プラグインアーキテクチャに従い、現状 3 つのモデル型（状態遷移図 / 要求図 / プロセス図）を PlantUML Server（Docker セルフホスト）経由で実装している。SVG 取得 → ネイティブ SVG オーバーレイ（ADR-006）にマーカーを重ねる構成。
+
+今後追加予定のモデル型としてシーケンス図・DFD・C4 モデルがある。これらをどの図エンジンで実装するかが論点。
+
+意思決定を取り巻く事実関係：
+
+- 2022 年以降 GitHub Markdown が Mermaid をネイティブ render するようになり、流通性で Mermaid 優位の流れ。
+- C4 モデル：C4-PlantUML（老舗・実装厚い）と Mermaid C4（新興・最近活発）が併存。
+- シーケンス図：機能性は両者拮抗、流通性で Mermaid 優位。
+- DFD：両者とも DFD 専用構文はなく flowchart / activity で表現。
+
+一方、既存 3 モデル型の PlantUML 採用は妥当性が今でも高い：
+
+- 状態遷移図：複合状態の DRY 表現、ガード／アクション付き遷移の柔軟性、レイアウト品質で Mermaid stateDiagram-v2 より優位。
+- 要求図：Mermaid `requirementDiagram` は SysML native だが、ADR-014 の soft-delete 表現や ADR-015 の type/level/group 軸グルーピング（PlantUML class 図の `package "..." <<Frame>>` を活用）が Mermaid 側で成立しない。
+- プロセス図：v7.6 の lanes / partitions / `<<event>>` ステレオタイプ・arrow label・note 内 `**外部:**` 抽出は PlantUML activity の機能。Mermaid flowchart には lane/partition の native 概念がない。
+
+**主な判断要因:**
+
+- 新モデル型の流通性・GitHub Markdown ネイティブ render
+- Mermaid C4 の活発化、Mermaid の Web 標準としての勢い
+- 既存 3 モデル型の PlantUML 仕様要件（ADR-014 / ADR-015 / プロセス図サブセット）
+- Lean Architecture 原則（ADR-002）：機能を抱え込まず外部サービスをオーケストレーション
+- SPA / no server 前提（ADR-001）：サーバを不必要に増やさない
+- 既存 PlantUML Server 移行コストとレグレッションリスク
+
+### 決定
+
+**要約:** 新モデル型（シーケンス・DFD・C4）は Mermaid を採用しフロントで直接 render する（Docker サーバを増やさない）。既存 3 モデル型（状態遷移図・要求図・プロセス図）は PlantUML を維持する
+
+新モデル型を追加するときの図エンジン選択を以下のとおり確定する：
+
+1. **新モデル型は Mermaid**：シーケンス図・DFD・C4 を Mermaid で実装する。`npm install mermaid` で取り込み、ブラウザ内で SVG を render する。
+2. **既存 3 モデル型は PlantUML 維持**：状態遷移図・要求図・プロセス図を Mermaid に移行しない。各モデル型の仕様（ADR-013 / ADR-014 / ADR-015 / プロセス図 EBNF）が PlantUML の表現力に依存しているため、移行コスト > 描画品質の差。
+3. **Mermaid 用に Docker サーバを立てない**：Mermaid は JavaScript ライブラリで完結する。`mermaid-cli` を Docker 化する設計案は採らない。
+
+アーキテクチャへの影響：
+
+- PlantUML Server（既存 Docker サービス）はそのまま継続。既存 3 モデル型の SVG render 経路は無変更。
+- 新モデル型は ModelTypeDefinition プラグイン（ADR-012）の枠組みで追加。プラグイン内の render 関数が PlantUML 経由か Mermaid 経由かを内部で切り替える。
+- DiagramView は引き続き SVG 文字列を受け取って表示する。上流が PlantUML Server か Mermaid frontend かを意識しない。
+- マーカーオーバーレイ（ADR-006）と座標抽出（ADR-007）は Mermaid SVG にも原則として適用可能だが、Mermaid 出力の DOM 構造は PlantUML と異なる。座標抽出ロジックは Mermaid 用に別ファイルとして実装する。
+- PlantUML 経由のエラーは HTTP 経由の遅延エラーだが、Mermaid の parse エラーはライブラリ側の throw で同期的に捕捉できる。エラー UX は単純化される。
+
+依存・ライセンス：
+
+- Mermaid 本体：MIT License。CLAUDE.md の Dependency License Policy（MIT / Apache-2.0 / BSD / ISC のみ）と整合。サブ依存（D3、dagre 等）も MIT/BSD 系。
+- bundle サイズへの影響：Mermaid は minified gzipped で約数百 KB。lazy import（モデル型を選択したときに動的 import）すれば既存ユーザに影響を与えずに導入できる。
+
+実装タイミング：
+
+- 本 ADR の対象範囲は「方針を確定すること」であり、具体実装は新モデル型 SR を立てるタイミング（v7.9 / v8.0 のシーケンス図 SR）で行う。
+- シーケンス図を最初の Mermaid 採用モデル型として実装し、Mermaid 統合の reference 実装として確立する。DFD・C4 はその後に続く。
+
+### 検討したが採用しなかった選択肢
+
+- **PlantUML 一本で続け、シーケンス・DFD・C4 も PlantUML で実装する** — 短期的な追加コストは最低だが、GitHub Markdown ネイティブ render など Mermaid 圏の流通性メリットを取り逃がす。特に C4 はコミュニティの勢いが Mermaid 側に移動中
+- **全モデル型を Mermaid に統一する（既存 3 型も移行）** — 一貫性は最高だが、状態遷移図の複合状態 DRY、要求図の ADR-014/015、プロセス図のレーン/パーティション/イベントといった既存仕様が Mermaid で再現できないか大幅再設計が必要。実装コストとレグレッションリスクが大きすぎる
+- **Mermaid CLI を Docker サーバ化して既存の SVG 取得経路を流用する** — Mermaid は本来ブラウザ完結のライブラリで、サーバ化するメリットがない（API キーや重い計算が無い）。Lean Architecture / 持たないアーキテクチャから見て不自然。運用コストだけ増える
+- **Mermaid を採用するが既存 3 型のうち要求図だけ移行する** — Mermaid `requirementDiagram` は SysML native だが、ADR-014 / ADR-015 の表現力に届かない。再設計影響範囲（parser / preamble / renderer / traceability / auto-marker）が大きい割に実機 UX の改善余地は限定的
+
+### 結果・影響
+
+**メリット:**
+
+- シーケンス図・C4 で GitHub Markdown ネイティブ流通の利点を取り込める
+- Mermaid フロント render により Docker サーバが増えない（ADR-001 / ADR-002 と整合）
+- Mermaid の parse エラーが同期 throw で捕捉できるため、図 → エラー の UX が PlantUML より単純化される
+- 既存 PlantUML 経路は無変更なので、既存 3 モデル型の動作・テスト・運用に影響しない
+- lazy import すれば bundle サイズ影響を既存ユーザから隔離できる
+
+**受け入れる負債・制約:**
+
+- ModelLogue 内に PlantUML と Mermaid の 2 エンジンが併存する。プラグイン切り替えと SVG 抽出経路が 2 系統になる
+- 座標抽出ロジック（ADR-007）を Mermaid 用に別実装する必要があり、保守対象が増える
+- Mermaid のバージョンアップに追従する保守責任が新たに発生する（PlantUML Server とは独立な依存）
+- シーケンス図実装時に Mermaid 統合の reference を作る分、最初の新モデル型の追加コストが他のモデル型より高くなる
+
+**リスク:**
+
+- Mermaid の SVG DOM 構造が将来のバージョンで変わると、座標抽出ロジックがレグレッションする可能性。バージョン pin と CI 上の smoke が必要
+- DFD のように Mermaid 側に専用構文が無い図種で、flowchart / sequenceDiagram の流用設計が ModelLogue の解析タブ要件と噛み合わない可能性
+- C4 モデルを Mermaid C4 で実装する場合、Mermaid C4 の API がまだ実験的扱いのため、安定版に向けて構文変更が起きる可能性
+- Mermaid 採用範囲が広がると、既存 PlantUML 3 モデル型を維持する判断（本 ADR の前提）が将来見直されるトリガーになる可能性。再評価する場合は別 ADR を起こす
 
 ---
