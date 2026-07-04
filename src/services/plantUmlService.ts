@@ -2,8 +2,12 @@
 
 import plantumlEncoder from 'plantuml-encoder';
 
+// SR-139: default to a same-origin relative prefix so the built bundle
+// carries no absolute URL (no per-host rebuild). A reverse proxy (prod)
+// or the Vite proxy (dev/preview) maps /plantuml -> the PlantUML server.
+// Set VITE_PLANTUML_SERVER_URL only to override with an absolute URL.
 const PLANTUML_SERVER_URL =
-  import.meta.env.VITE_PLANTUML_SERVER_URL ?? 'http://localhost:8080';
+  import.meta.env.VITE_PLANTUML_SERVER_URL ?? '/plantuml';
 
 export function encodePlantUml(source: string): string {
   return plantumlEncoder.encode(source);

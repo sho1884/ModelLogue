@@ -6,8 +6,12 @@
 
 import { effectiveSource, type ChatMessage } from '../types/session';
 
+// SR-139: default to a same-origin relative prefix so the built bundle
+// carries no absolute URL (no per-host rebuild). A reverse proxy (prod)
+// or the Vite proxy (dev/preview) maps /n8n -> the n8n instance. Set
+// VITE_N8N_BASE_URL only to override with an absolute URL.
 const N8N_BASE_URL =
-  import.meta.env.VITE_N8N_BASE_URL ?? 'http://localhost:5678';
+  import.meta.env.VITE_N8N_BASE_URL ?? '/n8n';
 
 // The chat webhook path is declared in the n8n workflow. We keep it fixed
 // here so the UI doesn't depend on per-deployment configuration.
@@ -240,18 +244,16 @@ export function extractPlantUmlBlock(text: string): string | undefined {
 }
 
 /**
- * Lightweight health check: try to reach the n8n base URL.
- * We don't have a dedicated health endpoint, so we just verify the server
- * responds at all. Any successful HTTP response (even 404) counts.
+ * Lightweight health check against n8n's /healthz liveness endpoint.
+ * SR-139: the SPA is same-origin with n8n (via /n8n behind the reverse
+ * proxy / Vite dev proxy), so we can read the real status instead of an
+ * opaque no-cors response. Behind the proxy only /n8n/webhook/* and
+ * /n8n/healthz are exposed — the n8n editor is intentionally not.
  */
 export async function checkHealth(): Promise<boolean> {
   try {
-    const response = await fetch(N8N_BASE_URL, {
-      method: 'GET',
-      mode: 'no-cors', // n8n root likely won't have CORS headers
-    });
-    // With no-cors the response is opaque; we just check that it didn't throw.
-    return response !== undefined;
+    const response = await fetch(`${N8N_BASE_URL}/healthz`, { method: 'GET' });
+    return response.ok;
   } catch {
     return false;
   }

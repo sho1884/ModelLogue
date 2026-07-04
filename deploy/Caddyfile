@@ -1,0 +1,54 @@
+# SR-139: single same-origin front. Caddy serves the built SPA and
+# reverse-proxies the API prefixes to the backend containers, so the browser
+# only ever talks to one origin (no CORS, no per-host rebuild).
+#
+# TLS is terminated at the edge (Cloudflare Access + Tunnel) in production,
+# and plain HTTP locally, so auto_https is off here.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	# PlantUML SVG generation. handle_path strips the /plantuml prefix, so
+	# /plantuml/svg/<enc> -> plantuml:8080/svg/<enc>.
+	handle_path /plantuml/* {
+		reverse_proxy plantuml:8080
+	}
+
+	# N-switch coverage API.
+	handle_path /nswitch/* {
+		reverse_proxy nswitch-api:8090
+	}
+
+	# SR-136/137: identity probe for the front-end AI gate. Reports the
+	# operator's authenticated identity as seen by the edge auth gate
+	# (Cloudflare Access sets Cf-Access-Authenticated-User-Email once it has
+	# authenticated the request). With no gate / an anonymous visitor the
+	# header is absent and we return 401 {"authenticated":false}, so the SPA
+	# shows the AI-free app. This endpoint reads a header, so the auth gate
+	# provider is swappable (map its identity header here — NFR-091).
+	handle /auth/whoami {
+		header Content-Type application/json
+		@authed header Cf-Access-Authenticated-User-Email *
+		respond @authed `{"authenticated":true}` 200
+		respond `{"authenticated":false}` 401
+	}
+
+	# n8n: ONLY the relay webhooks and the liveness probe are exposed. The
+	# n8n editor / admin UI (which holds the Gemini credential) is
+	# deliberately NOT proxied — the operator reaches it via SSH / compose
+	# exec. Any other /n8n/* path falls through to the SPA handler below.
+	@n8n path /n8n/webhook/* /n8n/healthz
+	handle @n8n {
+		uri strip_prefix /n8n
+		reverse_proxy n8n:5678
+	}
+
+	# SPA (everything else) with History-API fallback.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

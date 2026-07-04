@@ -17,12 +17,18 @@ interface UiStore {
   plantUmlStatus: 'connected' | 'disconnected' | 'checking';
   n8nStatus: 'connected' | 'disconnected' | 'checking';
 
+  // SR-136: whether AI (the chat pane + n8n relay) is available for the
+  // current user. Driven by authenticated identity, NOT by n8n reachability.
+  // Fail-safe default false: anonymous visitors get the AI-free app.
+  aiAvailable: boolean;
+
   setAnalysisPanelHeight: (height: number) => void;
   toggleAnalysisPanel: () => void;
   setActiveAnalysisTab: (tab: AnalysisTab) => void;
   setChatPanelWidth: (width: number) => void;
   setPlantUmlStatus: (status: UiStore['plantUmlStatus']) => void;
   setN8nStatus: (status: UiStore['n8nStatus']) => void;
+  setAiAvailable: (available: boolean) => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -33,6 +39,7 @@ export const useUiStore = create<UiStore>((set) => ({
 
   plantUmlStatus: 'disconnected',
   n8nStatus: 'disconnected',
+  aiAvailable: false,
 
   setAnalysisPanelHeight: (height) => set({ analysisPanelHeight: height }),
   toggleAnalysisPanel: () =>
@@ -41,4 +48,5 @@ export const useUiStore = create<UiStore>((set) => ({
   setChatPanelWidth: (width) => set({ chatPanelWidth: width }),
   setPlantUmlStatus: (status) => set({ plantUmlStatus: status }),
   setN8nStatus: (status) => set({ n8nStatus: status }),
+  setAiAvailable: (available) => set({ aiAvailable: available }),
 }));

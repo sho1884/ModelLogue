@@ -9,6 +9,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useTestCasesStore } from '../stores/testCasesStore';
 import { checkHealth as checkPlantUmlHealth } from '../services/plantUmlService';
 import { checkHealth as checkN8nHealth } from '../services/n8nService';
+import { checkAiAvailability } from '../services/authService';
 import { isMockMode } from '../services/mockAi';
 import { ScenarioRunner } from '../debug/ScenarioRunner';
 
@@ -27,6 +28,8 @@ export function MainLayout() {
   const setChatPanelWidth = useUiStore((s) => s.setChatPanelWidth);
   const setPlantUmlStatus = useUiStore((s) => s.setPlantUmlStatus);
   const setN8nStatus = useUiStore((s) => s.setN8nStatus);
+  const aiAvailable = useUiStore((s) => s.aiAvailable);
+  const setAiAvailable = useUiStore((s) => s.setAiAvailable);
   const requestTestCases = useTestCasesStore((s) => s.requestGeneration);
   const resetTestCases = useTestCasesStore((s) => s.reset);
   const nSwitchLevel = useTestCasesStore((s) => s.n);
@@ -109,17 +112,24 @@ export function MainLayout() {
     resetTestCases,
   ]);
 
-  // Check PlantUML Server and n8n health on mount
+  // Check PlantUML Server health on mount, and probe AI availability
+  // (SR-136). The AI switch is authenticated identity, not n8n reachability,
+  // so we only probe n8n's health once AI is actually available for this
+  // user — an anonymous visitor never talks to n8n.
   useEffect(() => {
     setPlantUmlStatus('checking');
     checkPlantUmlHealth().then((ok) =>
       setPlantUmlStatus(ok ? 'connected' : 'disconnected')
     );
-    setN8nStatus('checking');
-    checkN8nHealth().then((ok) =>
-      setN8nStatus(ok ? 'connected' : 'disconnected')
-    );
-  }, [setPlantUmlStatus, setN8nStatus]);
+    checkAiAvailability().then((available) => {
+      setAiAvailable(available);
+      if (!available) return;
+      setN8nStatus('checking');
+      checkN8nHealth().then((ok) =>
+        setN8nStatus(ok ? 'connected' : 'disconnected')
+      );
+    });
+  }, [setPlantUmlStatus, setN8nStatus, setAiAvailable]);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -129,19 +139,26 @@ export function MainLayout() {
         <AnalysisPanel />
       </div>
 
-      {/* Resize handle between diagram/analysis area and chat */}
-      <ResizeHandle
-        edge="left"
-        value={chatPanelWidth}
-        onChange={setChatPanelWidth}
-        min={MIN_CHAT_WIDTH}
-        max={Math.max(MIN_CHAT_WIDTH, window.innerWidth * MAX_CHAT_WIDTH_RATIO)}
-      />
-
-      {/* Right: Chat */}
-      <div style={{ width: chatPanelWidth }} className="shrink-0">
-        <ChatPanel />
-      </div>
+      {/* Right: Chat — SR-136: only for the authenticated operator. An
+          anonymous visitor gets the full review tool without AI, so the
+          chat pane (and its resize handle) is not rendered at all. */}
+      {aiAvailable && (
+        <>
+          <ResizeHandle
+            edge="left"
+            value={chatPanelWidth}
+            onChange={setChatPanelWidth}
+            min={MIN_CHAT_WIDTH}
+            max={Math.max(
+              MIN_CHAT_WIDTH,
+              window.innerWidth * MAX_CHAT_WIDTH_RATIO
+            )}
+          />
+          <div style={{ width: chatPanelWidth }} className="shrink-0">
+            <ChatPanel />
+          </div>
+        </>
+      )}
 
       {/* Debug: scripted scenario runner (only when mock AI is active) */}
       {isMockMode() && <ScenarioRunner />}

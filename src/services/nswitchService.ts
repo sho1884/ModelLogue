@@ -7,7 +7,11 @@ import type {
   NswitchGenerationResult,
 } from '../types/testCase';
 
-const DEFAULT_BASE_URL = 'http://localhost:8090';
+// SR-139: default to a same-origin relative prefix so the built bundle
+// carries no absolute URL (no per-host rebuild). A reverse proxy (prod)
+// or the Vite proxy (dev/preview) maps /nswitch -> the nswitch API. Set
+// VITE_NSWITCH_BASE_URL only to override with an absolute URL.
+const DEFAULT_BASE_URL = '/nswitch';
 
 function baseUrl(): string {
   const injected =
