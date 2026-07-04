@@ -35,6 +35,14 @@
 		respond `{"authenticated":false}` 401
 	}
 
+	# SR-140: Sign-in entry point. Navigating here (a top-level navigation
+	# from the SPA's "Sign in" button) triggers the edge auth gate's login
+	# (Cloudflare Access etc.) because this path is gate-protected in prod.
+	# Once past the gate we bounce back to the app, which re-probes
+	# /auth/whoami and shows the chat pane. With no gate in front this simply
+	# returns to / and the user stays unauthenticated (fail-safe).
+	redir /auth/login / 302
+
 	# n8n: ONLY the relay webhooks and the liveness probe are exposed. The
 	# n8n editor / admin UI (which holds the Gemini credential) is
 	# deliberately NOT proxied — the operator reaches it via SSH / compose

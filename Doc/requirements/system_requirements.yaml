@@ -2136,6 +2136,44 @@ parser_diagnostics:
       - "The SPA image deploys to a different host by changing only a small env / the domain — no per-host rebuild"
       - "The auth gate provider and the static-host choice can each change without reworking the app services"
 
+  SR-140:
+    function: "Provide a Sign-in entry point in the SPA: when AI is unavailable, offer a control that navigates to the auth gate's login and returns the operator to the app once authenticated"
+    parent: [UR-018]
+    component: a Sign-in control in the app header (shown when aiAvailable is false) + deploy/Caddyfile (/auth/login redirect) + the auth gate (SR-138)
+    status: planned  # v8.0 (public beta)
+    notes: |
+      SR-136 hides the chat pane when the user is not the authenticated
+      operator, but by itself gives no way to BECOME authenticated from
+      inside the app — the bootstrap gap the operator actually hit. SR-140
+      adds the entry point.
+
+      Flow (top-level browser navigation, NOT a background fetch):
+        - When aiAvailable is false, the SPA shows a small "Sign in"
+          control (in the header).
+        - Activating it navigates the browser to the gate-protected path
+          `/auth/login`. Because it is a navigation (not a fetch), the auth
+          gate (Cloudflare Access etc., SR-138) can present its own login
+          page; on success the gate sets its session and forwards the
+          request to the origin.
+        - The reverse proxy answers `/auth/login` with a 302 back to `/`.
+          The SPA then re-probes `/auth/whoami` (SR-136), now sees the
+          authenticated identity header, and shows the chat pane.
+
+      Local / no-gate behaviour: with no gate in front (the local stack, or
+      before SR-137/138 is deployed), `/auth/login` is unprotected and just
+      302s to `/`; the user stays unauthenticated (fail-safe, AI off). The
+      control is therefore inert until the gate is deployed — implemented
+      first (doc-first), activated by deployment.
+
+      Provider-agnostic: the SPA knows only "navigate to /auth/login"; which
+      gate performs the login stays behind the SR-138 seam (NFR-091).
+    acceptance_criteria:
+      - "When aiAvailable is false the SPA shows a 'Sign in' control; when true it does not"
+      - "Activating 'Sign in' performs a top-level browser navigation to /auth/login (not a background fetch), so the edge auth gate can present its login page"
+      - "Behind the auth gate, a successful login returns the operator to the app authenticated: the chat pane appears after the redirect without a further manual step"
+      - "With no gate in front, /auth/login 302-redirects to / and the user remains unauthenticated (fail-safe); the control does not error"
+      - "The SPA hard-codes no gate-specific detail beyond the /auth/login path — the gate provider stays swappable (NFR-091)"
+
 # =============================================================================
 # Data Model
 # =============================================================================

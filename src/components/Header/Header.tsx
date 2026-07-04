@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useRequirementsStore } from '../../stores/requirementsStore';
+import { useUiStore } from '../../stores/uiStore';
 import { SaveAndFinishDialog } from '../SaveAndFinishDialog';
 import grammarSpec from '../../grammars/stateDiagram.ebnf?raw';
 import { downloadTextFile } from '../../services/download';
@@ -69,6 +70,7 @@ export function Header() {
   const setModelTypeId = useSessionStore((s) => s.setModelTypeId);
   const requirementsText = useRequirementsStore((s) => s.requirementsText);
   const bootstrapFromBundle = useSessionStore((s) => s.bootstrapFromBundle);
+  const aiAvailable = useUiStore((s) => s.aiAvailable);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -167,6 +169,21 @@ export function Header() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* SR-140: Sign-in entry point. Shown only when AI is unavailable
+              (the anonymous view). A top-level navigation — not a fetch — so
+              the edge auth gate can present its login; it returns to `/` and
+              the app re-probes /auth/whoami (SR-136). Inert with no gate. */}
+          {!aiAvailable && (
+            <button
+              onClick={() => {
+                window.location.href = '/auth/login';
+              }}
+              className="px-3 py-1 text-sm border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100"
+              title="Sign in to enable AI. Redirects to the authentication gate and returns you here once signed in."
+            >
+              Sign in
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
