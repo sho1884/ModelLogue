@@ -89,6 +89,21 @@ class Unreachable:
 
 
 @dataclass(slots=True)
+class NegativeTest:
+    """A robustness test for one invalid transition (§7.2 / §7.4).
+
+    Reaches ``source_state`` via ``prefix`` from the layer's initial
+    pseudo-state, then injects ``inject_event`` — which has no valid
+    transition out of ``source_state`` — and asserts no state change.
+    """
+
+    layer_name: str
+    prefix: tuple[Transition, ...]  # path initial -> source_state
+    source_state: str
+    inject_event: str
+
+
+@dataclass(slots=True)
 class LayerResult:
     layer: Layer
     tests: list[TestPath] = field(default_factory=list)
@@ -204,6 +219,78 @@ def build_tests(
             covered.add(tuple(full[i : i + chain_len]))
 
     return result
+
+
+# ---------- negative tests (invalid transitions, §7.2) ----------
+
+
+def _event_alphabet(layer: Layer) -> list[str]:
+    """Sorted set of real event names on the layer's transitions.
+
+    Excludes the synthetic `()` init/final events (event is None/empty).
+    """
+    seen: set[str] = {t.event for t in layer.transitions if t.event}
+    return sorted(seen)
+
+
+def invalid_cells(layer: Layer) -> list[tuple[str, str]]:
+    """Empty state-table cells: `(state_id, event)` with no transition.
+
+    For every real (non-pseudo) state and every event in the alphabet,
+    a cell is invalid iff no transition leaves that state on that event.
+    Deterministically sorted by `(state_id, event)`.
+    """
+    alphabet = _event_alphabet(layer)
+    valid: set[tuple[str, str]] = {
+        (t.source_state_id, t.event)
+        for t in layer.transitions
+        if t.event
+    }
+    cells = [
+        (s.id, e)
+        for s in layer.states
+        for e in alphabet
+        if (s.id, e) not in valid
+    ]
+    cells.sort()
+    return cells
+
+
+def build_negative_tests(
+    layer: Layer, *, max_cycle_unroll: int
+) -> tuple[list[NegativeTest], list[Unreachable]]:
+    """One negative test per invalid cell whose source state is reachable."""
+    tests: list[NegativeTest] = []
+    unreachable: list[Unreachable] = []
+    for state_id, event in invalid_cells(layer):
+        prefix = _shortest_path(
+            layer,
+            layer.initial_id,
+            {state_id},
+            max_cycle_unroll=max_cycle_unroll,
+            allow_empty=True,
+        )
+        if prefix is None:
+            unreachable.append(
+                Unreachable(
+                    layer_name=layer.name,
+                    chain=(),
+                    reason=(
+                        f"invalid cell {state_id}--{event}--x: "
+                        "source state unreachable within cap"
+                    ),
+                )
+            )
+            continue
+        tests.append(
+            NegativeTest(
+                layer_name=layer.name,
+                prefix=prefix,
+                source_state=state_id,
+                inject_event=event,
+            )
+        )
+    return tests, unreachable
 
 
 def _visited_states(transitions: tuple[Transition, ...], start: str) -> set[str]:

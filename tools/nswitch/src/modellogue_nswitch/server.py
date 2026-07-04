@@ -114,6 +114,15 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
+        invalid = body.get("invalid", False)
+        if not isinstance(invalid, bool):
+            self._send_error(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_request",
+                "`invalid` must be boolean",
+            )
+            return
+
         max_cycle_unroll = body.get("max_cycle_unroll", 3)
         if not isinstance(max_cycle_unroll, int) or max_cycle_unroll < 1:
             self._send_error(
@@ -149,6 +158,7 @@ class _Handler(BaseHTTPRequestHandler):
             result: GenerationResult = generate(
                 model,
                 n=n,
+                invalid=invalid,
                 layered=layered,
                 max_cycle_unroll=max_cycle_unroll,
                 require_final=require_final,

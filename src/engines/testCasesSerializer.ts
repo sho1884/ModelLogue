@@ -13,11 +13,14 @@ import type { CoverageRow, TestCase } from '../types/testCase';
 
 const CSV_HEADER = [
   'test_id',
+  'kind',
   'layer',
   'length',
   'start',
   'sequence',
   'end',
+  'inject',
+  'expect',
   'covers',
 ];
 
@@ -35,11 +38,14 @@ export function testCasesToCsv(tests: TestCase[]): string {
     lines.push(
       [
         t.test_id,
+        t.kind,
         t.layer,
         t.length,
         t.start,
         t.sequence,
         t.end,
+        t.inject,
+        t.expect,
         t.covers,
       ]
         .map(csvCell)
@@ -76,11 +82,14 @@ export function testCasesToHtml(tests: TestCase[]): string {
         (t) =>
           `<tr>` +
           `<th scope="row" style="font-weight:normal;text-align:left;">${htmlEscape(t.test_id)}</th>` +
+          `<td>${htmlEscape(t.kind)}</td>` +
           `<td>${htmlEscape(t.layer)}</td>` +
           `<td style="text-align:right;">${htmlEscape(t.length)}</td>` +
           `<td>${htmlEscape(t.start)}</td>` +
           `<td>${htmlEscape(t.sequence)}</td>` +
           `<td>${htmlEscape(t.end)}</td>` +
+          `<td>${htmlEscape(t.inject)}</td>` +
+          `<td>${htmlEscape(t.expect)}</td>` +
           `<td>${htmlEscape(t.covers)}</td>` +
           `</tr>`
       )

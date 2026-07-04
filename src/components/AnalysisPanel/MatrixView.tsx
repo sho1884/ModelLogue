@@ -102,11 +102,20 @@ export function MatrixView({ matrix, model, title }: MatrixViewProps) {
                 {matrix.cells[ri].map((cell, ci) => (
                   <td
                     key={ci}
+                    // SR-020: never leave an empty cell blank. A cell with no
+                    // transition is an invalid/forbidden transition, shown as
+                    // `-` (locale-safe ASCII) — the negative-test target
+                    // (UR-013, nswitch §7.2).
+                    title={
+                      cell
+                        ? undefined
+                        : 'No transition — invalid/forbidden (negative-test target)'
+                    }
                     className={`border border-gray-300 px-2 py-1 text-center ${
                       cell ? 'text-gray-800' : 'text-gray-300'
                     } ${row.isComposite ? 'bg-gray-50' : ''}`}
                   >
-                    {cell ?? ''}
+                    {cell || '-'}
                   </td>
                 ))}
               </tr>

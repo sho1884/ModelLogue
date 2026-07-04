@@ -6,19 +6,24 @@
 // AbortController so mid-keystroke calls don't pile up.
 
 import { create } from 'zustand';
-import type { NSwitchLevel, NswitchGenerationResult } from '../types/testCase';
+import type {
+  CoverageMode,
+  NSwitchLevel,
+  NswitchGenerationResult,
+} from '../types/testCase';
 import { NswitchError, generate as generateApi } from '../services/nswitchService';
 
 export type TestCasesStatus = 'idle' | 'loading' | 'success' | 'error';
 export type TestCasesView = 'tests' | 'coverage';
 
 interface TestCasesStore {
-  n: NSwitchLevel;
+  // Coverage selector: 0/1/2 (positive N-switch) or 'invalid' (negative).
+  mode: CoverageMode;
   view: TestCasesView;
   status: TestCasesStatus;
   result: NswitchGenerationResult | null;
   error: NswitchError | null;
-  setN: (n: NSwitchLevel) => void;
+  setMode: (mode: CoverageMode) => void;
   setView: (v: TestCasesView) => void;
   requestGeneration: (source: string) => Promise<void>;
   reset: () => void;
@@ -27,15 +32,15 @@ interface TestCasesStore {
 let inflight: AbortController | null = null;
 
 export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
-  n: 1,
+  mode: 1,
   view: 'tests',
   status: 'idle',
   result: null,
   error: null,
 
-  setN: (n) => {
-    set({ n });
-    // The effect in MainLayout will re-trigger on n change, so we do not
+  setMode: (mode) => {
+    set({ mode });
+    // The effect in MainLayout re-triggers on mode change, so we do not
     // fire the request from the store itself — keeps the store pure and
     // the fetch-orchestration logic in one place.
   },
@@ -54,8 +59,13 @@ export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
     inflight = controller;
     set({ status: 'loading', error: null });
     try {
+      const mode = get().mode;
+      const modeOpts =
+        mode === 'invalid'
+          ? { invalid: true, n: 0 as NSwitchLevel }
+          : { n: mode };
       const result = await generateApi(source, {
-        n: get().n,
+        ...modeOpts,
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;

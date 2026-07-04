@@ -65,6 +65,7 @@ export async function generate(
   const body = {
     source,
     n: options.n ?? 1,
+    invalid: options.invalid ?? false,
     format: options.format,
     layered: options.layered ?? true,
     max_cycle_unroll: options.max_cycle_unroll ?? 3,

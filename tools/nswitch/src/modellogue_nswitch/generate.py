@@ -11,8 +11,10 @@ from dataclasses import asdict, dataclass, field
 from .algorithm import (
     Chain,
     LayerResult,
+    NegativeTest,
     TestPath,
     Unreachable,
+    build_negative_tests,
     build_tests,
     chain_str,
     required_chains,
@@ -25,11 +27,14 @@ from .model import StateMachineModel, Transition
 @dataclass(slots=True)
 class TestCase:
     test_id: str
+    kind: str  # "positive" | "negative"
     layer: str
     length: int
     start: str
     sequence: str
     end: str
+    inject: str  # negative only: the invalid event injected at `end`
+    expect: str  # negative only: "no-transition"
     covers: str
 
 
@@ -56,6 +61,7 @@ def generate(
     model: StateMachineModel,
     *,
     n: int = 1,
+    invalid: bool = False,
     layered: bool = True,
     max_cycle_unroll: int = 3,
     require_final: bool = False,
@@ -74,9 +80,22 @@ def generate(
         for layer in layers
     ]
 
-    tests = _assign_test_ids(layer_results)
-    coverage = _build_coverage_rows(layer_results, tests, n)
-    uncovered = [u for lr in layer_results for u in lr.unreachable]
+    # Negative tests for invalid transitions (§7.2), keyed by layer name.
+    negatives: dict[str, list[NegativeTest]] = {}
+    neg_unreachable: list[Unreachable] = []
+    if invalid:
+        for layer in layers:
+            negs, unreach = build_negative_tests(
+                layer, max_cycle_unroll=max_cycle_unroll
+            )
+            negatives[layer.name] = negs
+            neg_unreachable.extend(unreach)
+
+    tests = _assign_test_ids(layer_results, negatives)
+    coverage = _build_coverage_rows(layer_results, tests, n, negatives)
+    uncovered = [
+        u for lr in layer_results for u in lr.unreachable
+    ] + neg_unreachable
     return GenerationResult(
         tests=tests,
         coverage=coverage,
@@ -88,8 +107,11 @@ def generate(
 # ---------- test cases ----------
 
 
-def _assign_test_ids(layer_results: list[LayerResult]) -> list[TestCase]:
-    """Order tests by (layer order, seq) and materialize the CSV rows."""
+def _assign_test_ids(
+    layer_results: list[LayerResult],
+    negatives: dict[str, list[NegativeTest]],
+) -> list[TestCase]:
+    """Order tests by (layer order, positive then negative) and materialize rows."""
     out: list[TestCase] = []
     # Layers sort: top first, then composite names alphabetically.
     ordered = sorted(
@@ -98,18 +120,35 @@ def _assign_test_ids(layer_results: list[LayerResult]) -> list[TestCase]:
     )
     for lr in ordered:
         for idx, tp in enumerate(lr.tests, start=1):
-            test_id = f"{lr.layer.name}-{idx:03d}"
-            sequence = "|".join(_event_token(t) for t in tp.transitions)
-            covers = ";".join(transition_str(t) for t in tp.transitions)
             out.append(
                 TestCase(
-                    test_id=test_id,
+                    test_id=f"{lr.layer.name}-{idx:03d}",
+                    kind="positive",
                     layer=lr.layer.name,
                     length=len(tp.transitions),
                     start=tp.start,
-                    sequence=sequence,
+                    sequence="|".join(_event_token(t) for t in tp.transitions),
                     end=tp.end,
-                    covers=covers,
+                    inject="",
+                    expect="",
+                    covers=";".join(transition_str(t) for t in tp.transitions),
+                )
+            )
+        # Negative tests continue from a distinct hundreds block (§6.1) so
+        # positive and negative ids never collide.
+        for idx, nt in enumerate(negatives.get(lr.layer.name, ()), start=101):
+            out.append(
+                TestCase(
+                    test_id=f"{lr.layer.name}-{idx:03d}",
+                    kind="negative",
+                    layer=lr.layer.name,
+                    length=len(nt.prefix),
+                    start=lr.layer.initial_id,
+                    sequence="|".join(_event_token(t) for t in nt.prefix),
+                    end=nt.source_state,
+                    inject=nt.inject_event,
+                    expect="no-transition",
+                    covers=f"{nt.source_state}--{nt.inject_event}--x",
                 )
             )
     return out
@@ -129,6 +168,7 @@ def _build_coverage_rows(
     layer_results: list[LayerResult],
     tests: list[TestCase],
     n: int,
+    negatives: dict[str, list[NegativeTest]],
 ) -> list[CoverageRow]:
     kind = "transition" if n == 0 else "chain"
     rows: list[CoverageRow] = []
@@ -161,6 +201,29 @@ def _build_coverage_rows(
                     break
             rows.append(row)
 
+    # Invalid-transition coverage rows (§6.2): one per invalid cell, marked
+    # covered by its negative test.
+    for lr in layer_results:
+        neg_id_by_element = {
+            tc.covers: tc.test_id
+            for tc in tests
+            if tc.layer == lr.layer.name and tc.kind == "negative"
+        }
+        for nt in negatives.get(lr.layer.name, []):
+            element = f"{nt.source_state}--{nt.inject_event}--x"
+            hits = {tid: "" for tid in test_ids_in_order}
+            tid = neg_id_by_element.get(element)
+            if tid is not None:
+                hits[tid] = "#"
+            rows.append(
+                CoverageRow(
+                    kind="invalid-transition",
+                    layer=lr.layer.name,
+                    element=element,
+                    hits=hits,
+                )
+            )
+
     rows.sort(key=lambda r: (r.kind, r.layer, r.element))
     return rows
 
@@ -186,10 +249,18 @@ def _test_covers_chain(tc: TestCase, chain: Chain) -> bool:
 def tests_to_csv(tests: list[TestCase]) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["test_id", "layer", "length", "start", "sequence", "end", "covers"])
+    writer.writerow(
+        [
+            "test_id", "kind", "layer", "length", "start",
+            "sequence", "end", "inject", "expect", "covers",
+        ]
+    )
     for tc in tests:
         writer.writerow(
-            [tc.test_id, tc.layer, tc.length, tc.start, tc.sequence, tc.end, tc.covers]
+            [
+                tc.test_id, tc.kind, tc.layer, tc.length, tc.start,
+                tc.sequence, tc.end, tc.inject, tc.expect, tc.covers,
+            ]
         )
     return buf.getvalue()
 

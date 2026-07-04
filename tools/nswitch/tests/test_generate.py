@@ -14,7 +14,32 @@ def test_tests_csv_header_is_stable():
     result = generate(model, n=0)
     csv = tests_to_csv(result.tests)
     header = csv.split("\n")[0]
-    assert header == "test_id,layer,length,start,sequence,end,covers"
+    assert header == (
+        "test_id,kind,layer,length,start,sequence,end,inject,expect,covers"
+    )
+
+
+def test_invalid_generates_negative_tests():
+    model = parse_puml(
+        "@startuml\n"
+        "[*] --> Idle\n"
+        "Idle --> Active : start\n"
+        "Active --> Idle : stop\n"
+        "Active --> [*] : done\n"
+        "@enduml\n"
+    )
+    # Events {start, stop, done}; invalid cells e.g. (Idle,stop), (Idle,done),
+    # (Active,start) each become a negative test.
+    result = generate(model, n=0, invalid=True)
+    negatives = [t for t in result.tests if t.kind == "negative"]
+    assert negatives, "expected negative tests for invalid cells"
+    nt = negatives[0]
+    assert nt.expect == "no-transition"
+    assert nt.inject
+    assert nt.covers.endswith("--x")
+    assert any(r.kind == "invalid-transition" for r in result.coverage)
+    # Without invalid, only positive tests are produced (unchanged behaviour).
+    assert all(t.kind == "positive" for t in generate(model, n=0).tests)
 
 
 def test_output_is_byte_deterministic():

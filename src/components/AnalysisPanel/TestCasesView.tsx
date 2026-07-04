@@ -6,7 +6,7 @@
 import { useTestCasesStore } from '../../stores/testCasesStore';
 import { getBaseUrl } from '../../services/nswitchService';
 import { useSessionStore } from '../../stores/sessionStore';
-import type { NSwitchLevel } from '../../types/testCase';
+import type { CoverageMode } from '../../types/testCase';
 import { ExportActions } from '../ExportActions';
 import {
   coverageToCsv,
@@ -17,15 +17,22 @@ import {
 import { copyHtmlAndText } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
 
-const N_OPTIONS: NSwitchLevel[] = [0, 1, 2];
+// Coverage selector (SR-103): positive N-switch levels + the negative
+// "Invalid" mode (invalid-transition tests, nswitch §7.2).
+const MODE_OPTIONS: { id: CoverageMode; label: string }[] = [
+  { id: 0, label: '0-switch' },
+  { id: 1, label: '1-switch' },
+  { id: 2, label: '2-switch' },
+  { id: 'invalid', label: 'Invalid' },
+];
 const VIEWS: { id: 'tests' | 'coverage'; label: string }[] = [
   { id: 'tests', label: 'Tests' },
   { id: 'coverage', label: 'Coverage' },
 ];
 
 export function TestCasesView() {
-  const n = useTestCasesStore((s) => s.n);
-  const setN = useTestCasesStore((s) => s.setN);
+  const mode = useTestCasesStore((s) => s.mode);
+  const setMode = useTestCasesStore((s) => s.setMode);
   const view = useTestCasesStore((s) => s.view);
   const setView = useTestCasesStore((s) => s.setView);
   const status = useTestCasesStore((s) => s.status);
@@ -48,28 +55,35 @@ export function TestCasesView() {
       ? testCasesToHtml(result.tests)
       : coverageToHtml(result.coverage, result.tests);
   };
-  const exportSuffix = view === 'tests' ? `testcases-n${n}` : `coverage-n${n}`;
+  const modeTag = mode === 'invalid' ? 'invalid' : `n${mode}`;
+  const exportSuffix =
+    view === 'tests' ? `testcases-${modeTag}` : `coverage-${modeTag}`;
 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="px-2 py-1 bg-gray-50 border-b border-gray-200 flex items-center gap-3 shrink-0">
-        <span className="text-xs text-gray-600">N-switch:</span>
-        <div role="radiogroup" aria-label="N-switch level" className="flex gap-1">
-          {N_OPTIONS.map((opt) => (
+        <span className="text-xs text-gray-600">Coverage:</span>
+        <div role="radiogroup" aria-label="Coverage mode" className="flex gap-1">
+          {MODE_OPTIONS.map((opt) => (
             <button
-              key={opt}
+              key={String(opt.id)}
               type="button"
               role="radio"
-              aria-checked={n === opt}
-              onClick={() => setN(opt)}
+              aria-checked={mode === opt.id}
+              onClick={() => setMode(opt.id)}
+              title={
+                opt.id === 'invalid'
+                  ? 'Invalid transitions: one negative test per empty state-table cell (forbidden transition). nswitch §7.2.'
+                  : `N-switch level ${opt.id}`
+              }
               className={`px-2 py-0.5 text-xs border rounded ${
-                n === opt
+                mode === opt.id
                   ? 'bg-indigo-500 text-white border-indigo-500'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
-              N={opt}
+              {opt.label}
             </button>
           ))}
         </div>
@@ -166,45 +180,71 @@ function TestsTable({
 }: {
   result: NonNullable<ReturnType<typeof useTestCasesStore.getState>['result']>;
 }) {
+  const headers = [
+    'test_id', 'kind', 'layer', 'length',
+    'start', 'sequence', 'end', 'inject', 'expect',
+  ];
   return (
     <table className="w-full text-xs border-collapse">
       <thead>
         <tr>
-          {['test_id', 'layer', 'length', 'start', 'sequence', 'end'].map(
-            (h) => (
-              <th
-                key={h}
-                className="border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600"
-              >
-                {h}
-              </th>
-            )
-          )}
+          {headers.map((h) => (
+            <th
+              key={h}
+              className="border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600"
+            >
+              {h}
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody>
-        {result.tests.map((t) => (
-          <tr key={t.test_id} title={t.covers}>
-            <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-              {t.test_id}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 text-gray-700 whitespace-nowrap">
-              {t.layer}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 text-right text-gray-700">
-              {t.length}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-              {t.start}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800">
-              {t.sequence}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-              {t.end}
-            </td>
-          </tr>
-        ))}
+        {result.tests.map((t) => {
+          const neg = t.kind === 'negative';
+          return (
+            <tr
+              key={t.test_id}
+              title={t.covers}
+              className={neg ? 'bg-red-50' : undefined}
+            >
+              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
+                {t.test_id}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 whitespace-nowrap">
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    neg
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {t.kind}
+                </span>
+              </td>
+              <td className="border border-gray-300 px-2 py-1 text-gray-700 whitespace-nowrap">
+                {t.layer}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 text-right text-gray-700">
+                {t.length}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
+                {t.start}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800">
+                {t.sequence}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
+                {t.end}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 font-mono text-red-700 whitespace-nowrap">
+                {t.inject}
+              </td>
+              <td className="border border-gray-300 px-2 py-1 text-red-700 whitespace-nowrap">
+                {t.expect}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

@@ -78,6 +78,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="N-switch level (0, 1, or 2). Default: 1.",
     )
     p.add_argument(
+        "--invalid",
+        action="store_true",
+        help=(
+            "Also emit negative tests: one per invalid transition (empty "
+            "state-table cell, §7.2). Orthogonal to -n."
+        ),
+    )
+    p.add_argument(
         "--format",
         choices=("puml", "csv"),
         default=None,
@@ -178,6 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         result = generate(
             model,
             n=args.n,
+            invalid=args.invalid,
             layered=args.layered,
             max_cycle_unroll=args.max_cycle_unroll,
             require_final=args.require_final,

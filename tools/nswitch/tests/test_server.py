@@ -94,6 +94,22 @@ def test_generate_puml_with_leading_comment_detected_as_puml():
         assert body["tests"]
 
 
+def test_generate_invalid_emits_negative_tests():
+    source = (
+        "@startuml\n[*] --> Idle\nIdle --> Active : start\n"
+        "Active --> Idle : stop\nActive --> [*] : done\n@enduml\n"
+    )
+    with running_server() as base:
+        status, body, _ = _post(
+            f"{base}/generate", {"source": source, "n": 0, "invalid": True}
+        )
+        assert status == 200
+        negs = [t for t in body["tests"] if t["kind"] == "negative"]
+        assert negs
+        assert negs[0]["expect"] == "no-transition"
+        assert any(r["kind"] == "invalid-transition" for r in body["coverage"])
+
+
 def test_generate_csv_input_explicit_format():
     csv_text = (
         "state,label,parent,type,initial,go\n"

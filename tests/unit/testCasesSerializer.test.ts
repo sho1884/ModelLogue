@@ -15,18 +15,39 @@ const sample: TestCase[] = [
     start: '[*]_init',
     sequence: '()|start|done',
     end: '[*]_final',
+    inject: '',
+    expect: '',
+    kind: 'positive',
     covers:
       '[*]_init--()-->Idle;Idle--start-->Active;Active--done-->[*]_final',
   },
   {
     test_id: 'Operating-001',
+    kind: 'positive',
     layer: 'Operating',
     length: 2,
     start: '[*]_init_Operating',
     sequence: 'pause|resume',
     end: 'Running',
+    inject: '',
+    expect: '',
     covers:
       '[*]_init_Operating--()-->Running;Running--pause-->Paused;Paused--resume-->Running',
+  },
+];
+
+const negativeSample: TestCase[] = [
+  {
+    test_id: 'top-101',
+    kind: 'negative',
+    layer: 'top',
+    length: 2,
+    start: '[*]_init',
+    sequence: '()|start',
+    end: 'Active',
+    inject: 'reset',
+    expect: 'no-transition',
+    covers: 'Active--reset--x',
   },
 ];
 
@@ -34,7 +55,7 @@ describe('testCasesSerializer (SR-102)', () => {
   it('CSV header matches §6.1', () => {
     const csv = testCasesToCsv(sample);
     expect(csv.split('\n')[0]).toBe(
-      'test_id,layer,length,start,sequence,end,covers'
+      'test_id,kind,layer,length,start,sequence,end,inject,expect,covers'
     );
   });
 
@@ -42,8 +63,15 @@ describe('testCasesSerializer (SR-102)', () => {
     const csv = testCasesToCsv(sample);
     const rows = csv.split('\n');
     expect(rows[1]).toBe(
-      'top-001,top,3,[*]_init,()|start|done,[*]_final,' +
+      'top-001,positive,top,3,[*]_init,()|start|done,[*]_final,,,' +
         '[*]_init--()-->Idle;Idle--start-->Active;Active--done-->[*]_final'
+    );
+  });
+
+  it('CSV negative test row carries kind, inject, expect, and the --x cell', () => {
+    const csv = testCasesToCsv(negativeSample);
+    expect(csv.split('\n')[1]).toBe(
+      'top-101,negative,top,2,[*]_init,()|start,Active,reset,no-transition,Active--reset--x'
     );
   });
 
@@ -51,24 +79,27 @@ describe('testCasesSerializer (SR-102)', () => {
     const withSpecials: TestCase[] = [
       {
         test_id: 'x-01',
+        kind: 'positive',
         layer: 'top',
         length: 1,
         start: 'A',
         sequence: 'ev [g,h]',
         end: 'B',
+        inject: '',
+        expect: '',
         covers: 'A--ev [g,h]-->B',
       },
     ];
     const csv = testCasesToCsv(withSpecials);
     const row = csv.split('\n')[1];
     expect(row).toBe(
-      'x-01,top,1,A,"ev [g,h]",B,"A--ev [g,h]-->B"'
+      'x-01,positive,top,1,A,"ev [g,h]",B,,,"A--ev [g,h]-->B"'
     );
   });
 
   it('empty list yields header-only CSV', () => {
     expect(testCasesToCsv([])).toBe(
-      'test_id,layer,length,start,sequence,end,covers'
+      'test_id,kind,layer,length,start,sequence,end,inject,expect,covers'
     );
   });
 

@@ -32,7 +32,7 @@ export function MainLayout() {
   const setAiAvailable = useUiStore((s) => s.setAiAvailable);
   const requestTestCases = useTestCasesStore((s) => s.requestGeneration);
   const resetTestCases = useTestCasesStore((s) => s.reset);
-  const nSwitchLevel = useTestCasesStore((s) => s.n);
+  const coverageMode = useTestCasesStore((s) => s.mode);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const testCasesDebounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -107,7 +107,7 @@ export function MainLayout() {
     modelTypeId,
     parseErrors,
     model,
-    nSwitchLevel,
+    coverageMode,
     requestTestCases,
     resetTestCases,
   ]);

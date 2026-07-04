@@ -36,8 +36,23 @@ def test_cli_puml_file_produces_test_case_csv(tmp_path: Path):
     r = _run([str(puml)])
     assert r.returncode == 0
     assert r.stdout.splitlines()[0] == (
-        "test_id,layer,length,start,sequence,end,covers"
+        "test_id,kind,layer,length,start,sequence,end,inject,expect,covers"
     )
+
+
+def test_cli_invalid_flag_emits_negative_rows():
+    source = (
+        "@startuml\n"
+        "[*] --> Idle\n"
+        "Idle --> Active : start\n"
+        "Active --> Idle : stop\n"
+        "Active --> [*] : done\n"
+        "@enduml\n"
+    )
+    r = _run(["--invalid"], stdin=source)
+    assert r.returncode == 0
+    assert ",negative," in r.stdout
+    assert "--x" in r.stdout
 
 
 def test_cli_stdin_auto_detects_puml():
