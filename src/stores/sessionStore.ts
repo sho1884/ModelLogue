@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import type {
   ChatMessage,
   SourceSnapshot,
@@ -72,7 +72,11 @@ function nextVersion(history: SourceSnapshot[]): number {
   return history[history.length - 1].version + 1;
 }
 
-export const useSessionStore = create<SessionStore>((set, get) => ({
+// Explicit type annotation (not just create<SessionStore>) breaks the
+// self-referential inference across the sessionStore <-> requirementsStore
+// import cycle; without it tsc collapses the store type to `any` (TS7022)
+// and every `(s) => s.x` selector downstream becomes an implicit-any error.
+export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<SessionStore>((set, get) => ({
   sessionId: crypto.randomUUID(),
   sessionName: 'Untitled Session',
   createdAt: new Date().toISOString(),

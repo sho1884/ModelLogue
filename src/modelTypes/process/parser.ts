@@ -24,7 +24,6 @@
 import type {
   ProcessFork,
   ProcessIf,
-  ProcessModel,
   ProcessNode,
   ProcessPartition,
   ProcessTask,
@@ -86,15 +85,6 @@ interface ParseContext {
   containerNode?: ProcessIf | ProcessFork | ProcessPartition;
   /** Fork-branch only: index into the parent fork.branches. */
   branchIndex?: number;
-}
-
-// Attaches a just-completed task to note-external extraction later.
-// We collect (lineNumber → task) pairs during the main parse so the
-// second pass can match note blocks back to their preceding task by
-// the nearest-earlier-task rule.
-interface TaskWithLine {
-  task: ProcessTask;
-  line: number;
 }
 
 // ===== Main parse =====

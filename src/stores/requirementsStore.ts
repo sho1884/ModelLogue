@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import { useSessionStore } from './sessionStore';
 
 // SR-080 (v7.1): the short requirements text scoped to the current model.
@@ -17,7 +17,9 @@ interface RequirementsStore {
   characterCount: () => number;
 }
 
-export const useRequirementsStore = create<RequirementsStore>((set, get) => ({
+// Explicit type annotation breaks the self-referential inference across the
+// requirementsStore <-> sessionStore import cycle (see sessionStore.ts).
+export const useRequirementsStore: UseBoundStore<StoreApi<RequirementsStore>> = create<RequirementsStore>((set, get) => ({
   requirementsText: '',
 
   setRequirementsText: (text) => {
