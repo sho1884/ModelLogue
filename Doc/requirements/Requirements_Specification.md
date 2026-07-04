@@ -74,6 +74,7 @@ This document defines requirements for ModelLogue, a model review platform for s
 | UR-015 | Review a business process / workflow diagram / 業務プロセス図をレビューする **(v7.6)** | High / 高 |
 | UR-016 | Establish the correct model type for the session, even when type is unstated or initially miscued / 型未指定／誤選択時にもセッションを正しいモデル型で確立する **(v7.7)** | Medium / 中 |
 | UR-017 | Have multiple participants take part in the review chat / 複数人がチャットでレビューに参加する **(v7.8 planned, Slack 中継で実現)** | High / 高 |
+| UR-018 | Run reviews without AI when unauthenticated, unlock AI by authenticating as the operator / 未認証では AI 無しでレビュー、operator として認証したときのみ AI を使う **(v8.0 planned, 公開ベータ)** | High / 高 |
 
 > **Note 1**: UR-009とUR-010の前後（初版生成手段、終了後フィードバック先）はn8nワークフローで現場ごとに構成する。ModelLogue本体は入出力の境界に専念する。詳細は [ADR-008](../adr/ADR-008-scope-boundary-with-surrounding-workflow.yaml) を参照。
 >
@@ -1022,6 +1023,48 @@ UR-017 のニーズは単純：**レビューに複数人がチャットで参�
 
 ---
 
+### 3.18 Public Deployment & AI Authorization / 公開デプロイと AI 認可 (UR-018, v8.0 planned)
+
+UR-018 のニーズ：**ModelLogue を他者に公開しつつ（まずは限定公開ベータ）、AI だけは認証した operator に限定する**。ModelLogue は AI 無しでも有用（図の表示・各種マトリクス／トレーサビリティ・マーカー・証跡保存はクライアント側または秘密無しサービス＝PlantUML Server / nswitch で成立）で、AI 対話経路だけが n8n を通り、Gemini API キーと従量課金を伴う。したがって未認証の訪問者には AI 抜きのフル機能（チャット欄非表示）を、認証 operator には AI も提供する。
+
+AI ゲートへの要求は**3つだけ**：**安全・簡単・後で変えやすい**。operator が認証の仕組みを自前で持つ必要はない。これらは、AI 境界を**プロバイダ非依存の forward-auth の継ぎ目**にすることで満たす（n8n は「認証済みリクエストが継ぎ目に届いたこと」だけを要求し、"誰がどう認証したか" は差し替え可能な手前の部品に委ねる）。
+
+#### 3.18.1 セキュリティの不変条件（＝要求「安全」）
+
+この AI ゲートを**安全に**する不変条件（詳細は [NFR-090](./nonfunctional_requirements.yaml)）。素朴な発想はいずれも危険で、以下が正しい：
+
+- **スイッチは「認証された identity」**であり、「n8n の有無・到達性」ではない。デプロイ環境では n8n は存在し接続先も固定で、operator にも不特定多数にも同じ。だから n8n の存在では利用者を区別できない。区別してよいのは「自分は認証済み operator か」だけ。
+- **強制はサーバ側**（認証ゲート／n8n）。フロントのゲート（SR-136）はバイパス可能なので、系の安全性をそこに依存させない。**フロントを丸ごと取り除いても成立**していなければならない。
+- **AI 境界はゲートを通過したリクエストのみ信頼する**。origin はゲート経由でしか到達できない形にする（ネットワーク隔離、または n8n がゲートの署名アサーションを検証）。クライアントが立てた「認証済み」という主張は信じない。operator の秘密を SPA に埋めない（SPA の JS は公開＝抽出される）。
+
+結果として Gemini キーとそのコストが匿名の濫用から守られる。
+
+#### 3.18.2 導出機能（SR）
+
+| 区分 | SR | 概要 |
+|---|---|---|
+| フロント・ゲート（保険） | **SR-136** | 認証 operator でなければチャット欄を出さず n8n/relay 呼び出しを一切行わない。スイッチは identity（n8n の有無ではない） |
+| サーバ強制（本命の境界） | **SR-137** | AI 経路はゲートを通過したリクエストのみ処理。origin をゲート経由でしか到達できなくし、未認証は Gemini 呼び出し前に遮断。フロントを外しても成立 |
+| 認証機構（継ぎ目＋ゲート） | **SR-138** | AI 境界をプロバイダ非依存の forward-auth の継ぎ目にし、ベータは**作らずに済むマネージドゲート**（operator の許可リスト）で実現。プロバイダは継ぎ目の手前で差し替え可能 |
+| トポロジ | **SR-139** | app 群（SPA + PlantUML + n8n + nswitch）を compose スタックで配備し、ゲートの手前に置く。同一オリジン化＋ SPA の実行時/相対設定で host ごとの再ビルド不要。ゲート提供元・静的ホストの選択を後から変更可能 |
+
+#### 3.18.3 品質要求（NFR）
+
+- **[NFR-090](./nonfunctional_requirements.yaml)**（＝要求「安全」）— AI 認可：identity スイッチ＋サーバ強制＋ゲート通過のみ信頼（上記 3.18.1）。NFR-030（Security）の AI 経路への拡張
+- **[NFR-091](./nonfunctional_requirements.yaml)**（＝要求「簡単・変えやすい」）— 認証境界は当面マネージドゲートで**作らず簡単に**、継ぎ目のおかげでプロバイダを後から差し替え可能（マネージド→自前 forward-auth/OIDC/社内 SSO）。セルフホストは"継ぎ目が許す将来の変更"であって launch 要件ではない。NFR-060（Deployment）の拡張
+
+#### 3.18.4 設計判断のサマリ（次セッションへ）
+
+- UR-018 = 未認証は AI 無し・operator のみ AI
+- AI ゲートへの要求は3つだけ = **安全・簡単・後で変えやすい**（operator が認証を自前で持つ必要はない）
+- 安全 = 「identity がスイッチ／サーバ側で強制／ゲート通過のみ信頼」（フロントは保険にすぎない）
+- 簡単・変えやすさ = **forward-auth の継ぎ目**（今すぐ決める唯一の設計判断・プロバイダ非依存）＋当面は**作らないマネージドゲート**。セルフホスト等は継ぎ目が許す将来の変更
+- 導出機能（SR-136〜139）= フロント・ゲート／サーバ強制（origin 隔離）／継ぎ目＋マネージドゲート／変更に強いトポロジ
+- 汎用 OIDC やログインを先回りで作らない（無駄）。継ぎ目を綺麗に保つことで、現場は「改造」ではなく「接ぎ木（多くは設定のみ）」でプロバイダを差し替えられる
+- これは通常の決定事項なので仕様（本節＋SR/NFR）に記録する。ADR は将来効く教訓を伴う決定に限る方針のため起こさない
+
+---
+
 ## 4. Non-Functional Requirements / 非機能要件
 
 > Source / 出典: [nonfunctional_requirements.yaml](./nonfunctional_requirements.yaml)
@@ -1039,6 +1082,8 @@ UR-017 のニーズは単純：**レビューに複数人がチャットで参�
 | NFR-070 | Licensing / ライセンス | MIT project, permissive deps only (no GPL/LGPL/AGPL) |
 | NFR-080 | Usability / ユーザビリティ (UR-017) | 進行役は ModelLogue 単独画面で複数人レビューを駆動、参加者は Slack 単独でレビューを追える、各メッセージは source 識別子付き |
 | NFR-081 | Performance / パフォーマンス (UR-017) | Slack→ModelLogue ≤ 4s、ModelLogue→Slack ≤ 2s、relay 不達時も ChatPanel 通常動作 |
+| NFR-090 | Security / セキュリティ (UR-018) | AI 可用性は認証 identity で決まり n8n の有無ではない、拒否はサーバ側で強制（フロント除去でも成立）、AI 境界はゲート通過のみ信頼（origin 隔離）、未認証には Gemini 呼び出しをしない |
+| NFR-091 | Maintainability / 保守性 (UR-018) | 認証境界は当面マネージドゲートで作らず簡単に、forward-auth の継ぎ目でプロバイダを後から差し替え可能（マネージド→自前/OIDC/社内SSO）、host ごとの再ビルド不要 |
 
 ---
 

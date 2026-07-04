@@ -2,8 +2,8 @@
 # Format: Task expression (Value Engineering)
 # Writing convention: Short verb phrase describing user task
 
-version: "7.7"
-last_updated: "2026-05-01"
+version: "8.0"
+last_updated: "2026-07-04"
 
 # Version 7.0 highlights:
 #   - Reframed as a review tool where PlantUML source and requirements text
@@ -343,4 +343,56 @@ requirements:
         - Real-time multi-user marker / source collaboration is
           a separate concern; if pursued it belongs to its own
           UR.
+    priority: high
+
+  UR-018:
+    task: "Run reviews without AI when unauthenticated, and unlock AI assistance by authenticating as the operator"
+    background: >
+      To publish ModelLogue for others (starting with a limited
+      public beta), the tool must be useful to an anonymous visitor
+      AND keep AI — the only paid, secret-bearing capability —
+      restricted to the operator.
+
+      ModelLogue is already useful without AI: diagram rendering,
+      parsing, the matrices/traceability/coverage tabs, and marker
+      annotation all run client-side or through secret-free services
+      (PlantUML Server, nswitch). Only the AI dialogue path goes
+      through n8n, which holds the Gemini API key and incurs
+      per-call cost. So an unauthenticated visitor should get the
+      full review tool minus AI (no chat pane), while the
+      authenticated operator gets AI as well.
+
+      The user-side need has two facets bundled here because they
+      are the two sides of one switch:
+
+      a) Anonymous, AI-free use. An unauthenticated visitor can
+         review a model end to end (display, tables, markers,
+         save evidence) without any AI, and without the chat pane
+         appearing at all.
+
+      b) Operator-only AI. Only the operator (the single
+         authenticated identity, for now) can use the AI. This
+         both scopes the beta audience and protects the Gemini key
+         and its cost from anonymous abuse.
+
+      The requirements on the AI gate are only three: it must be
+      (1) SAFE, (2) SIMPLE, and (3) EASY TO CHANGE LATER if someone
+      wants to swap how authentication is done. The operator does
+      NOT need to own or self-host the auth mechanism — that was
+      never a requirement.
+
+      Those three are met by making the AI boundary a
+      provider-agnostic FORWARD-AUTH SEAM: n8n requires only that
+      an authenticated request reached the boundary, so "who
+      authenticated and how" lives in a swappable front-piece.
+      The switch is thus authenticated identity (never whether n8n
+      is present/reachable), enforcement is server-side, and the
+      frontend behaviour is only insurance. Concretely the seam is
+      realised for the beta by a MANAGED access gate (nothing to
+      build); self-hosting the gate later is one of the changes the
+      seam permits, not a launch requirement.
+
+      Implementation detail is otherwise NOT specified here. The
+      derived functions are SR-136–139; the quality bars are
+      NFR-090 (safe) / NFR-091 (simple + changeable).
     priority: high

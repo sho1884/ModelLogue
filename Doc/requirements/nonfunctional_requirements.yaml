@@ -1,7 +1,7 @@
 # ModelLogue Non-Functional Requirements
 
-version: "5.1"
-last_updated: "2026-05-01"
+version: "6.0"
+last_updated: "2026-07-04"
 
 requirements:
   NFR-001:
@@ -167,3 +167,70 @@ requirements:
         standard: "≤ 2 seconds from chat send (or AI reply receipt) to appearance in the Slack channel"
       - item: "Relay failure mode"
         standard: "If the relay endpoint is unreachable, the local ModelLogue chat continues to function; failures are logged but do not break the chat pane"
+
+  NFR-090:
+    parent: [UR-018]
+    category: security
+    name: "AI authorization — identity switch, server-enforced"
+    rationale: |
+      UR-018 gates AI (the only paid, secret-bearing capability)
+      behind authentication. This NFR fixes the invariant that makes
+      that gate actually safe, because the naive framings are unsafe:
+
+        - The switch must be AUTHENTICATED IDENTITY, not "n8n is
+          present / reachable". In a deployment n8n exists and is
+          fixed for everyone — operator and anonymous visitors alike
+          — so its presence cannot discriminate users. Only "am I the
+          authenticated operator?" is a legitimate discriminator.
+        - Enforcement must be SERVER-SIDE (the auth gate / n8n).
+          Frontend gating (SR-136) is bypassable, so the system's
+          safety must not depend on it; the property must hold even
+          if the entire frontend is removed.
+        - The AI boundary must trust only requests that PASSED THE
+          GATE — the origin reachable only through the gate (network
+          isolation, or n8n verifying the gate's signed assertion) —
+          never a client-set "authenticated" claim; and no operator
+          secret is embedded in the SPA build (the SPA's JS is public
+          and any bearer could extract it).
+
+      Net effect: the Gemini API key and its per-call cost are
+      protected from anonymous abuse. Extends NFR-030 (Security) for
+      the AI relay path. Realised by SR-136 (insurance) + SR-137
+      (boundary / origin isolation) + SR-138 (the gate).
+    criteria:
+      - item: "Switch basis"
+        standard: "AI availability is decided by authenticated identity, never by whether n8n is configured or reachable"
+      - item: "Enforcement location"
+        standard: "Rejection of unauthenticated AI requests happens server-side (n8n / in-stack proxy) and holds even if the entire frontend is removed"
+      - item: "Boundary integrity"
+        standard: "The AI boundary accepts only requests that passed the gate (origin reachable only through the gate); a client-set 'authenticated' claim or an SPA-embedded static secret is not accepted"
+      - item: "Cost protection"
+        standard: "No Gemini call is made on behalf of an unauthenticated request"
+
+  NFR-091:
+    parent: [UR-018]
+    category: maintainability
+    name: "Auth boundary — simple now, changeable later"
+    rationale: |
+      The operator's requirements for the AI gate are only three:
+      safe, simple, and easy to change later. Safety is NFR-090;
+      this NFR fixes SIMPLE and CHANGEABLE. The operator does not
+      build or own the auth. The AI boundary is a provider-agnostic
+      forward-auth seam (SR-138): n8n requires only that an
+      authenticated request reached the seam, so the front-piece is
+      swappable. For the beta the simplest safe realisation is
+      chosen — a managed access gate with nothing to build.
+      Self-hosting the gate (e.g. oauth2-proxy / Authelia / a site's
+      own OIDC / corporate SSO) is one of the changes the seam
+      permits, not a launch requirement. Extends NFR-060
+      (Deployment). Realised by SR-138 (the seam + managed gate) +
+      SR-139 (change-friendly topology).
+    criteria:
+      - item: "Simple to stand up"
+        standard: "The beta gate requires no bespoke auth code — a managed access gate plus an allowlist of the operator, TLS included"
+      - item: "Provider replaceable"
+        standard: "The gate provider can be swapped (managed → self-hosted forward-auth / OIDC / corporate SSO) without changing the seam contract the AI boundary relies on, and without rebuilding the SPA — often configuration-only"
+      - item: "Stable seam"
+        standard: "The AI boundary depends only on 'an authenticated request reached the seam', not on any specific provider's specifics beyond the seam"
+      - item: "Deploy portability"
+        standard: "The SPA deploys to a different host by changing only a small env / the domain (no per-host rebuild); a static host MAY front the SPA but is not required"

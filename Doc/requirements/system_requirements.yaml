@@ -3,8 +3,8 @@
 # Subject is always the artifact (component/system), omitted by convention.
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
-version: "7.5"
-last_updated: "2026-04-22"
+version: "8.0"
+last_updated: "2026-07-04"
 
 # Version 7.5 highlights (planned, not yet implemented):
 #   - UR-014 (new): "Review a requirement diagram" — a second model
@@ -1994,6 +1994,138 @@ parser_diagnostics:
       - "Doc/architecture.md (or an inline note in the n8n workflow) clearly states this is Phase A and that per-session selection is deferred"
       - "Removing or unsetting SLACK_RELAY_CHANNEL_ID cleanly disables the relay — the local chat continues to work without errors"
       - "The Phase B follow-up (per-session channel selection) is captured as a documented future SR rather than left implicit"
+
+  SR-136:
+    function: "Hide the chat pane and suppress every n8n / AI relay call unless the current user is the authenticated operator"
+    parent: [UR-018]
+    component: src/components/MainLayout.tsx (ChatPanel mount gate) + src/services/n8nService.ts + src/services/slackRelay.ts + an AI-availability flag derived from auth state
+    status: planned  # v8.0 (public beta)
+    notes: |
+      The frontend half of UR-018's AI gate. Today ChatPanel is
+      rendered unconditionally in MainLayout (~line 143) and
+      n8nService / slackRelay call their webhooks whenever
+      configured. SR-136 makes the chat pane and all AI/relay
+      traffic conditional on the user being the authenticated
+      operator.
+
+      Critical framing (see NFR-090):
+        - The switch is the AUTHENTICATED IDENTITY, never whether
+          n8n is configured or reachable. In a deployment n8n
+          exists and is fixed for everyone (operator and anonymous
+          visitors alike), so its presence cannot discriminate
+          users. Only "am I the authenticated operator?" may drive
+          the switch.
+        - This frontend gate is INSURANCE, not the security
+          boundary. It is bypassable (a modified client can call
+          n8n anyway), so the system's safety must NOT depend on
+          it. The real boundary is SR-137 (server-side). SR-136
+          exists for UX (anonymous users see a clean AI-free app)
+          and to avoid doomed calls.
+
+      Anonymous experience: full review tool minus AI — display,
+      tables, markers, save evidence all work; the chat pane does
+      not appear.
+    acceptance_criteria:
+      - "When the user is not the authenticated operator, the chat pane is not rendered and zero requests are sent to the n8n chat or Slack-relay webhooks"
+      - "When the user is the authenticated operator, the chat pane is shown and the AI relay works normally"
+      - "The visibility switch is driven by authenticated identity, never by whether VITE_N8N_BASE_URL / the n8n endpoint is configured or reachable"
+      - "Removing this gate entirely does not expose the AI to anonymous users, because SR-137 still rejects unauthenticated calls server-side"
+
+  SR-137:
+    function: "Ensure the AI relay boundary serves only requests that have passed the auth gate — the origin is reachable only through the gate (or n8n verifies the gate's signed assertion) — so an unauthenticated request never reaches a Gemini call"
+    parent: [UR-018]
+    component: the auth gate (managed access gate for the beta) in front of the AI route + origin network isolation and/or a verification step at the head of the n8n chat/relay workflows
+    status: planned  # v8.0 (public beta)
+    notes: |
+      The server-side half of UR-018's AI gate, and THE security
+      boundary (SR-136 is only insurance). This must hold even if
+      the entire frontend is removed or a hostile client crafts
+      requests directly.
+
+      Realised as a forward-auth seam (SR-138):
+        - The AI boundary trusts only requests that have passed the
+          gate. It never trusts a client-asserted "I am
+          authenticated" flag — that would collapse the two layers
+          into the untrustworthy one.
+        - Safety of the seam depends on the origin being reachable
+          ONLY through the gate. Achieve this by network isolation
+          (e.g. a tunnel, or allowing only the gate's IPs) or by
+          having n8n verify the gate's signed assertion — otherwise
+          the gate can be bypassed by hitting the origin directly.
+        - Rejection happens BEFORE any Gemini call, so the API key
+          is never spent on behalf of a non-operator. This is what
+          protects cost.
+    acceptance_criteria:
+      - "A request that has not passed the auth gate cannot reach the AI route, and no Gemini API call is made for it"
+      - "The origin is not directly reachable in a way that bypasses the gate (tunnel / IP allowlist / signed-assertion verification)"
+      - "A bare client-set 'authenticated' flag with no gate passage is not accepted"
+      - "Disabling or removing the SR-136 frontend gate does not weaken this — the AI boundary still rejects unauthenticated calls"
+
+  SR-138:
+    function: "Gate the AI boundary with a provider-agnostic forward-auth seam, realised for the beta by a managed access gate (an allowlist of the operator) with nothing to build, and keep the gate provider swappable behind the seam"
+    parent: [UR-018]
+    component: a managed access gate in front of the AI route (beta) + the forward-auth seam contract the AI boundary (SR-137) relies on
+    status: planned  # v8.0 (public beta)
+    notes: |
+      The auth mechanism behind SR-137. The operator does NOT build
+      or own the auth — the requirements are only safe / simple /
+      changeable (NFR-090 / NFR-091).
+
+      Decisions:
+        - Simplest safe realisation NOW: a MANAGED access gate
+          (e.g. Cloudflare Access) in front of the AI route, with
+          an allowlist of the single operator and managed TLS.
+          Nothing to build or run; login (Google / OTP / etc.) and
+          enforcement are the gate's job.
+        - Changeability (the reason we don't lock in): the AI
+          boundary depends only on "an authenticated request
+          reached the seam", NOT on the specific provider. So the
+          gate can later be swapped — managed → self-hosted
+          forward-auth (oauth2-proxy / Authelia) → a site's own
+          OIDC / corporate SSO — without reworking n8n or the SPA.
+          Self-hosting is one such change, not a launch
+          requirement.
+        - We do NOT build generic OIDC or a login component up
+          front (unrequested speculative work). We only keep the
+          seam clean so the front-piece is replaceable.
+        - No secret that identifies the operator is embedded in the
+          SPA build. No hand-rolled crypto — rely on the gate's
+          vetted implementation. Enforcement over HTTPS.
+    acceptance_criteria:
+      - "The operator reaches the AI route only after passing the gate; a non-allowlisted user does not"
+      - "Standing up the beta gate requires no bespoke auth code — a managed access gate plus an allowlist of one"
+      - "The gate provider can be swapped (managed → self-hosted forward-auth / OIDC) without changing the seam contract the AI boundary (SR-137) relies on, and without rebuilding the SPA"
+      - "No secret that identifies or authenticates the operator is embedded in the shipped SPA build"
+
+  SR-139:
+    function: "Deploy the app services as a Docker Compose stack that sits behind the auth gate, wired so the gate provider and the static-host choice can change without reworking the app"
+    parent: [UR-018]
+    component: docker-compose (SPA + PlantUML + n8n + nswitch) + a reverse proxy for same-origin routing + SPA runtime/relative config
+    status: planned  # v8.0 (public beta)
+    notes: |
+      The deployment topology for UR-018. The app services
+      (SPA + PlantUML + n8n + nswitch) run as a compose stack; the
+      auth gate (SR-138) sits in front of the AI route. For the
+      beta the gate is a managed access gate; a self-hosted gate
+      MAY later occupy the same seam (NFR-091).
+
+      Keep the deployment easy and change-friendly:
+        - Route the SPA and the n8n relay under a single origin (a
+          reverse proxy) so the browser's AI calls are same-origin
+          — no CORS / cross-site-cookie friction, and no per-host
+          rebuild.
+        - The SPA reads its endpoints at runtime / as relative
+          paths, NOT baked absolute URLs at build time, so the same
+          image deploys to any host by changing only a small env /
+          the domain (avoids the VITE_* build-time rebuild trap).
+        - A static host (e.g. Vercel) MAY additionally front the
+          SPA, but is not required — this is one of the swappable
+          choices, not a hard dependency.
+    acceptance_criteria:
+      - "`docker compose up` brings up the app services (SPA served + PlantUML + n8n + nswitch)"
+      - "The SPA and the n8n relay are reachable under a single origin via the reverse proxy, so AI calls are same-origin"
+      - "The SPA image deploys to a different host by changing only a small env / the domain — no per-host rebuild"
+      - "The auth gate provider and the static-host choice can each change without reworking the app services"
 
 # =============================================================================
 # Data Model
