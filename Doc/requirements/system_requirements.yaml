@@ -360,7 +360,7 @@ state_transition_table:
       - "Composite-state rows hold group-escape transitions (transitions whose source is the composite itself)"
       - "Child-state rows hold the transitions internal to the composite, plus any transitions from that specific child"
       - "Child rows are visually indented under their parent row"
-      - "Cell value: next state name (or empty if no transition)"
+      - "Cell value: next state name for a valid transition; `-` (ASCII hyphen, locale-safe) for an invalid transition (no transition on that event) — never left blank, so the forbidden/invalid transitions are visible. These `-` cells are the negative-test targets (UR-013, nswitch §7.2)"
       - "Recalculate reactively when model changes"
     rules:
       - context: "Transition has guard condition"
@@ -892,10 +892,19 @@ artifact_export:
       source is empty or has parse errors, and cache the last good
       response while a new one is in flight so the tab is never blank
       mid-keystroke.
+
+      Invalid-transition (negative) mode (v8.x): the coverage-mode selector
+      gains a fourth choice `Invalid` alongside `0/1/2-switch`. It requests
+      `invalid=true` from the service (nswitch §7.2/§9.2) and renders the
+      returned `negative` tests (kind/inject/expect). This is the GUI
+      surface of UR-013's negative half — the empty state-table cells the
+      State×Event matrix now shows as `-` (SR-020). The nswitch positive
+      algorithm is unchanged; this only adds a mode.
     acceptance_criteria:
       - "A fourth Analysis-panel tab labelled 'Test cases' appears after State×State"
-      - "The tab shows a table with one row per generated test case (test_id, layer, length, start, sequence, end) and a tooltip / expand for the full `covers` chain"
-      - "Selecting N (0 / 1 / 2) updates the list in place; default N=1"
+      - "The tab shows a table with one row per generated test case, including a `kind` column (positive / negative); positive rows show test_id/layer/length/start/sequence/end with a tooltip / expand for the full `covers` chain; negative rows additionally show `inject` (the invalid event) and `expect` (`no-transition`)"
+      - "A coverage-mode selector with four choices updates the list in place: `0-switch` / `1-switch` / `2-switch` (positive N-switch; default `1-switch`, calls the service with the matching `n`) and `Invalid` (negative tests for the empty state-table cells, calls the service with `invalid=true`)"
+      - "In `Invalid` mode the negative tests are visually distinct from positive tests (badge / colour), so a forbidden-transition test is not mistaken for a coverage sequence"
       - "The list updates reactively after a successful parse (same debounce as SVG fetch) without requiring a manual refresh"
       - "When tools/nswitch/ responds with `uncovered` entries, a warning banner lists them above the table"
       - "When the nswitch service is unreachable, the tab shows a connection-error hint with the probed URL; the rest of the UI keeps working"

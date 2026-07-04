@@ -185,6 +185,8 @@ ModelLogueの状態遷移表は、業界調査（ISO/IEC/IEEE 29119-4、MATLAB S
 
 複合状態がない図では、従来通りフラットな表として表示される。
 
+> **空欄セル＝禁止遷移 (v8.x)** / **Empty cell = forbidden transition**: 遷移が無い `(状態, イベント)` セルは**空白のままにせず `-`（英語圏でも安全な ASCII ハイフン）で明示**する。これらが「その状態でそのイベントは受け付けてはならない」禁止遷移＝**負テストの対象**（UR-013、[nswitch §7.2](../../tools/nswitch/Requirements_Specification.md)）。状態遷移表を描く理由そのものが、図に現れないこの空欄をあぶり出すことにある（ソフトでは未処理入力＝暴走の温床）。A cell with no transition is shown as `-`, never blank — the invalid/forbidden transitions, which are the negative-test targets.
+
 **PreState×PostState Matrix / 遷移前×遷移後マトリクス** (SR-021、ハイブリッド表示の例):
 
 |  | Operating | Idle | Working | Failure |
@@ -280,6 +282,7 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 - テストケース生成は補助サービス（[`tools/nswitch/`](../../tools/nswitch/)）の責務。ModelLogue 本体はその HTTP API (§9.2) を叩いて結果を並べるだけ。重い計算ロジックは本体に取り込まない（ADR-010）。
 - タブ内での**リアクティブ更新**を最優先。パース成功時に SVG 取得と同じデバウンスで自動再計算する。ユーザーが N (0/1/2) を切り替えた時も即時反映。
 - エラーは **in-place 表示**：サービスが落ちていても、パースエラーがあっても、タブ内に原因を出すだけで UI 全体は動き続ける。
+- **Invalid モード (v8.x)**：被覆モード選択に 4 つ目 `Invalid` を追加（`0-switch / 1-switch / 2-switch / Invalid`）。`invalid=true` で nswitch を呼び、空欄セル（禁止遷移）の**負テスト**（`inject`／`expect`）を表示し、正テストと視覚的に区別する。UR-013 の「負の半分」の GUI 面で、State×Event 表が `-` で見せる禁止遷移（SR-020）に対応。nswitch の正側アルゴリズムは不変で、モードが増えるだけ。
 
 **設計意図**:
 
@@ -1228,7 +1231,7 @@ Marker geometry is in the SVG coordinate space (the space of the PlantUML SVG). 
 | Composite State / 複合状態 | A state that contains child states. Used to factor out common behavior of a group of states. ModelLogue supports one level only (ADR-009). / 子状態を内包する状態。複数状態の共通動作を集約する。ModelLogueは1階層のみサポート |
 | Group Escape Transition / グループ脱出遷移 | A transition whose source is a composite state, meaning "from any child state" / 複合状態を遷移元とする遷移。「内部のどの子状態からでも」という意味 |
 | Hybrid Pattern / ハイブリッドパターン | State transition table layout where both composite states and child states appear as rows, with children indented under their parent (industry standard per ISO/IEC/IEEE 29119-4) / 複合状態と子状態の両方を行に含め、子状態を親の下にインデント表示する状態遷移表のレイアウト |
-| State×Event Matrix / 状態×イベント表 | Table with states as rows, events as columns, cells showing next state / 行：状態、列：イベント、セル：遷移先状態 |
+| State×Event Matrix / 状態×イベント表 | Table with states as rows, events as columns, cells showing next state (or `-` for an invalid/forbidden transition) / 行：状態、列：イベント、セル：遷移先状態（禁止遷移は `-`） |
 | PreState×PostState Matrix / 遷移前×遷移後表 | Table with source states as rows, target states as columns, cells showing event / 行：遷移元、列：遷移先、セル：イベント |
 | Marker / マーカー | A colored shape (ellipse, rectangle, or arrow) drawn by the reviewer on top of the diagram to indicate "look here". Markers have an id, type, color, and geometry, and are passed to the AI as context. / レビューアが図の上に描く色付き図形（楕円・矩形・矢印）。「ここに注目」を示す。ID、タイプ、色、座標を持ち、AIにコンテキストとして渡される |
 | Marker Color Palette / マーカー色パレット | Fixed four-color set (red, blue, green, purple). New markers get an unused color; if all four are in use, a new marker cannot be added. / 4色固定（赤、青、緑、紫）。新マーカーは未使用色を取り、4色すべて使用中なら追加不可 |

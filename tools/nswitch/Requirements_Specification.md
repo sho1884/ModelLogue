@@ -14,7 +14,7 @@
 
 ## 1. Overview / 概要
 
-**modellogue-nswitch** is a self-contained command-line tool that reads a state machine description — either a **PlantUML source** (in the EBNF-defined subset) or a **state transition table CSV** — and emits a **test case CSV** covering every N-switch transition sequence. It is an ADR-010 auxiliary service: independent of the ModelLogue GUI, runnable anywhere Python 3.10+ is available, designed for CI/CD pipelines and data-driven testing frameworks.
+**modellogue-nswitch** is a self-contained command-line tool that reads a state machine description — either a **PlantUML source** (in the EBNF-defined subset) or a **state transition table CSV** — and emits a **test case CSV** covering every N-switch transition sequence (positive tests) and, optionally, a **negative test for every invalid transition** — the empty cells of the derived state table (§7.2). It is an ADR-010 auxiliary service: independent of the ModelLogue GUI, runnable anywhere Python 3.10+ is available, designed for CI/CD pipelines and data-driven testing frameworks.
 
 ModelLogue とは独立に動くテストケース生成 CLI。入力は **PlantUML サブセット** または **状態遷移表 CSV** のどちらでも可。出力は N-switch カバレッジを満たすテストケース CSV。ADR-010 の補助サービス方針に従い Python で独立実装し、CI から容易に呼び出せる。
 
@@ -27,7 +27,7 @@ ModelLogue とは独立に動くテストケース生成 CLI。入力は **Plant
 
 ### Non-goals / スコープ外
 
-- **Test oracle generation**: this tool emits *sequences* to exercise, not expected outputs/assertions. Pairing with oracles is the downstream framework's job.
+- **Full oracle generation**: for *positive* (valid-transition) tests the tool emits sequences to exercise, not expected outputs — pairing rich oracles is the downstream framework's job. *Negative* (invalid-transition) tests are the deliberate exception: they carry the minimal expectation that the invalid event causes **no improper state change**, because that assertion is the whole point of exercising an invalid cell (§7.2).
 - **Layout / image output**: text and CSV only. Visual rendering stays in the GUI.
 - **Beyond the ADR-009 subset**: orthogonal regions, nested composites beyond one level, history pseudo-states, and dot-notation entry are rejected at input.
 - **Arbitrary N**: only N ∈ {0, 1, 2} is supported (see §3). Higher N yields combinatorial blow-up with little practical benefit for review-scale models.
@@ -86,7 +86,8 @@ modellogue-nswitch serve [--port PORT] ...    # long-running HTTP server
 
 | Option | Default | Description |
 |---|---|---|
-| `-n N`, `--n N` | `1` | N-switch level. Accepted values: **0 / 1 / 2** only. N=0 exercises each transition once; N=1 each transition pair; N=2 each triple. |
+| `-n N`, `--n N` | `1` | N-switch level for **positive** tests. Accepted values: **0 / 1 / 2** only. N=0 exercises each transition once; N=1 each transition pair; N=2 each triple. |
+| `--invalid` | off | Also emit **negative** tests: one per invalid transition (empty state-table cell, §7.2). Orthogonal to `-n`. With `--invalid` and no `-n`, only negative tests are produced. |
 | `--format puml\|csv` | auto | Force input format. |
 | `-o FILE`, `--output FILE` | stdout | Write output to FILE instead of stdout. |
 | `--coverage` | off | Emit coverage-report CSV (which tests cover which transitions / chains) instead of the default test-case CSV. |
@@ -287,43 +288,50 @@ One row per test case. Each test is a sequence of transitions, grouped by *layer
 | Column | Type | Meaning |
 |---|---|---|
 | `test_id` | string | Stable identifier. Format `<layer>-<seq>`, e.g. `top-001`, `Operating-001`. |
+| `kind` | string | `positive` — a valid transition sequence (N-switch). `negative` — an invalid-transition robustness test (§7.2). |
 | `layer` | string | `top` for the composed machine; the composite's state id (e.g. `Operating`) for a child-layer test. |
-| `length` | integer | Number of transitions in this test. |
-| `start` | string | State id the sequence starts at. |
-| `sequence` | string | Pipe-separated event labels, in order. Each element is `event` optionally followed by `[guard]` or `/action` (same textual form as the input). |
-| `end` | string | State id the sequence ends at. |
-| `covers` | string | Semicolon-separated list of transition identifiers (`<source>--<event>-->target`) exercised by this test. |
+| `length` | integer | Number of transitions in the path. For a `negative` test, the length of the prefix that reaches the injection state. |
+| `start` | string | State id the path starts at. |
+| `sequence` | string | Pipe-separated event labels of the path, in order (empty when length 0). Each element is `event` optionally with `[guard]` / `/action`. For a `negative` test this is the prefix that drives the machine to the injection state. |
+| `end` | string | State id the path ends at. For a `negative` test, the state `S` at which the invalid event is injected. |
+| `inject` | string | **`negative` only**: the invalid event `<E>` injected at `end`. Empty for `positive` tests. |
+| `expect` | string | **`negative` only**: expected disposition `no-transition` — the event is rejected/absorbed and the machine stays at `end` (never a wrong/undefined state). Empty for `positive` tests. |
+| `covers` | string | Semicolon-separated identifiers exercised. `positive`: valid transitions `<S>--<E>-->T`. `negative`: the invalid cell `<end>--<inject>--x` (§7.5). |
 
-Example:
+Example (one negative test shown; it reaches `Active` via `start`, then injects the invalid event `reset` which must be rejected):
 
 ```csv
-test_id,layer,length,start,sequence,end,covers
-top-001,top,3,[*]_init,start|fault|reset,[*]_final,[*]_init--()-->Idle;Idle--start-->Active;Active--fault-->Failure;Failure--reset-->Idle
-top-002,top,4,[*]_init,start|stop|start|reset,[*]_final,[*]_init--()-->Idle;Idle--start-->Active;Active--stop-->Idle;Idle--start-->Active;Active--reset-->[*]_final
-Operating-001,Operating,2,[*]_init_Operating,pause|resume,[*]_final_Operating,[*]_init_Operating--()-->Running;Running--pause-->Paused;Paused--resume-->Running
+test_id,kind,layer,length,start,sequence,end,inject,expect,covers
+top-001,positive,top,3,[*]_init,start|fault|reset,[*]_final,,,[*]_init--()-->Idle;Idle--start-->Active;Active--fault-->Failure;Failure--reset-->Idle
+top-002,positive,top,4,[*]_init,start|stop|start|reset,[*]_final,,,[*]_init--()-->Idle;Idle--start-->Active;Active--stop-->Idle;Idle--start-->Active;Active--reset-->[*]_final
+top-101,negative,top,2,[*]_init,()|start,Active,reset,no-transition,Active--reset--x
+Operating-001,positive,Operating,2,[*]_init_Operating,pause|resume,[*]_final_Operating,,,[*]_init_Operating--()-->Running;Running--pause-->Paused;Paused--resume-->Running
 ```
+
+Negative tests sort after positive tests within a layer; their `test_id` sequence numbers continue from a distinct hundreds block (e.g. `top-101`) so positive and negative ids never collide.
 
 ### 6.2 Coverage report CSV (`--coverage`)
 
-One row per transition (N=0) or per N-chain (N ≥ 1). Columns are the test-case ids, cells mark coverage.
+One row per transition (N=0) or per N-chain (N ≥ 1) for positive coverage, plus one row per invalid transition when `--invalid` is set. Columns are the test-case ids, cells mark coverage.
 
 | Column | Meaning |
 |---|---|
-| `kind` | `transition` for a single transition, `chain` for an N-chain. |
+| `kind` | `transition` for a single transition, `chain` for an N-chain, `invalid-transition` for an empty state-table cell (§7.2). |
 | `layer` | `top` or composite-id. |
-| `element` | Transition id (`A--event-->B`) or chain (`A--ev1-->B--ev2-->C`). |
+| `element` | Transition id (`A--event-->B`), chain (`A--ev1-->B--ev2-->C`), or invalid cell (`A--event--x`, §7.5). |
 | `test_id…` | One column per test case; `#` when covered, empty otherwise. |
 
-Example:
+Example (the last row is an invalid transition, covered by the negative test `top-101`):
 
 ```csv
-kind,layer,element,top-001,top-002,Operating-001
-transition,top,Idle--start-->Active,#,#,
-transition,top,Active--fault-->Failure,#,,
-transition,top,Active--stop-->Idle,,#,
-chain,top,Idle--start-->Active--fault-->Failure,#,,
-chain,top,Idle--start-->Active--stop-->Idle,,#,
-transition,Operating,Running--pause-->Paused,,,#
+kind,layer,element,top-001,top-002,top-101,Operating-001
+transition,top,Idle--start-->Active,#,#,,
+transition,top,Active--fault-->Failure,#,,,
+transition,top,Active--stop-->Idle,,#,,
+chain,top,Idle--start-->Active--fault-->Failure,#,,,
+chain,top,Idle--start-->Active--stop-->Idle,,#,,
+invalid-transition,top,Active--reset--x,,,#,
+transition,Operating,Running--pause-->Paused,,,,#
 ```
 
 ### 6.3 Canonicality / 決定論
@@ -367,25 +375,38 @@ Per layer we build a square matrix `A` indexed by the layer's states.
 - **Matrix product**: `(A · B)[i][j] = ⋃_k (A[i][k] ⊗ B[k][j])`.
 - **Powers**: `A^k[i][j]` is the set of every transition sequence of length exactly `k` that takes the machine from `i` to `j`.
 
-The **required coverage set** at a layer for N-switch (N ∈ {0, 1, 2}) is:
+**From diagram to state table (same information, different use).** For test design the diagram alone is not enough; standard state-transition testing (ISTQB) builds the **state-transition table**, precisely because the diagram shows only the drawn (valid) transitions while the *table* forces every `(state, event)` combination into view. The table is **derived**, not authored — it carries no information the diagram doesn't already imply. Given the layer's states and its event alphabet `Sigma` (all events on any transition in the layer), each cell `(S, E)` is either a **valid transition** (drawn) or **empty** (no drawn transition = an *invalid / forbidden transition*). The empty cells are the whole reason the table is mandatory: they surface the combinations the diagram hides.
+
+Why the empty cells matter for software: in **hardware** an unhandled `(S, E)` is inherently a safe no-op (the state holds); in **software** it is undefined behavior (fall-through, exception, runaway), which is exactly where defects and security holes live. So the empty cells are worth testing.
+
+**Coverage levels** (standard names, increasing strength):
+
+| Level | Obligation |
+|---|---|
+| all valid transitions (**0-switch**) | every drawn transition exercised once — a **positive** test |
+| **all transitions incl. invalid** | additionally, every empty cell exercised — a **negative** test: reach `S`, inject `E`, assert **no improper transition** (the machine rejects or safely absorbs the event and does not enter a wrong/undefined state) |
+| **N-switch** (`N ∈ {1, 2}`) | every valid transition sequence of length `N+1` exercised (positive), built over the drawn transitions |
+
+Formally, per layer:
 
 ```
-Required[layer] = ⋃_{i,j} A^(N+1)[i][j]
+Valid[layer]   = ⋃_{i,j} A^(N+1)[i][j]                                     # positive: valid (N+1)-chains (classic N-switch)
+Invalid[layer] = { (S, E) | S ∈ states, E ∈ Sigma, ∄ t: t.source = S ∧ t.event = E }   # negative: empty cells
 ```
 
-Every element of `Required[layer]` is a chain that must appear in at least one generated test.
+Every chain in `Valid[layer]` must appear in at least one positive test; every cell in `Invalid[layer]` must be exercised by one negative test. The positive side is unchanged from classic N-switch; the negative side is the "all transitions including invalid" upgrade that the derived state table exposes. No new diagram notation and no per-cell authoring is required — the machine is not changed, only used more completely.
 
 ### 7.3 Cycle guard / サイクル抑制
 
 **Scope of the cap** — `--max-cycle-unroll K` applies **only** to path construction (§7.4). Specifically, the prefix `p1` and suffix `p2` searches reject any path that traverses the same transition more than K times. The matrix-power enumeration (§7.2) is bounded by `N ≤ 2` and needs no runtime cap.
 
-If a required chain in `Required[layer]` cannot be embedded in any finite path respecting the cap, it is reported as **uncovered** in the coverage report (`status=unreachable-within-cap`), and the process exits with code `3` after emitting the rest of the tests.
+If a required chain in `Valid[layer]` cannot be embedded in any finite path respecting the cap, it is reported as **uncovered** in the coverage report (`status=unreachable-within-cap`), and the process exits with code `3` after emitting the rest of the tests.
 
 The default `K = 3` is generous enough for realistic review-scale models under `N ≤ 2`.
 
 ### 7.4 Test case construction / テストケース生成
 
-Per layer, given `Required[layer]`:
+Per layer, given the positive coverage set `Valid[layer]` (§7.2):
 
 1. Determine the layer's **termination policy**:
    - If `--require-final` is set AND the layer's final pseudo-state is unreachable from its initial pseudo-state, exit 2 immediately.
@@ -417,11 +438,20 @@ Error --> Ready : recover
 
 Here there is no transition to `[*]_final`. Default behavior: generate cyclic tests that close on revisited states (e.g., `[*]_init → Idle → Ready → Running → Ready`). Exit code `0`. With `--require-final` the tool would exit `2` instead.
 
+**Negative tests (invalid transitions).** When `--invalid` is set, after the positive cover the tool constructs one negative test per element of `Invalid[layer]` (§7.2 — every `(S, E)` with no drawn transition on `E` from `S`):
+
+1. Enumerate the invalid cells: for each state `S` (excluding pseudo-states) and each event `E ∈ Sigma`, if no transition leaves `S` on `E`, `(S, E)` is invalid.
+2. For each, find a **prefix** `p1` = greedy shortest path from the layer's initial pseudo-state to `S` (the same BFS as positive construction, subject to the cycle-unroll cap). If `S` is unreachable within the cap, the cell is reported `unreachable-within-cap` (exit 3 / `uncovered`), same as a positive chain.
+3. Emit a `negative` test: `start` = initial, `sequence` = `p1`, `end` = `S`, `inject` = `E`, `expect` = `no-transition`, `covers` = `<S>--<E>--x`.
+
+Negative construction is **deterministic and reachability-bounded** just like the positive side: only invalid cells whose source state is reachable produce a test; the injection itself is a single step and never extends the path, so the cycle cap is unaffected. Invalid cells add no chains to `A` and do not change positive N-switch output.
+
 ### 7.5 Pseudo-state spelling conventions
 
 - Top-layer initial: `[*]_init`. Final: `[*]_final`.
 - Per-composite `X`: initial `[*]_init_X`, final `[*]_final_X`.
 - The synthetic "transition" from an initial pseudo-state to its target (and from a terminal regular state to the matching final pseudo-state) is spelled with an event of `()` in the `covers` / `element` columns.
+- An **invalid transition** (empty state-table cell) is spelled with a **blocked-arrow head**: `<S>--<E>--x` (ASCII, no target), read "event `<E>` is rejected in state `<S>`". This distinguishes it from a valid `<S>--<E>-->` in the `covers` / `element` / `inject` columns and is locale-safe.
 
 ### 7.6 Input handling
 
@@ -459,6 +489,9 @@ from modellogue_nswitch import generate, parse_puml, parse_csv
 
 # From PlantUML string
 result = generate(parse_puml(source_string), n=1, layered=True)
+
+# Positive N-switch plus negative (invalid-transition) tests
+result = generate(parse_puml(source_string), n=1, invalid=True)
 
 # From CSV string
 result = generate(parse_csv(csv_string), n=2)
@@ -500,6 +533,7 @@ All successful responses are JSON with `Content-Type: application/json; charset=
   "source": "@startuml\n[*] --> A\n...\n@enduml",
   "format": "puml",
   "n": 1,
+  "invalid": false,
   "layered": true,
   "max_cycle_unroll": 3,
   "require_final": false
@@ -512,7 +546,8 @@ Fields:
 |---|---|---|---|
 | `source` | string | — (required) | The PlantUML source or canonical CSV text. |
 | `format` | `"puml"` \| `"csv"` \| `null` | auto | Explicit when the caller already knows; otherwise the server auto-detects using the same rule as the CLI (§3). |
-| `n` | 0 \| 1 \| 2 | `1` | N-switch level. |
+| `n` | 0 \| 1 \| 2 | `1` | N-switch level (positive tests). |
+| `invalid` | boolean | `false` | Also emit negative (invalid-transition) tests, one per empty state-table cell (§7.2). Orthogonal to `n`. |
 | `layered` | boolean | `true` | Per §7.1. |
 | `max_cycle_unroll` | integer ≥ 1 | `3` | Per §7.3. |
 | `require_final` | boolean | `false` | Per §7.4. |
@@ -553,7 +588,7 @@ Fields:
 }
 ```
 
-The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is a JSON transport on top of the Python API, so behavior is identical.
+The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is a JSON transport on top of the Python API, so behavior is identical. Each `tests[]` entry carries `kind` (`positive` / `negative`) plus the `inject` / `expect` fields for negative tests (§6.1); when `invalid: true`, `coverage[]` additionally contains `invalid-transition` rows (§6.2).
 
 #### 9.2.4 POST /generate — error responses
 
@@ -610,7 +645,8 @@ The package ships with the following test suites, runnable via `pytest`:
 - **Parser conformance** — for every production in `stateDiagram.ebnf`, at least one accept and one reject case. Kept inside `tests/conformance/` as small `.puml` snippets paired with expected parse results (or expected rejection messages).
 - **Cross-parser equivalence** — a shared corpus of `.puml` files under `tests/shared_corpus/` that BOTH this Python parser and the ModelLogue TypeScript parser MUST accept and produce equivalent `StateMachineModel` output for. The Python side reads the corpus directly; the TypeScript side pulls the same corpus via a relative path in its own test runner. Divergences fail CI on either side.
 - **Canonical CSV round-trip** — for a fixture set of PlantUML files, parse → emit canonical CSV → re-parse the CSV → assert structural equivalence of the two internal models.
-- **Matrix-power coverage** — small hand-checked models where `Required[layer]` is enumerated by hand and compared against `A^(N+1)` output, for N ∈ {0, 1, 2}.
+- **Matrix-power coverage** — small hand-checked models where `Valid[layer]` is enumerated by hand and compared against `A^(N+1)` output, for N ∈ {0, 1, 2}.
+- **Invalid-transition coverage** — hand-checked models where the empty state-table cells `Invalid[layer]` are enumerated by hand and compared against the negative tests emitted with `--invalid` (§7.2 / §7.4).
 - **Byte-deterministic output** — run the generator twice on each fixture and assert output byte equality (ADR-011).
 
 The EBNF file itself is not parsed at runtime; instead, "the parser accepts exactly what the EBNF says" is continuously verified by the conformance suite. When the EBNF is intentionally extended, the suite is extended first (red), then the parser (green) — doc-first / spec-first per `CLAUDE.md`.

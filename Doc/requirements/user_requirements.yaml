@@ -237,16 +237,23 @@ requirements:
     priority: high
 
   UR-013:
-    task: "Review N-switch coverage test cases derived from the current model"
+    task: "Review N-switch coverage test cases AND invalid-transition (negative) tests derived from the current model"
     background: >
-      A reviewed state machine implies a set of test sequences needed to
-      cover its transitions (0-switch), transition pairs (1-switch), or
-      triples (2-switch). Seeing those sequences during the review — in
-      real time, alongside the diagram — surfaces gaps and impossible
-      chains that are easy to miss from the diagram alone. The generator
-      itself is an auxiliary service (ADR-010); ModelLogue's role is to
-      display the resulting test list reactively as the model evolves and
-      to let reviewers cross-reference a test sequence with the diagram.
+      A reviewed state machine implies two kinds of tests. (1) Positive:
+      sequences that cover its transitions (0-switch), transition pairs
+      (1-switch), or triples (2-switch). (2) Negative: one test per
+      invalid transition — the empty cells of the state-transition table,
+      i.e. "in this state, that event must not be accepted". The empty
+      cells are exactly where software runs away (unhandled input), so the
+      negative set is often the more valuable half; the state table is what
+      makes those cells visible (the diagram hides them). Seeing both sets
+      during the review — in real time, alongside the diagram — surfaces
+      gaps, impossible chains, and dangerous forbidden transitions that are
+      easy to miss from the diagram alone. The generator itself is an
+      auxiliary service (ADR-010, incl. invalid transitions per its
+      Requirements_Specification §7.2); ModelLogue's role is to display the
+      resulting test list reactively as the model evolves and to let
+      reviewers cross-reference a test with the diagram and the table.
     priority: medium
 
   UR-011:
