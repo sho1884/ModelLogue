@@ -52,6 +52,22 @@ def test_cli_stdin_auto_detects_puml():
     assert "test_id" in r.stdout
 
 
+def test_cli_stdin_auto_detects_puml_with_leading_comment():
+    # Leading '/# comments before @startuml must still auto-detect as puml.
+    source = (
+        "' header comment\n"
+        "# another comment\n"
+        "\n"
+        "@startuml\n"
+        "[*] --> A\n"
+        "A --> [*] : done\n"
+        "@enduml\n"
+    )
+    r = _run([], stdin=source)
+    assert r.returncode == 0
+    assert "test_id" in r.stdout
+
+
 def test_cli_csv_input_via_format_flag():
     csv_text = (
         "state,label,parent,type,initial,go\n"

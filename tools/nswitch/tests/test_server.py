@@ -85,6 +85,15 @@ def test_generate_puml_default_n_1():
         assert body["tests"][0]["test_id"].startswith("top-")
 
 
+def test_generate_puml_with_leading_comment_detected_as_puml():
+    # A header comment block before @startuml must not be misdetected as CSV.
+    source = "' header comment\n'   spanning several lines\n\n" + PUML_MIN
+    with running_server() as base:
+        status, body, _ = _post(f"{base}/generate", {"source": source})
+        assert status == 200
+        assert body["tests"]
+
+
 def test_generate_csv_input_explicit_format():
     csv_text = (
         "state,label,parent,type,initial,go\n"

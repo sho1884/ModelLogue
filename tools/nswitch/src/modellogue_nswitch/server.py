@@ -244,7 +244,11 @@ class _ThreadingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 def _detect_format(source: str) -> str | None:
     for line in source.split("\n"):
         s = line.strip()
-        if not s:
+        # Skip blank lines and leading comments ('/# ), so a diagram with a
+        # header comment block before @startuml is still detected as puml.
+        # This matches the ModelLogue TypeScript parser, which tolerates the
+        # same front matter.
+        if not s or s.startswith("'") or s.startswith("#"):
             continue
         if s.startswith("@startuml"):
             return "puml"
