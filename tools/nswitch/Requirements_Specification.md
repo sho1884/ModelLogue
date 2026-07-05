@@ -308,58 +308,67 @@ RFC 4180 CSV, UTF-8, LF line endings. Two outputs: **Tests** (§6.1, primary) an
 
 ### 6.1 Tests CSV (default)
 
-One row per **Test** (§1.1) — the primary artifact. A Test is a pattern to verify: a positive N-switch chain (`0S`/`1S`/`2S`) or a negative invalid transition (`INV`).
+One row per **Test** (§1.1) — the primary artifact. **Machine-friendly columnar layout**: the `start` state, then each `(event, reached)` step in its **own columns** — no packed `A--e-->B` string. One consistent label `reached` = the state reached by that event (the last `reached` is *not* specially named — no "next" / "end"). Columns are uniform within a level, so a data-driven runner reads column *k* directly and a spreadsheet can sort/filter per step. Headers are English.
 
-| Column | Type | Meaning |
-|---|---|---|
-| `id` | string | `<scope>-<type>-<NNN>` (§1.1), e.g. `untitled-1S-001`, `Operating-0S-002`, `untitled-INV-001`. |
-| `type` | string | `0S` / `1S` / `2S` (positive) or `INV` (negative). |
-| `scope` | string | The machine / sub-machine name (§1.1): `untitled` (or the supplied name) for the outermost machine, the composite id for a child layer. |
-| `pattern` | string | Positive: the chain `<S0>--<e0>--><S1>--<e1>-->…` to exercise. Negative: the invalid cell `<S>--<E>--x` (§7.5). |
-| `inject` | string | **`INV` only**: the forbidden event injected at the source state. Empty otherwise. |
-| `expect` | string | **`INV` only**: `no-transition` — the event must be rejected with no improper state change. Empty otherwise. |
-| `scenarios` | string | Semicolon-separated Scenario ids (§6.2) that exercise this positive Test. Empty for `INV` (negatives are not part of Scenarios; §1.1). |
+**Positive Tests** (a level-N Test has N+1 transitions):
 
-Example (1-switch positive Tests + one invalid Test):
+| Column | Meaning |
+|---|---|
+| `seq` | 1-based row number within the file (= the running count). |
+| `id` | `<scope>-<type>-<NNN>` (§1.1), e.g. `untitled-2S-001`. |
+| `start` | State the Test starts at. |
+| `event_i`, `reached_i` | for i = 1 … N+1: the i-th event and the state it reaches. `reached_{N+1}` is the final state. |
+| `scenarios` | Semicolon-separated Scenario ids (§6.2) that exercise this Test. |
+
+Example (2-switch = 3 transitions → `event_1..3` / `reached_1..3`):
 
 ```csv
-id,type,scope,pattern,inject,expect,scenarios
-untitled-1S-001,1S,untitled,Idle--start-->Active--fault-->Failure,,,untitled-SC-001
-untitled-1S-002,1S,untitled,Idle--start-->Active--stop-->Idle,,,untitled-SC-002
-untitled-INV-001,INV,untitled,Active--reset--x,reset,no-transition,
+seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,scenarios
+1,untitled-2S-001,Idle,start,Active,fault,Failure,reset,Idle,untitled-SC-001
+2,untitled-2S-002,Idle,start,Active,stop,Idle,start,Active,untitled-SC-002
 ```
 
-Selecting the **INV** level yields negative Tests only — positive `0S` Tests are never mixed in (they are a different type; §1.1).
+**Negative Tests (`INV`)** — a fixed, separate shape (one per invalid cell; §7.2). Selecting `INV` yields negative Tests **only** — positive `0S` Tests are never mixed in (they are a different type; §1.1).
+
+| Column | Meaning |
+|---|---|
+| `seq` | 1-based row number. |
+| `id` | `<scope>-INV-<NNN>`. |
+| `start` | The state where the forbidden event is injected. |
+| `event` | The forbidden event. |
+| `expect` | `no-transition` — must be rejected with no state change. |
+| `reach` | A Scenario id (§6.2) whose prefix reaches `start`, or empty. |
+
+```csv
+seq,id,start,event,expect,reach
+1,untitled-INV-001,Active,reset,no-transition,untitled-SC-002
+```
 
 ### 6.2 Scenarios CSV (secondary)
 
-One row per **Scenario** (§1.1) — a greedy initial→final (or cycle-closing) walk that covers several positive Tests (§7.4). Secondary output; negatives never appear here.
+One row per **Scenario** (§1.1) — a greedy initial→final (or cycle-closing) walk covering several positive Tests (§7.4). Secondary output; negatives never appear here. Same columnar `(event, reached)` layout as positive Tests, but walks vary in length, so trailing `event_i` / `reached_i` cells are empty for shorter walks.
 
-| Column | Type | Meaning |
-|---|---|---|
-| `id` | string | `<scope>-SC-<NNN>`. |
-| `scope` | string | As above. |
-| `length` | integer | Number of transitions in the walk. |
-| `start` | string | Start state id (`[*]_init` …). |
-| `sequence` | string | Pipe-separated event labels of the walk, in order. |
-| `end` | string | End state id (`[*]_final`, or the revisited state for a cycle-closing walk). |
-| `covers` | string | Semicolon-separated Test ids this Scenario exercises. |
-
-Example:
+| Column | Meaning |
+|---|---|
+| `seq` | 1-based row number. |
+| `id` | `<scope>-SC-<NNN>`. |
+| `start` | `[*]_init` (or the walk's start). |
+| `event_i`, `reached_i` | the i-th step; empty past the walk's length. |
+| `covers` | Semicolon-separated Test ids this Scenario exercises. |
 
 ```csv
-id,scope,length,start,sequence,end,covers
-untitled-SC-001,untitled,3,[*]_init,start|fault|reset,[*]_final,untitled-0S-001;untitled-1S-001
-untitled-SC-002,untitled,4,[*]_init,start|stop|start|reset,[*]_final,untitled-0S-003;untitled-1S-002
+seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,covers
+1,untitled-SC-001,[*]_init,(),Idle,start,Active,fault,Failure,untitled-0S-001;untitled-1S-001
+2,untitled-SC-002,[*]_init,(),Idle,start,Active,stop,Idle,untitled-0S-002;untitled-1S-002
 ```
 
 ### 6.3 Canonicality / 決定論
 
 For the same input and the same option values, the tool produces **byte-identical output** across runs, machines, and Python versions within 3.10+. Sort keys:
 
-- Tests ordered by `(layer, seq_number)` where layers sort `top` first then composite ids alphabetically, seq numbers assigned in the order tests are constructed.
-- Coverage rows ordered by `(kind, layer, element)`, each sorted lexicographically.
-- Cell-level iteration (e.g., required chains) is sorted by canonical chain string.
+- Tests ordered by `(scope, type, seq)`; scopes sort outermost-first then composite ids alphabetically; within a `(scope, type)`, `seq`/`NNN` follow the canonical chain order (the required chains are enumerated by canonical chain string).
+- Scenarios ordered by `(scope, seq)`, in construction order.
+- A Test's `scenarios` list and a Scenario's `covers` list are sorted by id.
 
 This satisfies ADR-011: CI diffs on generated artifacts are meaningful.
 
