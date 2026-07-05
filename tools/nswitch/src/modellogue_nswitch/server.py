@@ -123,6 +123,15 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
+        name = body.get("name", "untitled")
+        if not isinstance(name, str) or not name:
+            self._send_error(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_request",
+                "`name` must be a non-empty string",
+            )
+            return
+
         max_cycle_unroll = body.get("max_cycle_unroll", 3)
         if not isinstance(max_cycle_unroll, int) or max_cycle_unroll < 1:
             self._send_error(
@@ -159,6 +168,7 @@ class _Handler(BaseHTTPRequestHandler):
                 model,
                 n=n,
                 invalid=invalid,
+                name=name,
                 layered=layered,
                 max_cycle_unroll=max_cycle_unroll,
                 require_final=require_final,

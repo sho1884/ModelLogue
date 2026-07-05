@@ -12,7 +12,7 @@ from .model import (
 )
 from .parse_puml import parse_puml
 from .parse_csv import parse_csv
-from .generate import generate, GenerationResult, TestCase, CoverageRow
+from .generate import generate, GenerationResult, Test, Scenario, Step
 
 __all__ = [
     "State",
@@ -23,8 +23,9 @@ __all__ = [
     "parse_csv",
     "generate",
     "GenerationResult",
-    "TestCase",
-    "CoverageRow",
+    "Test",
+    "Scenario",
+    "Step",
 ]
 
 __version__ = "0.1.0"

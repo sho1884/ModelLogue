@@ -1,6 +1,13 @@
 """Orchestrator for the library API (§9) and the CLI.
 
-Produces test cases per §7.4 and optionally a coverage report per §6.2.
+Builds **Tests** (the coverage patterns to verify — primary) and **Scenarios**
+(executable walks that cover them — secondary), per §1.1 / §6 of
+``Requirements_Specification.md``. Output is columnar (§6): one column per
+`(event, reached)` step, not a packed string.
+
+The path-algebra / cover algorithm in ``algorithm.py`` is unchanged: the
+required chains are the positive Tests, the invalid cells are the negative
+(``INV``) Tests, and the greedy cover paths are the Scenarios.
 """
 from __future__ import annotations
 
@@ -10,51 +17,86 @@ from dataclasses import asdict, dataclass, field
 
 from .algorithm import (
     Chain,
-    LayerResult,
-    NegativeTest,
-    TestPath,
     Unreachable,
     build_negative_tests,
     build_tests,
-    chain_str,
     required_chains,
-    transition_str,
 )
 from .layers import Layer, decompose
 from .model import StateMachineModel, Transition
 
 
 @dataclass(slots=True)
-class TestCase:
-    test_id: str
-    kind: str  # "positive" | "negative"
-    layer: str
-    length: int
-    start: str
-    sequence: str
-    end: str
-    inject: str  # negative only: the invalid event injected at `end`
-    expect: str  # negative only: "no-transition"
-    covers: str
+class Step:
+    event: str
+    reached: str
 
 
 @dataclass(slots=True)
-class CoverageRow:
-    kind: str  # "transition" or "chain"
-    layer: str
-    element: str
-    # test_id -> marker ("#", "x", or "")
-    hits: dict[str, str] = field(default_factory=dict)
-    status: str = ""  # "unreachable-within-cap" etc.
-    reason: str = ""
+class Test:
+    id: str
+    type: str  # "0S" | "1S" | "2S" | "INV"
+    scope: str
+    start: str
+    # Positive: the chain's (event, reached) steps. INV: empty (uses the
+    # dedicated fields below).
+    steps: list[Step] = field(default_factory=list)
+    # INV only:
+    event: str = ""  # the forbidden event injected at `start`
+    expect: str = ""  # "no-transition"
+    reach: str = ""  # a Scenario id whose walk passes through `start`, or ""
+    # Positive only: Scenario ids that exercise this Test.
+    scenarios: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Scenario:
+    id: str
+    scope: str
+    start: str
+    steps: list[Step]
+    covers: list[str] = field(default_factory=list)  # positive Test ids
 
 
 @dataclass(slots=True)
 class GenerationResult:
-    tests: list[TestCase]
-    coverage: list[CoverageRow]
+    tests: list[Test]
+    scenarios: list[Scenario]
     uncovered: list[Unreachable]
-    layers: list[str]
+    scopes: list[str]
+
+
+# ---------- helpers ----------
+
+
+def _event_of(t: Transition) -> str:
+    return t.event if t.event else "()"
+
+
+def _steps_of(seq: tuple[Transition, ...]) -> list[Step]:
+    return [Step(event=_event_of(t), reached=t.target_state_id) for t in seq]
+
+
+def _scope_of(layer: Layer, name: str) -> str:
+    # The outermost machine has no intrinsic name; use the caller-supplied
+    # `name` (default "untitled", §1.1). Child layers use the composite id.
+    return name if layer.name == "top" else layer.name
+
+
+def _path_contains_chain(path: tuple[Transition, ...], chain: Chain) -> bool:
+    """True if `chain` appears as a contiguous subsequence of `path`."""
+    k = len(chain)
+    for i in range(len(path) - k + 1):
+        if path[i : i + k] == chain:
+            return True
+    return False
+
+
+def _states_on(scenario: Scenario) -> set[str]:
+    return {scenario.start, *(s.reached for s in scenario.steps)}
+
+
+# ---------- generation ----------
 
 
 def generate(
@@ -62,6 +104,7 @@ def generate(
     *,
     n: int = 1,
     invalid: bool = False,
+    name: str = "untitled",
     layered: bool = True,
     max_cycle_unroll: int = 3,
     require_final: bool = False,
@@ -70,222 +113,158 @@ def generate(
         raise ValueError(f"n must be 0, 1, or 2 (got {n})")
 
     layers: list[Layer] = decompose(model, layered=layered)
-    layer_results: list[LayerResult] = [
-        build_tests(
-            layer,
-            n,
-            max_cycle_unroll=max_cycle_unroll,
-            require_final=require_final,
-        )
-        for layer in layers
-    ]
+    all_tests: list[Test] = []
+    all_scenarios: list[Scenario] = []
+    uncovered: list[Unreachable] = []
 
-    # Negative tests for invalid transitions (§7.2), keyed by layer name.
-    negatives: dict[str, list[NegativeTest]] = {}
-    neg_unreachable: list[Unreachable] = []
-    if invalid:
-        for layer in layers:
-            negs, unreach = build_negative_tests(
+    for layer in layers:
+        scope = _scope_of(layer, name)
+
+        # Scenarios — the greedy cover walks (always produced; secondary).
+        lr = build_tests(
+            layer, n, max_cycle_unroll=max_cycle_unroll, require_final=require_final
+        )
+        uncovered.extend(lr.unreachable)
+        scenarios: list[Scenario] = [
+            Scenario(
+                id=f"{scope}-SC-{i:03d}",
+                scope=scope,
+                start=tp.start,
+                steps=_steps_of(tp.transitions),
+            )
+            for i, tp in enumerate(lr.tests, start=1)
+        ]
+
+        if invalid:
+            # INV mode: negative Tests only (never mixed with positive 0S).
+            negs, neg_unreach = build_negative_tests(
                 layer, max_cycle_unroll=max_cycle_unroll
             )
-            negatives[layer.name] = negs
-            neg_unreachable.extend(unreach)
+            uncovered.extend(neg_unreach)
+            for i, nt in enumerate(negs, start=1):
+                reach = next(
+                    (
+                        sc.id
+                        for sc, tp in zip(scenarios, lr.tests)
+                        if nt.source_state in _states_on(sc)
+                    ),
+                    "",
+                )
+                all_tests.append(
+                    Test(
+                        id=f"{scope}-INV-{i:03d}",
+                        type="INV",
+                        scope=scope,
+                        start=nt.source_state,
+                        event=nt.inject_event,
+                        expect="no-transition",
+                        reach=reach,
+                    )
+                )
+        else:
+            # Positive Tests — one per required chain at level n.
+            chains = required_chains(layer, n)
+            type_ = f"{n}S"
+            pos: list[Test] = [
+                Test(
+                    id=f"{scope}-{type_}-{i:03d}",
+                    type=type_,
+                    scope=scope,
+                    start=c[0].source_state_id,
+                    steps=_steps_of(c),
+                )
+                for i, c in enumerate(chains, start=1)
+            ]
+            # Cross-reference Tests <-> Scenarios.
+            for t, c in zip(pos, chains):
+                for sc, tp in zip(scenarios, lr.tests):
+                    if _path_contains_chain(tp.transitions, c):
+                        t.scenarios.append(sc.id)
+                        sc.covers.append(t.id)
+            all_tests.extend(pos)
 
-    tests = _assign_test_ids(layer_results, negatives)
-    coverage = _build_coverage_rows(layer_results, tests, n, negatives)
-    uncovered = [
-        u for lr in layer_results for u in lr.unreachable
-    ] + neg_unreachable
+        all_scenarios.extend(scenarios)
+
+    for t in all_tests:
+        t.scenarios.sort()
+    for s in all_scenarios:
+        s.covers.sort()
+
     return GenerationResult(
-        tests=tests,
-        coverage=coverage,
+        tests=all_tests,
+        scenarios=all_scenarios,
         uncovered=uncovered,
-        layers=[lr.layer.name for lr in layer_results],
+        scopes=[_scope_of(layer, name) for layer in layers],
     )
 
 
-# ---------- test cases ----------
+# ---------- CSV emitters (§6, columnar) ----------
 
 
-def _assign_test_ids(
-    layer_results: list[LayerResult],
-    negatives: dict[str, list[NegativeTest]],
-) -> list[TestCase]:
-    """Order tests by (layer order, positive then negative) and materialize rows."""
-    out: list[TestCase] = []
-    # Layers sort: top first, then composite names alphabetically.
-    ordered = sorted(
-        layer_results,
-        key=lambda lr: (0 if lr.layer.name == "top" else 1, lr.layer.name),
-    )
-    for lr in ordered:
-        for idx, tp in enumerate(lr.tests, start=1):
-            out.append(
-                TestCase(
-                    test_id=f"{lr.layer.name}-{idx:03d}",
-                    kind="positive",
-                    layer=lr.layer.name,
-                    length=len(tp.transitions),
-                    start=tp.start,
-                    sequence="|".join(_event_token(t) for t in tp.transitions),
-                    end=tp.end,
-                    inject="",
-                    expect="",
-                    covers=";".join(transition_str(t) for t in tp.transitions),
-                )
-            )
-        # Negative tests continue from a distinct hundreds block (§6.1) so
-        # positive and negative ids never collide.
-        for idx, nt in enumerate(negatives.get(lr.layer.name, ()), start=101):
-            out.append(
-                TestCase(
-                    test_id=f"{lr.layer.name}-{idx:03d}",
-                    kind="negative",
-                    layer=lr.layer.name,
-                    length=len(nt.prefix),
-                    start=lr.layer.initial_id,
-                    sequence="|".join(_event_token(t) for t in nt.prefix),
-                    end=nt.source_state,
-                    inject=nt.inject_event,
-                    expect="no-transition",
-                    covers=f"{nt.source_state}--{nt.inject_event}--x",
-                )
-            )
-    return out
+def _max_steps(items) -> int:
+    return max((len(x.steps) for x in items), default=0)
 
 
-def _event_token(t: Transition) -> str:
-    ev = t.event if t.event else "()"
-    g = f"[{t.guard}]" if t.guard else ""
-    a = f"/{t.action}" if t.action else ""
-    return f"{ev}{g}{a}"
-
-
-# ---------- coverage ----------
-
-
-def _build_coverage_rows(
-    layer_results: list[LayerResult],
-    tests: list[TestCase],
-    n: int,
-    negatives: dict[str, list[NegativeTest]],
-) -> list[CoverageRow]:
-    kind = "transition" if n == 0 else "chain"
-    rows: list[CoverageRow] = []
-
-    test_ids_in_order = [tc.test_id for tc in tests]
-
-    # For each layer, compute required chains and mark which tests cover
-    # which chains.
-    for lr in layer_results:
-        chains = required_chains(lr.layer, n)
-        layer_tests = [tc for tc in tests if tc.layer == lr.layer.name]
-        for c in chains:
-            cs = chain_str(c, lr.layer.initial_id)
-            row = CoverageRow(kind=kind, layer=lr.layer.name, element=cs)
-            hits: dict[str, str] = {tid: "" for tid in test_ids_in_order}
-            first_adopter: str | None = None
-            for tc in layer_tests:
-                if _test_covers_chain(tc, c):
-                    if first_adopter is None:
-                        hits[tc.test_id] = "#"
-                        first_adopter = tc.test_id
-                    else:
-                        hits[tc.test_id] = "x"
-            row.hits = hits
-            # Flag chains the builder reported as unreachable.
-            for u in lr.unreachable:
-                if u.chain == c:
-                    row.status = "unreachable-within-cap"
-                    row.reason = u.reason
-                    break
-            rows.append(row)
-
-    # Invalid-transition coverage rows (§6.2): one per invalid cell, marked
-    # covered by its negative test.
-    for lr in layer_results:
-        neg_id_by_element = {
-            tc.covers: tc.test_id
-            for tc in tests
-            if tc.layer == lr.layer.name and tc.kind == "negative"
-        }
-        for nt in negatives.get(lr.layer.name, []):
-            element = f"{nt.source_state}--{nt.inject_event}--x"
-            hits = {tid: "" for tid in test_ids_in_order}
-            tid = neg_id_by_element.get(element)
-            if tid is not None:
-                hits[tid] = "#"
-            rows.append(
-                CoverageRow(
-                    kind="invalid-transition",
-                    layer=lr.layer.name,
-                    element=element,
-                    hits=hits,
-                )
-            )
-
-    rows.sort(key=lambda r: (r.kind, r.layer, r.element))
-    return rows
-
-
-def _test_covers_chain(tc: TestCase, chain: Chain) -> bool:
-    # Rebuild a chain-string from tc.covers and look for the target as a
-    # contiguous subsequence. Use the covers column since it contains the
-    # canonical transition ids.
-    target = [
-        f"{t.source_state_id}--{t.event or '()'}-->{t.target_state_id}"
-        for t in chain
-    ]
-    path = tc.covers.split(";")
-    for i in range(len(path) - len(target) + 1):
-        if path[i : i + len(target)] == target:
-            return True
-    return False
-
-
-# ---------- CSV emitters ----------
-
-
-def tests_to_csv(tests: list[TestCase]) -> str:
+def tests_to_csv(tests: list[Test]) -> str:
+    """§6.1. Homogeneous per call: all positive (columnar) or all INV."""
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(
-        [
-            "test_id", "kind", "layer", "length", "start",
-            "sequence", "end", "inject", "expect", "covers",
-        ]
-    )
-    for tc in tests:
-        writer.writerow(
-            [
-                tc.test_id, tc.kind, tc.layer, tc.length, tc.start,
-                tc.sequence, tc.end, tc.inject, tc.expect, tc.covers,
-            ]
-        )
+    is_inv = bool(tests) and all(t.type == "INV" for t in tests)
+
+    if is_inv:
+        writer.writerow(["seq", "id", "start", "event", "expect", "reach"])
+        for seq, t in enumerate(tests, start=1):
+            writer.writerow([seq, t.id, t.start, t.event, t.expect, t.reach])
+        return buf.getvalue()
+
+    k = _max_steps(tests)  # uniform within a positive level
+    header = ["seq", "id", "start"]
+    for i in range(1, k + 1):
+        header += [f"event_{i}", f"reached_{i}"]
+    header.append("scenarios")
+    writer.writerow(header)
+    for seq, t in enumerate(tests, start=1):
+        row = [seq, t.id, t.start]
+        for i in range(k):
+            if i < len(t.steps):
+                row += [t.steps[i].event, t.steps[i].reached]
+            else:
+                row += ["", ""]
+        row.append(";".join(t.scenarios))
+        writer.writerow(row)
     return buf.getvalue()
 
 
-def coverage_to_csv(rows: list[CoverageRow], tests: list[TestCase]) -> str:
+def scenarios_to_csv(scenarios: list[Scenario]) -> str:
+    """§6.2. Columnar; walks vary in length so trailing cells are padded."""
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    headers = ["kind", "layer", "element", *[tc.test_id for tc in tests], "status", "reason"]
-    writer.writerow(headers)
-    for row in rows:
-        cells = [row.hits.get(tc.test_id, "") for tc in tests]
-        writer.writerow(
-            [row.kind, row.layer, row.element, *cells, row.status, row.reason]
-        )
+    k = _max_steps(scenarios)
+    header = ["seq", "id", "start"]
+    for i in range(1, k + 1):
+        header += [f"event_{i}", f"reached_{i}"]
+    header.append("covers")
+    writer.writerow(header)
+    for seq, s in enumerate(scenarios, start=1):
+        row = [seq, s.id, s.start]
+        for i in range(k):
+            if i < len(s.steps):
+                row += [s.steps[i].event, s.steps[i].reached]
+            else:
+                row += ["", ""]
+        row.append(";".join(s.covers))
+        writer.writerow(row)
     return buf.getvalue()
 
 
 def result_to_dict(result: GenerationResult) -> dict:
-    """Serialize a GenerationResult as plain dict (for library users)."""
+    """Serialize a GenerationResult as a plain dict (library / HTTP API)."""
     return {
-        "tests": [asdict(tc) for tc in result.tests],
-        "coverage": [asdict(row) for row in result.coverage],
+        "tests": [asdict(t) for t in result.tests],
+        "scenarios": [asdict(s) for s in result.scenarios],
         "uncovered": [
             {
-                "layer": u.layer_name,
+                "scope": u.layer_name,
                 "chain": [
                     {
                         "source": t.source_state_id,
@@ -300,18 +279,17 @@ def result_to_dict(result: GenerationResult) -> dict:
             }
             for u in result.uncovered
         ],
-        "layers": result.layers,
+        "scopes": result.scopes,
     }
 
 
 __all__ = [
-    "TestCase",
-    "CoverageRow",
+    "Step",
+    "Test",
+    "Scenario",
     "GenerationResult",
     "generate",
     "tests_to_csv",
-    "coverage_to_csv",
+    "scenarios_to_csv",
     "result_to_dict",
-    "TestPath",
-    "Unreachable",
 ]

@@ -12,8 +12,8 @@ import sys
 
 from . import __version__
 from .generate import (
-    coverage_to_csv,
     generate,
+    scenarios_to_csv,
     tests_to_csv,
 )
 from .parse_csv import CsvParseError, parse_csv
@@ -98,9 +98,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write output to FILE instead of stdout.",
     )
     p.add_argument(
-        "--coverage",
+        "--scenarios",
         action="store_true",
-        help="Emit coverage report CSV instead of test-case CSV.",
+        help="Emit the Scenarios CSV (§6.2) instead of the Tests CSV (§6.1).",
+    )
+    p.add_argument(
+        "--name",
+        default="untitled",
+        help=(
+            "Scope name for the outermost machine; prefixes ids as "
+            "<name>-<type>-NNN (§1.1). Default: untitled."
+        ),
     )
     layered = p.add_mutually_exclusive_group()
     layered.add_argument(
@@ -187,6 +195,7 @@ def main(argv: list[str] | None = None) -> int:
             model,
             n=args.n,
             invalid=args.invalid,
+            name=args.name,
             layered=args.layered,
             max_cycle_unroll=args.max_cycle_unroll,
             require_final=args.require_final,
@@ -208,8 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     csv_text = (
-        coverage_to_csv(result.coverage, result.tests)
-        if args.coverage
+        scenarios_to_csv(result.scenarios)
+        if args.scenarios
         else tests_to_csv(result.tests)
     )
 

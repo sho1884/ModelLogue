@@ -80,9 +80,10 @@ def test_generate_puml_default_n_1():
     with running_server() as base:
         status, body, _ = _post(f"{base}/generate", {"source": PUML_MIN})
         assert status == 200
-        assert body["layers"] == ["top"]
+        assert body["scopes"] == ["untitled"]
         assert body["tests"]
-        assert body["tests"][0]["test_id"].startswith("top-")
+        assert body["tests"][0]["id"].startswith("untitled-")
+        assert "scenarios" in body
 
 
 def test_generate_puml_with_leading_comment_detected_as_puml():
@@ -104,10 +105,10 @@ def test_generate_invalid_emits_negative_tests():
             f"{base}/generate", {"source": source, "n": 0, "invalid": True}
         )
         assert status == 200
-        negs = [t for t in body["tests"] if t["kind"] == "negative"]
+        negs = [t for t in body["tests"] if t["type"] == "INV"]
         assert negs
         assert negs[0]["expect"] == "no-transition"
-        assert any(r["kind"] == "invalid-transition" for r in body["coverage"])
+        assert all(t["type"] == "INV" for t in body["tests"])  # negatives only
 
 
 def test_generate_csv_input_explicit_format():

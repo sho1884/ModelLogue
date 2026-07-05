@@ -35,12 +35,11 @@ def test_cli_puml_file_produces_test_case_csv(tmp_path: Path):
     )
     r = _run([str(puml)])
     assert r.returncode == 0
-    assert r.stdout.splitlines()[0] == (
-        "test_id,kind,layer,length,start,sequence,end,inject,expect,covers"
-    )
+    # Columnar Tests CSV (§6.1); default n=1 → (event_i, reached_i) pairs.
+    assert r.stdout.splitlines()[0].startswith("seq,id,start,event_1,reached_1")
 
 
-def test_cli_invalid_flag_emits_negative_rows():
+def test_cli_invalid_flag_emits_negative_tests():
     source = (
         "@startuml\n"
         "[*] --> Idle\n"
@@ -51,8 +50,8 @@ def test_cli_invalid_flag_emits_negative_rows():
     )
     r = _run(["--invalid"], stdin=source)
     assert r.returncode == 0
-    assert ",negative," in r.stdout
-    assert "--x" in r.stdout
+    assert r.stdout.splitlines()[0] == "seq,id,start,event,expect,reach"
+    assert "no-transition" in r.stdout
 
 
 def test_cli_stdin_auto_detects_puml():
@@ -64,7 +63,7 @@ def test_cli_stdin_auto_detects_puml():
     )
     r = _run([], stdin=source)
     assert r.returncode == 0
-    assert "test_id" in r.stdout
+    assert "seq,id,start" in r.stdout
 
 
 def test_cli_stdin_auto_detects_puml_with_leading_comment():
@@ -80,7 +79,7 @@ def test_cli_stdin_auto_detects_puml_with_leading_comment():
     )
     r = _run([], stdin=source)
     assert r.returncode == 0
-    assert "test_id" in r.stdout
+    assert "seq,id,start" in r.stdout
 
 
 def test_cli_csv_input_via_format_flag():
@@ -93,7 +92,7 @@ def test_cli_csv_input_via_format_flag():
     assert r.returncode == 0
 
 
-def test_cli_coverage_report_mode():
+def test_cli_scenarios_mode():
     puml = (
         "@startuml\n"
         "[*] --> A\n"
@@ -101,9 +100,9 @@ def test_cli_coverage_report_mode():
         "B --> [*] : done\n"
         "@enduml\n"
     )
-    r = _run(["--coverage"], stdin=puml)
+    r = _run(["--scenarios"], stdin=puml)
     assert r.returncode == 0
-    assert r.stdout.startswith("kind,layer,element,")
+    assert r.stdout.startswith("seq,id,start,event_1,reached_1")
 
 
 def test_cli_output_file_writes_csv(tmp_path: Path):
@@ -112,7 +111,7 @@ def test_cli_output_file_writes_csv(tmp_path: Path):
     r = _run(["-o", str(out)], stdin=puml)
     assert r.returncode == 0
     assert r.stdout == ""
-    assert out.read_text().startswith("test_id,")
+    assert out.read_text().startswith("seq,id,start")
 
 
 def test_cli_require_final_exit_code_2_when_no_final_reachable():
@@ -137,7 +136,7 @@ def test_cli_default_accepts_mainloop_models():
     )
     r = _run([], stdin=puml)
     assert r.returncode == 0
-    assert "test_id" in r.stdout
+    assert "seq,id,start" in r.stdout
 
 
 def test_cli_invalid_n_value():

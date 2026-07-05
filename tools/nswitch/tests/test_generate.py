@@ -1,87 +1,84 @@
-"""End-to-end tests for the generate API and CSV emitters."""
+"""End-to-end tests for the generate API and CSV emitters (§1.1 / §6)."""
+import json
+
 from modellogue_nswitch import generate, parse_csv, parse_puml
 from modellogue_nswitch.generate import (
-    coverage_to_csv,
     result_to_dict,
+    scenarios_to_csv,
     tests_to_csv,
 )
 
-
-def test_tests_csv_header_is_stable():
-    model = parse_puml(
-        "@startuml\n[*] --> A\nA --> [*] : done\n@enduml\n"
-    )
-    result = generate(model, n=0)
-    csv = tests_to_csv(result.tests)
-    header = csv.split("\n")[0]
-    assert header == (
-        "test_id,kind,layer,length,start,sequence,end,inject,expect,covers"
-    )
+SIMPLE = "@startuml\n[*] --> A\nA --> [*] : done\n@enduml\n"
+LOOP = (
+    "@startuml\n"
+    "[*] --> Idle\n"
+    "Idle --> Active : start\n"
+    "Active --> Idle : stop\n"
+    "Active --> [*] : done\n"
+    "@enduml\n"
+)
 
 
-def test_invalid_generates_negative_tests():
-    model = parse_puml(
-        "@startuml\n"
-        "[*] --> Idle\n"
-        "Idle --> Active : start\n"
-        "Active --> Idle : stop\n"
-        "Active --> [*] : done\n"
-        "@enduml\n"
-    )
-    # Events {start, stop, done}; invalid cells e.g. (Idle,stop), (Idle,done),
-    # (Active,start) each become a negative test.
-    result = generate(model, n=0, invalid=True)
-    negatives = [t for t in result.tests if t.kind == "negative"]
-    assert negatives, "expected negative tests for invalid cells"
-    nt = negatives[0]
+def test_tests_csv_is_columnar():
+    result = generate(parse_puml(SIMPLE), n=0)
+    header = tests_to_csv(result.tests).split("\n")[0]
+    # 0-switch = single transition => one (event, reached) step.
+    assert header == "seq,id,start,event_1,reached_1,scenarios"
+
+
+def test_ids_use_scope_and_type():
+    result = generate(parse_puml(LOOP), n=1, name="watch")
+    assert result.tests, "expected positive tests"
+    t = result.tests[0]
+    assert t.type == "1S"
+    assert t.scope == "watch"
+    assert t.id.startswith("watch-1S-")
+    assert t.steps and t.steps[0].reached  # (event, reached) pairs
+
+
+def test_default_scope_is_untitled():
+    result = generate(parse_puml(SIMPLE), n=0)
+    assert all(t.id.startswith("untitled-") for t in result.tests)
+    assert result.scopes == ["untitled"]
+
+
+def test_invalid_mode_yields_negative_tests_only():
+    result = generate(parse_puml(LOOP), n=0, invalid=True)
+    assert result.tests, "expected INV tests"
+    assert all(t.type == "INV" for t in result.tests)  # negatives only
+    nt = result.tests[0]
     assert nt.expect == "no-transition"
-    assert nt.inject
-    assert nt.covers.endswith("--x")
-    assert any(r.kind == "invalid-transition" for r in result.coverage)
-    # Without invalid, only positive tests are produced (unchanged behaviour).
-    assert all(t.kind == "positive" for t in generate(model, n=0).tests)
+    assert nt.event
+    assert nt.id.startswith("untitled-INV-")
+    # Positive mode has no INV tests.
+    assert all(t.type != "INV" for t in generate(parse_puml(LOOP), n=0).tests)
+
+
+def test_inv_csv_shape():
+    result = generate(parse_puml(LOOP), n=0, invalid=True)
+    header = tests_to_csv(result.tests).split("\n")[0]
+    assert header == "seq,id,start,event,expect,reach"
+
+
+def test_scenarios_csv_and_cross_reference():
+    result = generate(parse_puml(LOOP), n=1)
+    assert result.scenarios
+    sc_header = scenarios_to_csv(result.scenarios).split("\n")[0]
+    assert sc_header.startswith("seq,id,start,event_1,reached_1")
+    assert sc_header.endswith(",covers")
+    # Cross-reference is populated in both directions.
+    assert any(t.scenarios for t in result.tests)
+    assert any(s.covers for s in result.scenarios)
 
 
 def test_output_is_byte_deterministic():
-    source = (
-        "@startuml\n"
-        "[*] --> Idle\n"
-        "Idle --> Active : start\n"
-        "Active --> Idle : stop\n"
-        "Active --> [*] : done\n"
-        "@enduml\n"
-    )
-    a = generate(parse_puml(source), n=1)
-    b = generate(parse_puml(source), n=1)
+    a = generate(parse_puml(LOOP), n=1)
+    b = generate(parse_puml(LOOP), n=1)
     assert tests_to_csv(a.tests) == tests_to_csv(b.tests)
-    assert coverage_to_csv(a.coverage, a.tests) == coverage_to_csv(
-        b.coverage, b.tests
-    )
+    assert scenarios_to_csv(a.scenarios) == scenarios_to_csv(b.scenarios)
 
 
-def test_csv_input_produces_identical_model_to_puml():
-    puml = (
-        "@startuml\n"
-        "[*] --> Idle\n"
-        "Idle --> Active : start\n"
-        "Active --> Idle : stop\n"
-        "Active --> [*] : reset\n"
-        "@enduml\n"
-    )
-    csv_text = (
-        "state,label,parent,type,initial,start,stop,reset\n"
-        "Idle,,,normal,Y,Active,,\n"
-        "Active,,,normal,,,Idle,[*]\n"
-    )
-    r_puml = generate(parse_puml(puml), n=1)
-    r_csv = generate(parse_csv(csv_text), n=1)
-    # Same set of required chains and equivalent test coverage.
-    assert {row.element for row in r_puml.coverage} == {
-        row.element for row in r_csv.coverage
-    }
-
-
-def test_layered_decomposition_emits_one_layer_per_composite():
+def test_layered_scopes():
     model = parse_puml(
         "@startuml\n"
         "[*] --> Idle\n"
@@ -94,9 +91,9 @@ def test_layered_decomposition_emits_one_layer_per_composite():
         "Outer --> Idle : stop\n"
         "@enduml\n"
     )
-    result = generate(model, n=1, layered=True)
-    assert "top" in result.layers
-    assert "Outer" in result.layers
+    result = generate(model, n=1, layered=True, name="M")
+    assert "M" in result.scopes  # top layer uses the supplied name
+    assert "Outer" in result.scopes  # composite keeps its id
 
 
 def test_no_layered_keeps_only_top():
@@ -111,29 +108,38 @@ def test_no_layered_keeps_only_top():
         "Outer --> Idle : stop\n"
         "@enduml\n"
     )
-    result = generate(model, n=1, layered=False)
-    assert result.layers == ["top"]
+    result = generate(model, n=1, layered=False, name="M")
+    assert result.scopes == ["M"]
 
 
-def test_result_to_dict_is_plain_json_serializable():
-    import json
+def test_result_to_dict_is_json_serializable():
+    result = generate(parse_puml(SIMPLE), n=0, invalid=True)
+    payload = json.loads(json.dumps(result_to_dict(result)))
+    assert payload["scopes"] == ["untitled"]
+    assert "tests" in payload and "scenarios" in payload
 
-    model = parse_puml(
-        "@startuml\n[*] --> A\nA --> [*] : done\n@enduml\n"
+
+def test_csv_and_puml_equivalent():
+    puml = (
+        "@startuml\n"
+        "[*] --> Idle\n"
+        "Idle --> Active : start\n"
+        "Active --> Idle : stop\n"
+        "Active --> [*] : reset\n"
+        "@enduml\n"
     )
-    result = generate(model, n=0)
-    payload = result_to_dict(result)
-    # Round-trip through JSON to confirm no non-serializable types leaked.
-    round_tripped = json.loads(json.dumps(payload))
-    assert round_tripped["layers"] == ["top"]
-
-
-def test_coverage_csv_marks_chains_with_hash():
-    model = parse_puml(
-        "@startuml\n[*] --> A\nA --> [*] : done\n@enduml\n"
+    csv_text = (
+        "state,label,parent,type,initial,start,stop,reset\n"
+        "Idle,,,normal,Y,Active,,\n"
+        "Active,,,normal,,,Idle,[*]\n"
     )
-    result = generate(model, n=0)
-    csv = coverage_to_csv(result.coverage, result.tests)
-    # At least one row with a '#' in a test column.
-    body = csv.split("\n")[1:]
-    assert any("," + "#" + "," in row or row.strip().endswith(",#") or ",#," in row for row in body)
+
+    def patterns(r):
+        return {
+            (t.start, tuple((s.event, s.reached) for s in t.steps))
+            for t in r.tests
+        }
+
+    assert patterns(generate(parse_puml(puml), n=1)) == patterns(
+        generate(parse_csv(csv_text), n=1)
+    )
