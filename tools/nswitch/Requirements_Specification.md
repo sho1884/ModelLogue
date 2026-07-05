@@ -14,9 +14,33 @@
 
 ## 1. Overview / 概要
 
-**modellogue-nswitch** is a self-contained command-line tool that reads a state machine description — either a **PlantUML source** (in the EBNF-defined subset) or a **state transition table CSV** — and emits a **test case CSV** covering every N-switch transition sequence (positive tests) and, optionally, a **negative test for every invalid transition** — the empty cells of the derived state table (§7.2). It is an ADR-010 auxiliary service: independent of the ModelLogue GUI, runnable anywhere Python 3.10+ is available, designed for CI/CD pipelines and data-driven testing frameworks.
+**modellogue-nswitch** is a self-contained command-line tool that reads a state machine description — either a **PlantUML source** (in the EBNF-defined subset) or a **state transition table CSV** — and emits **Tests** and **Scenarios** (§1.1). *Tests* are the coverage patterns to verify — each valid N-switch chain and each invalid (forbidden) transition — and are the **primary** output. *Scenarios* are executable initial→final walks that cover the positive Tests, offered as a **secondary** convenience. It is an ADR-010 auxiliary service: independent of the ModelLogue GUI, runnable anywhere Python 3.10+ is available, designed for CI/CD pipelines and data-driven testing frameworks.
 
-ModelLogue とは独立に動くテストケース生成 CLI。入力は **PlantUML サブセット** または **状態遷移表 CSV** のどちらでも可。出力は N-switch カバレッジを満たすテストケース CSV。ADR-010 の補助サービス方針に従い Python で独立実装し、CI から容易に呼び出せる。
+ModelLogue とは独立に動くテスト生成 CLI。入力は **PlantUML サブセット** または **状態遷移表 CSV**。出力は **Tests**（検証したいパターン＝主）と **Scenarios**（それらを踏む一筆書き経路＝副）。ADR-010 の補助サービス方針に従い Python で独立実装し、CI から容易に呼び出せる。
+
+### 1.1 Tests and Scenarios / テストとシナリオ (v8.x)
+
+A **Test** is one thing to verify. A **Scenario** is one executable walk that verifies several Tests at once. The Test is primary (what you want to check); the Scenario is the minimal-cover walk that realizes many Tests, offered so the whole suite can be driven in few runs.
+
+- **Tests** (primary; default view in the GUI). Two kinds:
+  - **Positive** — one per required N-switch chain `A^(N+1)` (§7.2): a single transition (`0S`), a transition pair (`1S`), or a triple (`2S`). "Reach the chain's start, take these transitions, assert the expected states."
+  - **Negative / invalid** (`INV`) — one per invalid transition (an empty state-table cell, §7.2): "reach the source state, inject the forbidden event, assert no improper transition." Negatives are inherently single-transition; they are **not** 0-switch positives and must never be mixed into the 0S set.
+- **Scenarios** (`SC`; secondary). Greedy initial→final (or cycle-closing) walks that each cover multiple **positive** Tests (§7.4). **Negatives never appear in a Scenario** — a rejected event does not continue a walk. A negative Test may *reference* a prefix/Scenario to reach its source state, but is not part of the positive Scenario set.
+
+**Identifiers.** Every Test and Scenario has a stable id:
+
+```
+<scope>-<type>-<NNN>
+```
+
+- `<scope>` — the machine or sub-machine name, **always present**:
+  - a composite state's id for its child layer (e.g. `Operating`);
+  - the caller-supplied name for the outermost machine (ModelLogue passes the **session name**; CLI/API accept `--name` / `name`);
+  - `untitled` when the outermost machine is unnamed. `untitled` is chosen because it matches ModelLogue's default session name ("Untitled Session") and is a distinctive placeholder that a later rename can find-replace in one pass (`untitled-` → `<realname>-`).
+- `<type>` — `0S` / `1S` / `2S` (positive), `INV` (negative), `SC` (scenario).
+- `<NNN>` — 3-digit sequence within each `(scope, type)`.
+
+Examples: `untitled-1S-001`, `untitled-INV-001`, `untitled-SC-001`, `Operating-1S-001`, `決済-1S-001`.
 
 ### Typical workflow / 想定ワークフロー
 
@@ -87,7 +111,8 @@ modellogue-nswitch serve [--port PORT] ...    # long-running HTTP server
 | Option | Default | Description |
 |---|---|---|
 | `-n N`, `--n N` | `1` | N-switch level for **positive** tests. Accepted values: **0 / 1 / 2** only. N=0 exercises each transition once; N=1 each transition pair; N=2 each triple. |
-| `--invalid` | off | Also emit **negative** tests: one per invalid transition (empty state-table cell, §7.2). Orthogonal to `-n`. With `--invalid` and no `-n`, only negative tests are produced. |
+| `--invalid` | off | Also emit **negative** (`INV`) Tests: one per invalid transition (empty state-table cell, §7.2). Orthogonal to `-n`. With `--invalid` and no `-n`, only negative Tests are produced. |
+| `--name NAME` | `untitled` | Scope name for the outermost machine — prefixes Test / Scenario ids as `<NAME>-<type>-<NNN>` (§1.1). Composite sub-machines always use their own state id. Default `untitled`. |
 | `--format puml\|csv` | auto | Force input format. |
 | `-o FILE`, `--output FILE` | stdout | Write output to FILE instead of stdout. |
 | `--coverage` | off | Emit coverage-report CSV (which tests cover which transitions / chains) instead of the default test-case CSV. |
@@ -279,59 +304,53 @@ cat input.puml | modellogue-nswitch --format puml > tests.csv
 
 ## 6. Output format / 出力フォーマット
 
-RFC 4180 CSV, UTF-8, LF line endings. Two output modes.
+RFC 4180 CSV, UTF-8, LF line endings. Two outputs: **Tests** (§6.1, primary) and **Scenarios** (§6.2, secondary). Ids follow §1.1.
 
-### 6.1 Test case CSV (default)
+### 6.1 Tests CSV (default)
 
-One row per test case. Each test is a sequence of transitions, grouped by *layer* (top layer for the composed machine, child layers for each composite's internal state machine).
+One row per **Test** (§1.1) — the primary artifact. A Test is a pattern to verify: a positive N-switch chain (`0S`/`1S`/`2S`) or a negative invalid transition (`INV`).
 
 | Column | Type | Meaning |
 |---|---|---|
-| `test_id` | string | Stable identifier. Format `<layer>-<seq>`, e.g. `top-001`, `Operating-001`. |
-| `kind` | string | `positive` — a valid transition sequence (N-switch). `negative` — an invalid-transition robustness test (§7.2). |
-| `layer` | string | `top` for the composed machine; the composite's state id (e.g. `Operating`) for a child-layer test. |
-| `length` | integer | Number of transitions in the path. For a `negative` test, the length of the prefix that reaches the injection state. |
-| `start` | string | State id the path starts at. |
-| `sequence` | string | Pipe-separated event labels of the path, in order (empty when length 0). Each element is `event` optionally with `[guard]` / `/action`. For a `negative` test this is the prefix that drives the machine to the injection state. |
-| `end` | string | State id the path ends at. For a `negative` test, the state `S` at which the invalid event is injected. |
-| `inject` | string | **`negative` only**: the invalid event `<E>` injected at `end`. Empty for `positive` tests. |
-| `expect` | string | **`negative` only**: expected disposition `no-transition` — the event is rejected/absorbed and the machine stays at `end` (never a wrong/undefined state). Empty for `positive` tests. |
-| `covers` | string | Semicolon-separated identifiers exercised. `positive`: valid transitions `<S>--<E>-->T`. `negative`: the invalid cell `<end>--<inject>--x` (§7.5). |
+| `id` | string | `<scope>-<type>-<NNN>` (§1.1), e.g. `untitled-1S-001`, `Operating-0S-002`, `untitled-INV-001`. |
+| `type` | string | `0S` / `1S` / `2S` (positive) or `INV` (negative). |
+| `scope` | string | The machine / sub-machine name (§1.1): `untitled` (or the supplied name) for the outermost machine, the composite id for a child layer. |
+| `pattern` | string | Positive: the chain `<S0>--<e0>--><S1>--<e1>-->…` to exercise. Negative: the invalid cell `<S>--<E>--x` (§7.5). |
+| `inject` | string | **`INV` only**: the forbidden event injected at the source state. Empty otherwise. |
+| `expect` | string | **`INV` only**: `no-transition` — the event must be rejected with no improper state change. Empty otherwise. |
+| `scenarios` | string | Semicolon-separated Scenario ids (§6.2) that exercise this positive Test. Empty for `INV` (negatives are not part of Scenarios; §1.1). |
 
-Example (one negative test shown; it reaches `Active` via `start`, then injects the invalid event `reset` which must be rejected):
+Example (1-switch positive Tests + one invalid Test):
 
 ```csv
-test_id,kind,layer,length,start,sequence,end,inject,expect,covers
-top-001,positive,top,3,[*]_init,start|fault|reset,[*]_final,,,[*]_init--()-->Idle;Idle--start-->Active;Active--fault-->Failure;Failure--reset-->Idle
-top-002,positive,top,4,[*]_init,start|stop|start|reset,[*]_final,,,[*]_init--()-->Idle;Idle--start-->Active;Active--stop-->Idle;Idle--start-->Active;Active--reset-->[*]_final
-top-101,negative,top,2,[*]_init,()|start,Active,reset,no-transition,Active--reset--x
-Operating-001,positive,Operating,2,[*]_init_Operating,pause|resume,[*]_final_Operating,,,[*]_init_Operating--()-->Running;Running--pause-->Paused;Paused--resume-->Running
+id,type,scope,pattern,inject,expect,scenarios
+untitled-1S-001,1S,untitled,Idle--start-->Active--fault-->Failure,,,untitled-SC-001
+untitled-1S-002,1S,untitled,Idle--start-->Active--stop-->Idle,,,untitled-SC-002
+untitled-INV-001,INV,untitled,Active--reset--x,reset,no-transition,
 ```
 
-Negative tests sort after positive tests within a layer; their `test_id` sequence numbers continue from a distinct hundreds block (e.g. `top-101`) so positive and negative ids never collide.
+Selecting the **INV** level yields negative Tests only — positive `0S` Tests are never mixed in (they are a different type; §1.1).
 
-### 6.2 Coverage report CSV (`--coverage`)
+### 6.2 Scenarios CSV (secondary)
 
-One row per transition (N=0) or per N-chain (N ≥ 1) for positive coverage, plus one row per invalid transition when `--invalid` is set. Columns are the test-case ids, cells mark coverage.
+One row per **Scenario** (§1.1) — a greedy initial→final (or cycle-closing) walk that covers several positive Tests (§7.4). Secondary output; negatives never appear here.
 
-| Column | Meaning |
-|---|---|
-| `kind` | `transition` for a single transition, `chain` for an N-chain, `invalid-transition` for an empty state-table cell (§7.2). |
-| `layer` | `top` or composite-id. |
-| `element` | Transition id (`A--event-->B`), chain (`A--ev1-->B--ev2-->C`), or invalid cell (`A--event--x`, §7.5). |
-| `test_id…` | One column per test case; `#` when covered, empty otherwise. |
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | string | `<scope>-SC-<NNN>`. |
+| `scope` | string | As above. |
+| `length` | integer | Number of transitions in the walk. |
+| `start` | string | Start state id (`[*]_init` …). |
+| `sequence` | string | Pipe-separated event labels of the walk, in order. |
+| `end` | string | End state id (`[*]_final`, or the revisited state for a cycle-closing walk). |
+| `covers` | string | Semicolon-separated Test ids this Scenario exercises. |
 
-Example (the last row is an invalid transition, covered by the negative test `top-101`):
+Example:
 
 ```csv
-kind,layer,element,top-001,top-002,top-101,Operating-001
-transition,top,Idle--start-->Active,#,#,,
-transition,top,Active--fault-->Failure,#,,,
-transition,top,Active--stop-->Idle,,#,,
-chain,top,Idle--start-->Active--fault-->Failure,#,,,
-chain,top,Idle--start-->Active--stop-->Idle,,#,,
-invalid-transition,top,Active--reset--x,,,#,
-transition,Operating,Running--pause-->Paused,,,,#
+id,scope,length,start,sequence,end,covers
+untitled-SC-001,untitled,3,[*]_init,start|fault|reset,[*]_final,untitled-0S-001;untitled-1S-001
+untitled-SC-002,untitled,4,[*]_init,start|stop|start|reset,[*]_final,untitled-0S-003;untitled-1S-002
 ```
 
 ### 6.3 Canonicality / 決定論
@@ -347,6 +366,8 @@ This satisfies ADR-011: CI diffs on generated artifacts are meaningful.
 ---
 
 ## 7. Algorithm / アルゴリズム
+
+> **Bridge to §1.1:** the required chains (§7.2) are the positive **Tests**; the invalid cells (§7.2) are the negative (`INV`) **Tests**; the greedy cover paths (§7.4) are the **Scenarios**. The algorithm below is unchanged by the v8.x Tests/Scenarios reframe — only the output naming/ids (§6, §1.1) changed.
 
 ### 7.1 Layered decomposition / レイヤ分解
 
@@ -547,7 +568,8 @@ Fields:
 | `source` | string | — (required) | The PlantUML source or canonical CSV text. |
 | `format` | `"puml"` \| `"csv"` \| `null` | auto | Explicit when the caller already knows; otherwise the server auto-detects using the same rule as the CLI (§3). |
 | `n` | 0 \| 1 \| 2 | `1` | N-switch level (positive tests). |
-| `invalid` | boolean | `false` | Also emit negative (invalid-transition) tests, one per empty state-table cell (§7.2). Orthogonal to `n`. |
+| `invalid` | boolean | `false` | Also emit negative (`INV`) Tests, one per empty state-table cell (§7.2). Orthogonal to `n`. |
+| `name` | string | `"untitled"` | Scope name for the outermost machine; prefixes ids as `<name>-<type>-<NNN>` (§1.1). ModelLogue passes the session name. |
 | `layered` | boolean | `true` | Per §7.1. |
 | `max_cycle_unroll` | integer ≥ 1 | `3` | Per §7.3. |
 | `require_final` | boolean | `false` | Per §7.4. |

@@ -874,7 +874,7 @@ artifact_export:
       - "Both actions are disabled while no tests have been generated (loading, idle, or error with no cached result)"
 
   SR-103:
-    function: "Display N-switch test cases in a dedicated Analysis panel tab, updated reactively from the current model"
+    function: "Display Tests (verification patterns, default) and Scenarios (executable walks, secondary) in a dedicated Analysis-panel tab, updated reactively from the current model"
     parent: [UR-013]
     component: TestCasesView + nswitch HTTP client (src/services/nswitchService.ts) + testCasesStore
     status: planned
@@ -893,18 +893,26 @@ artifact_export:
       response while a new one is in flight so the tab is never blank
       mid-keystroke.
 
-      Invalid-transition (negative) mode (v8.x): the coverage-mode selector
-      gains a fourth choice `Invalid` alongside `0/1/2-switch`. It requests
-      `invalid=true` from the service (nswitch §7.2/§9.2) and renders the
-      returned `negative` tests (kind/inject/expect). This is the GUI
-      surface of UR-013's negative half — the empty state-table cells the
-      State×Event matrix now shows as `-` (SR-020). The nswitch positive
-      algorithm is unchanged; this only adds a mode.
+      v8.x reframe (Tests / Scenarios — nswitch §1.1): the tab shows Tests
+      FIRST — the coverage PATTERNS to verify: positive N-switch chains at
+      0S/1S/2S and negative invalid transitions (INV). Each Test has an id
+      `<scope>-<type>-NNN` where scope = the ModelLogue session name (passed
+      to the service) or `untitled` when the session is unnamed. The
+      one-stroke paths that used to be the primary "test case" list are
+      demoted to Scenarios (a secondary Tests/Scenarios toggle): executable
+      initial→final walks that cover several positive Tests; negatives never
+      appear in a Scenario. The coverage-mode selector picks the Test set:
+      0-switch / 1-switch / 2-switch (positive) or Invalid (negative Tests
+      ONLY — positive 0S is never mixed in). The empty state-table cells the
+      State×Event matrix shows as `-` (SR-020) are exactly the INV Tests.
+      nswitch's positive algorithm is unchanged; this is a
+      presentation + selection reframe.
     acceptance_criteria:
-      - "A fourth Analysis-panel tab labelled 'Test cases' appears after State×State"
-      - "The tab shows a table with one row per generated test case, including a `kind` column (positive / negative); positive rows show test_id/layer/length/start/sequence/end with a tooltip / expand for the full `covers` chain; negative rows additionally show `inject` (the invalid event) and `expect` (`no-transition`)"
-      - "A coverage-mode selector with four choices updates the list in place: `0-switch` / `1-switch` / `2-switch` (positive N-switch; default `1-switch`, calls the service with the matching `n`) and `Invalid` (negative tests for the empty state-table cells, calls the service with `invalid=true`)"
-      - "In `Invalid` mode the negative tests are visually distinct from positive tests (badge / colour), so a forbidden-transition test is not mistaken for a coverage sequence"
+      - "A 'Test cases' tab appears after State×State and shows Tests by default: one row per Test with id (`<scope>-<type>-NNN`), type (`0S`/`1S`/`2S`/`INV`), scope, and the pattern; `INV` rows additionally show `inject` and `expect` (`no-transition`)"
+      - "A coverage-mode selector picks the Test set in place: `0-switch` / `1-switch` / `2-switch` (positive; default `1-switch`) and `Invalid`; `Invalid` shows negative Tests ONLY — positive 0-switch is never mixed in"
+      - "A Tests / Scenarios toggle switches to the secondary Scenarios view: the one-stroke initial→final walks, each listing the Test ids it covers; negatives never appear as or within a Scenario"
+      - "ModelLogue passes the session name to the service so ids read as `<session>-<type>-NNN`; an unnamed session yields `untitled-...`"
+      - "Negative Tests are visually distinct from positive (badge / colour), so a forbidden-transition test is not mistaken for a coverage pattern"
       - "The list updates reactively after a successful parse (same debounce as SVG fetch) without requiring a manual refresh"
       - "When tools/nswitch/ responds with `uncovered` entries, a warning banner lists them above the table"
       - "When the nswitch service is unreachable, the tab shows a connection-error hint with the probed URL; the rest of the UI keeps working"
