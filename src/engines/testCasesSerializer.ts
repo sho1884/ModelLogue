@@ -1,28 +1,15 @@
-// SR-102: serialize the nswitch test-case list and coverage report for
-// Copy / Save.
+// SR-102 / SR-103: serialize the nswitch Tests and Scenarios for Copy / Save.
 //
-// CSV shapes match tools/nswitch/Requirements_Specification.md
-//   - §6.1 for the test case list
-//   - §6.2 for the coverage report
-// so files saved here are byte-identical to the CLI's stdout (which
-// modellogue-nswitch derives from the same sections). That equivalence
-// is the ADR-011 promise: the same model + N always yields the same
-// artifact regardless of which surface produced it.
+// CSV shapes match tools/nswitch/Requirements_Specification.md §6 (columnar):
+//   - §6.1 Tests — positive: seq,id,start,event_i,reached_i,…,scenarios;
+//                  INV:      seq,id,start,event,expect,reach
+//   - §6.2 Scenarios — seq,id,start,event_i,reached_i,…,covers
+// The emitters below mirror generate.py's tests_to_csv / scenarios_to_csv
+// exactly, so files saved here are byte-identical to the CLI's stdout. That
+// equivalence is the ADR-011 promise: same model + N + name always yields the
+// same artifact regardless of which surface produced it.
 
-import type { CoverageRow, TestCase } from '../types/testCase';
-
-const CSV_HEADER = [
-  'test_id',
-  'kind',
-  'layer',
-  'length',
-  'start',
-  'sequence',
-  'end',
-  'inject',
-  'expect',
-  'covers',
-];
+import type { Scenario, Test } from '../types/testCase';
 
 function csvCell(s: string | number): string {
   const text = String(s);
@@ -30,30 +17,6 @@ function csvCell(s: string | number): string {
     return `"${text.replace(/"/g, '""')}"`;
   }
   return text;
-}
-
-export function testCasesToCsv(tests: TestCase[]): string {
-  const lines: string[] = [CSV_HEADER.join(',')];
-  for (const t of tests) {
-    lines.push(
-      [
-        t.test_id,
-        t.kind,
-        t.layer,
-        t.length,
-        t.start,
-        t.sequence,
-        t.end,
-        t.inject,
-        t.expect,
-        t.covers,
-      ]
-        .map(csvCell)
-        .join(',')
-    );
-  }
-  // LF line endings (nswitch CLI writes LF too; see server/cli output).
-  return lines.join('\n');
 }
 
 function htmlEscape(s: string | number): string {
@@ -64,117 +27,105 @@ function htmlEscape(s: string | number): string {
     .replace(/"/g, '&quot;');
 }
 
-/**
- * Serialize the test list as an HTML <table>. Excel / Google Sheets /
- * Numbers prefer HTML when both MIME types are on the clipboard, so this
- * gives users a formatted paste by default while keeping the plain-text
- * payload CSV-consumable for CI configs and text editors.
- */
-export function testCasesToHtml(tests: TestCase[]): string {
-  const header =
+function maxSteps(items: { steps: unknown[] }[]): number {
+  return items.reduce((m, x) => Math.max(m, x.steps.length), 0);
+}
+
+// The columnar header shared by positive Tests and Scenarios; `tail` is the
+// cross-reference column (`scenarios` for Tests, `covers` for Scenarios).
+function stepHeader(k: number, tail: string): string[] {
+  const header = ['seq', 'id', 'start'];
+  for (let i = 1; i <= k; i++) header.push(`event_${i}`, `reached_${i}`);
+  header.push(tail);
+  return header;
+}
+
+function stepCells(steps: { event: string; reached: string }[], k: number): string[] {
+  const cells: string[] = [];
+  for (let i = 0; i < k; i++) {
+    if (i < steps.length) cells.push(steps[i].event, steps[i].reached);
+    else cells.push('', '');
+  }
+  return cells;
+}
+
+// ---- Tests (§6.1) ----
+
+const INV_HEADER = ['seq', 'id', 'start', 'event', 'expect', 'reach'];
+
+function testsAllInv(tests: Test[]): boolean {
+  return tests.length > 0 && tests.every((t) => t.type === 'INV');
+}
+
+export function testCasesToCsv(tests: Test[]): string {
+  const lines: string[] = [];
+  if (testsAllInv(tests)) {
+    lines.push(INV_HEADER.join(','));
+    tests.forEach((t, i) => {
+      lines.push(
+        [i + 1, t.id, t.start, t.event, t.expect, t.reach].map(csvCell).join(',')
+      );
+    });
+    return lines.join('\n') + '\n';
+  }
+  const k = maxSteps(tests);
+  lines.push(stepHeader(k, 'scenarios').map(csvCell).join(','));
+  tests.forEach((t, i) => {
+    const row = [i + 1, t.id, t.start, ...stepCells(t.steps, k), t.scenarios.join(';')];
+    lines.push(row.map(csvCell).join(','));
+  });
+  return lines.join('\n') + '\n';
+}
+
+export function testCasesToHtml(tests: Test[]): string {
+  const inv = testsAllInv(tests);
+  const k = inv ? 0 : maxSteps(tests);
+  const header = inv ? INV_HEADER : stepHeader(k, 'scenarios');
+  const head =
     `<thead><tr>` +
-    CSV_HEADER.map((h) => `<th>${htmlEscape(h)}</th>`).join('') +
+    header.map((h) => `<th>${htmlEscape(h)}</th>`).join('') +
     `</tr></thead>`;
-  const body =
-    `<tbody>` +
-    tests
-      .map(
-        (t) =>
-          `<tr>` +
-          `<th scope="row" style="font-weight:normal;text-align:left;">${htmlEscape(t.test_id)}</th>` +
-          `<td>${htmlEscape(t.kind)}</td>` +
-          `<td>${htmlEscape(t.layer)}</td>` +
-          `<td style="text-align:right;">${htmlEscape(t.length)}</td>` +
-          `<td>${htmlEscape(t.start)}</td>` +
-          `<td>${htmlEscape(t.sequence)}</td>` +
-          `<td>${htmlEscape(t.end)}</td>` +
-          `<td>${htmlEscape(t.inject)}</td>` +
-          `<td>${htmlEscape(t.expect)}</td>` +
-          `<td>${htmlEscape(t.covers)}</td>` +
-          `</tr>`
-      )
-      .join('') +
-    `</tbody>`;
+  const rows = tests.map((t, i) => {
+    const cells = inv
+      ? [i + 1, t.id, t.start, t.event, t.expect, t.reach]
+      : [i + 1, t.id, t.start, ...stepCells(t.steps, k), t.scenarios.join(';')];
+    return `<tr>` + cells.map((c) => `<td>${htmlEscape(c)}</td>`).join('') + `</tr>`;
+  });
   return (
     `<table border="1" cellspacing="0" cellpadding="4">` +
-    header +
-    body +
+    head +
+    `<tbody>${rows.join('')}</tbody>` +
     `</table>`
   );
 }
 
-// ---- coverage report (§6.2) ----
+// ---- Scenarios (§6.2) ----
 
-function coverageHeader(tests: TestCase[]): string[] {
-  return [
-    'kind',
-    'layer',
-    'element',
-    ...tests.map((t) => t.test_id),
-    'status',
-    'reason',
-  ];
+export function scenariosToCsv(scenarios: Scenario[]): string {
+  const k = maxSteps(scenarios);
+  const lines: string[] = [stepHeader(k, 'covers').map(csvCell).join(',')];
+  scenarios.forEach((s, i) => {
+    const row = [i + 1, s.id, s.start, ...stepCells(s.steps, k), s.covers.join(';')];
+    lines.push(row.map(csvCell).join(','));
+  });
+  return lines.join('\n') + '\n';
 }
 
-export function coverageToCsv(
-  coverage: CoverageRow[],
-  tests: TestCase[]
-): string {
-  const header = coverageHeader(tests);
-  const lines: string[] = [header.map(csvCell).join(',')];
-  for (const row of coverage) {
-    const cells = [
-      row.kind,
-      row.layer,
-      row.element,
-      ...tests.map((t) => row.hits[t.test_id] ?? ''),
-      row.status,
-      row.reason,
-    ];
-    lines.push(cells.map(csvCell).join(','));
-  }
-  return lines.join('\n');
-}
-
-export function coverageToHtml(
-  coverage: CoverageRow[],
-  tests: TestCase[]
-): string {
-  const header =
+export function scenariosToHtml(scenarios: Scenario[]): string {
+  const k = maxSteps(scenarios);
+  const header = stepHeader(k, 'covers');
+  const head =
     `<thead><tr>` +
-    coverageHeader(tests)
-      .map((h) => `<th>${htmlEscape(h)}</th>`)
-      .join('') +
+    header.map((h) => `<th>${htmlEscape(h)}</th>`).join('') +
     `</tr></thead>`;
-
-  const body =
-    `<tbody>` +
-    coverage
-      .map(
-        (row) =>
-          `<tr>` +
-          `<td>${htmlEscape(row.kind)}</td>` +
-          `<td>${htmlEscape(row.layer)}</td>` +
-          `<th scope="row" style="font-weight:normal;text-align:left;">${htmlEscape(row.element)}</th>` +
-          tests
-            .map(
-              (t) =>
-                `<td style="text-align:center;">` +
-                `${htmlEscape(row.hits[t.test_id] ?? '')}` +
-                `</td>`
-            )
-            .join('') +
-          `<td>${htmlEscape(row.status)}</td>` +
-          `<td>${htmlEscape(row.reason)}</td>` +
-          `</tr>`
-      )
-      .join('') +
-    `</tbody>`;
-
+  const rows = scenarios.map((s, i) => {
+    const cells = [i + 1, s.id, s.start, ...stepCells(s.steps, k), s.covers.join(';')];
+    return `<tr>` + cells.map((c) => `<td>${htmlEscape(c)}</td>`).join('') + `</tr>`;
+  });
   return (
     `<table border="1" cellspacing="0" cellpadding="4">` +
-    header +
-    body +
+    head +
+    `<tbody>${rows.join('')}</tbody>` +
     `</table>`
   );
 }

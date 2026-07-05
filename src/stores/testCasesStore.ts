@@ -12,9 +12,18 @@ import type {
   NswitchGenerationResult,
 } from '../types/testCase';
 import { NswitchError, generate as generateApi } from '../services/nswitchService';
+import { useSessionStore } from './sessionStore';
 
 export type TestCasesStatus = 'idle' | 'loading' | 'success' | 'error';
-export type TestCasesView = 'tests' | 'coverage';
+export type TestCasesView = 'tests' | 'scenarios';
+
+// The scope name passed to nswitch (§1.1): the session name (spaces → _), or
+// `untitled` for the default/empty session — a distinctive placeholder.
+function scopeName(): string {
+  const raw = (useSessionStore.getState().sessionName ?? '').trim();
+  if (!raw || raw === 'Untitled Session') return 'untitled';
+  return raw.replace(/\s+/g, '_');
+}
 
 interface TestCasesStore {
   // Coverage selector: 0/1/2 (positive N-switch) or 'invalid' (negative).
@@ -66,6 +75,7 @@ export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
           : { n: mode };
       const result = await generateApi(source, {
         ...modeOpts,
+        name: scopeName(),
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;

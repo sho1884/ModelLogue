@@ -1,28 +1,35 @@
-// API response types for the N-switch coverage generator.
-// Mirrors the JSON shape documented in
-// tools/nswitch/Requirements_Specification.md §9.2.3.
+// API response types for the nswitch generator.
+// Mirrors the JSON shape in tools/nswitch/Requirements_Specification.md
+// §1.1 (Tests / Scenarios, ids) and §6 (columnar output).
 
-export interface TestCase {
-  test_id: string;
-  kind: 'positive' | 'negative';
-  layer: string;
-  length: number;
-  start: string;
-  sequence: string;
-  end: string;
-  // Negative (invalid-transition) tests only; empty string for positive.
-  inject: string;
-  expect: string;
-  covers: string;
+export interface Step {
+  event: string;
+  reached: string;
 }
 
-export interface CoverageRow {
-  kind: 'transition' | 'chain' | 'invalid-transition';
-  layer: string;
-  element: string;
-  hits: Record<string, string>;
-  status: string;
-  reason: string;
+// A Test = one verification pattern (§1.1). Positive N-switch chain (0S/1S/2S)
+// or a negative invalid transition (INV).
+export interface Test {
+  id: string; // <scope>-<type>-<NNN>
+  type: '0S' | '1S' | '2S' | 'INV';
+  scope: string;
+  start: string;
+  steps: Step[]; // positive: the chain's (event, reached) steps; INV: []
+  // INV only:
+  event: string; // the forbidden event injected at `start`
+  expect: string; // "no-transition"
+  reach: string; // a Scenario id reaching `start`, or ""
+  // positive only:
+  scenarios: string[]; // Scenario ids that exercise this Test
+}
+
+// A Scenario = one executable walk covering several positive Tests (§1.1).
+export interface Scenario {
+  id: string; // <scope>-SC-<NNN>
+  scope: string;
+  start: string;
+  steps: Step[];
+  covers: string[]; // Test ids exercised
 }
 
 export interface UncoveredChainTransition {
@@ -34,27 +41,28 @@ export interface UncoveredChainTransition {
 }
 
 export interface UncoveredChain {
-  layer: string;
+  scope: string;
   chain: UncoveredChainTransition[];
   reason: string;
 }
 
 export interface NswitchGenerationResult {
-  tests: TestCase[];
-  coverage: CoverageRow[];
+  tests: Test[];
+  scenarios: Scenario[];
   uncovered: UncoveredChain[];
-  layers: string[];
+  scopes: string[];
 }
 
 export type NSwitchLevel = 0 | 1 | 2;
 
 // The Test-cases tab coverage selector: positive N-switch levels plus the
-// negative "Invalid" mode (invalid-transition tests, §7.2).
+// negative "Invalid" mode (invalid-transition Tests, §7.2).
 export type CoverageMode = NSwitchLevel | 'invalid';
 
 export interface NswitchGenerateOptions {
   n?: NSwitchLevel;
   invalid?: boolean;
+  name?: string; // scope name for the outermost machine (§1.1)
   format?: 'puml' | 'csv';
   layered?: boolean;
   max_cycle_unroll?: number;

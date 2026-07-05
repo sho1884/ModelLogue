@@ -275,14 +275,17 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 
 | ID | Function / 機能 | Parent / 親 |
 |----|----------------|-------------|
-| SR-103 | Display N-switch test cases in a dedicated Analysis-panel tab, updated reactively from the current model / 専用タブにN-switchテストケースを表示し、現在のモデルに連動してリアクティブに更新する | UR-013 |
+| SR-103 | Display N-switch **Tests** (verification patterns — primary) and **Scenarios** (executable walks — secondary) in a dedicated Analysis-panel tab, columnar and updated reactively from the current model / 専用タブに N-switch の**テスト**（検証パターン＝主）と**シナリオ**（実行可能な経路＝従）を列展開で表示し、現在のモデルに連動してリアクティブに更新する | UR-013 |
 
 **設計意図**:
 
 - テストケース生成は補助サービス（[`tools/nswitch/`](../../tools/nswitch/)）の責務。ModelLogue 本体はその HTTP API (§9.2) を叩いて結果を並べるだけ。重い計算ロジックは本体に取り込まない（ADR-010）。
+- **Tests / Scenarios の二層** ([tools/nswitch §1.1](../../tools/nswitch/Requirements_Specification.md))：検証すべき**パターン**が Tests（既定表示、ID `<scope>-<type>-<NNN>`、type=`0S/1S/2S/INV`）、それを覆う**一筆書きの実行経路**が Scenarios（おまけ、ID `<scope>-SC-<NNN>`）。View トグルで切り替え、既定は Tests。scope は ModelLogue のセッション名（空白は `_`、無題は `untitled`）を nswitch に `name` として渡して決まる。
+- **列展開出力 (§6)**：各 `(event, reached)` ステップを独立した列（`event_i / reached_i`）に展開し、機械処理しやすい CSV とする。Tests・Scenarios とも同形。
+- **件数表示**：ツールバーに `N tests / scenarios across M scopes` を常時表示。ID だけでは総数が読み取りにくいため。
 - タブ内での**リアクティブ更新**を最優先。パース成功時に SVG 取得と同じデバウンスで自動再計算する。ユーザーが N (0/1/2) を切り替えた時も即時反映。
 - エラーは **in-place 表示**：サービスが落ちていても、パースエラーがあっても、タブ内に原因を出すだけで UI 全体は動き続ける。
-- **Invalid モード (v8.x)**：被覆モード選択に 4 つ目 `Invalid` を追加（`0-switch / 1-switch / 2-switch / Invalid`）。`invalid=true` で nswitch を呼び、空欄セル（禁止遷移）の**負テスト**（`inject`／`expect`）を表示し、正テストと視覚的に区別する。UR-013 の「負の半分」の GUI 面で、State×Event 表が `-` で見せる禁止遷移（SR-020）に対応。nswitch の正側アルゴリズムは不変で、モードが増えるだけ。
+- **Invalid モード**：被覆モード選択に 4 つ目 `Invalid` を追加（`0-switch / 1-switch / 2-switch / Invalid`）。`invalid=true` で nswitch を呼び、空欄セル（禁止遷移）の**負テストのみ**（INV、`event`／`expect=no-transition`／到達手段の `reach`）を表示する。負テストは正テストにも Scenarios にも混ざらない。UR-013 の「負の半分」の GUI 面で、State×Event 表が `-` で見せる禁止遷移（SR-020）に対応。nswitch の正側アルゴリズムは不変で、モードが増えるだけ。
 
 **設計意図**:
 
@@ -355,7 +358,7 @@ Notes:
 - Undo / Redo live on the diagram toolbar (SR-035) — they affect the model, not the chat
 - Empty-state guide replaces the diagram pane until a parseable model exists (SR-070)
 - Source tab shows **Copy** / **Save .puml** actions (SR-100); each matrix tab shows **Copy** / **Save .csv** (SR-101 — v7.3 は正規 CSV 形式で保存)
-- Test cases tab shows N selector (0/1/2) and a reactive test list fed by the nswitch HTTP API (SR-103, v7.4)
+- Test cases tab shows a coverage selector (0/1/2/Invalid) and a Tests|Scenarios toggle over a reactive, columnar list fed by the nswitch HTTP API (SR-103)
 - ProposalView: 提案があるメッセージ内で、**現モデル SVG（左） / 提案モデル SVG（右）** を並置。提案側には SR-090 の差分に基づく緑/赤/橙オーバーレイを重ねる。下には提案ソースの折りたたみ表示と Apply ボタン。⛶ Open larger comparison でフルスクリーンモーダルへ。
 
 ### 3.13 Requirement Diagram Support / 要求図対応 (v7.5)

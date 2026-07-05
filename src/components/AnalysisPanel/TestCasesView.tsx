@@ -1,16 +1,18 @@
-// SR-103: Display N-switch test cases fed by the modellogue-nswitch
-// HTTP API. SR-102: Copy / Save with a Tests|Coverage view toggle that
-// switches both the on-screen table and the export target. Reactive to
-// the current source; errors surface in-place.
+// SR-103: Display N-switch Tests (verification patterns — primary) and
+// Scenarios (executable walks that cover them — secondary), fed by the
+// modellogue-nswitch HTTP API. Output is columnar (§6): one column per
+// (event, reached) step, for machine processing. SR-102: Copy / Save with a
+// Tests|Scenarios toggle that switches both the on-screen table and the
+// export target. Reactive to the current source; errors surface in-place.
 
+import type { ReactNode } from 'react';
 import { useTestCasesStore } from '../../stores/testCasesStore';
-import { getBaseUrl } from '../../services/nswitchService';
 import { useSessionStore } from '../../stores/sessionStore';
-import type { CoverageMode } from '../../types/testCase';
+import type { CoverageMode, Scenario, Step, Test } from '../../types/testCase';
 import { ExportActions } from '../ExportActions';
 import {
-  coverageToCsv,
-  coverageToHtml,
+  scenariosToCsv,
+  scenariosToHtml,
   testCasesToCsv,
   testCasesToHtml,
 } from '../../engines/testCasesSerializer';
@@ -18,17 +20,25 @@ import { copyHtmlAndText } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
 
 // Coverage selector (SR-103): positive N-switch levels + the negative
-// "Invalid" mode (invalid-transition tests, nswitch §7.2).
+// "Invalid" mode (invalid-transition Tests, nswitch §7.2).
 const MODE_OPTIONS: { id: CoverageMode; label: string }[] = [
   { id: 0, label: '0-switch' },
   { id: 1, label: '1-switch' },
   { id: 2, label: '2-switch' },
   { id: 'invalid', label: 'Invalid' },
 ];
-const VIEWS: { id: 'tests' | 'coverage'; label: string }[] = [
+const VIEWS: { id: 'tests' | 'scenarios'; label: string }[] = [
   { id: 'tests', label: 'Tests' },
-  { id: 'coverage', label: 'Coverage' },
+  { id: 'scenarios', label: 'Scenarios' },
 ];
+
+function maxSteps(items: { steps: Step[] }[]): number {
+  return items.reduce((m, x) => Math.max(m, x.steps.length), 0);
+}
+
+function allInv(tests: Test[]): boolean {
+  return tests.length > 0 && tests.every((t) => t.type === 'INV');
+}
 
 export function TestCasesView() {
   const mode = useTestCasesStore((s) => s.mode);
@@ -41,23 +51,39 @@ export function TestCasesView() {
   const sessionName = useSessionStore((s) => s.sessionName);
 
   const isStale = status === 'loading' || status === 'error';
-  const hasTests = !!(result && result.tests.length > 0);
+  const rows = result
+    ? view === 'tests'
+      ? result.tests.length
+      : result.scenarios.length
+    : 0;
+  const hasData = rows > 0;
 
   const exportCsv = () => {
     if (!result) return '';
     return view === 'tests'
       ? testCasesToCsv(result.tests)
-      : coverageToCsv(result.coverage, result.tests);
+      : scenariosToCsv(result.scenarios);
   };
   const exportHtml = () => {
     if (!result) return '';
     return view === 'tests'
       ? testCasesToHtml(result.tests)
-      : coverageToHtml(result.coverage, result.tests);
+      : scenariosToHtml(result.scenarios);
   };
   const modeTag = mode === 'invalid' ? 'invalid' : `n${mode}`;
-  const exportSuffix =
-    view === 'tests' ? `testcases-${modeTag}` : `coverage-${modeTag}`;
+  const exportSuffix = view === 'tests' ? `tests-${modeTag}` : `scenarios-${modeTag}`;
+
+  const scopeCount = result?.scopes.length ?? 0;
+  const countLabel =
+    status === 'loading'
+      ? 'Generating…'
+      : status === 'success' && result
+        ? view === 'tests'
+          ? `${rows} test${rows === 1 ? '' : 's'} across ${scopeCount} scope${scopeCount === 1 ? '' : 's'}`
+          : `${rows} scenario${rows === 1 ? '' : 's'} across ${scopeCount} scope${scopeCount === 1 ? '' : 's'}`
+        : status === 'idle'
+          ? 'No model yet'
+          : '';
 
   return (
     <div className="flex flex-col h-full">
@@ -74,7 +100,7 @@ export function TestCasesView() {
               onClick={() => setMode(opt.id)}
               title={
                 opt.id === 'invalid'
-                  ? 'Invalid transitions: one negative test per empty state-table cell (forbidden transition). nswitch §7.2.'
+                  ? 'Invalid transitions: one negative Test per empty state-table cell (forbidden transition). nswitch §7.2.'
                   : `N-switch level ${opt.id}`
               }
               className={`px-2 py-0.5 text-xs border rounded ${
@@ -96,6 +122,11 @@ export function TestCasesView() {
               role="radio"
               aria-checked={view === v.id}
               onClick={() => setView(v.id)}
+              title={
+                v.id === 'tests'
+                  ? 'Tests: the verification patterns to check (primary).'
+                  : 'Scenarios: executable walks that cover the positive Tests (secondary).'
+              }
               className={`px-2 py-0.5 text-xs border rounded ${
                 view === v.id
                   ? 'bg-indigo-500 text-white border-indigo-500'
@@ -106,22 +137,15 @@ export function TestCasesView() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-700 font-semibold">
-          {status === 'loading' && 'Generating…'}
-          {status === 'success' && result &&
-            (view === 'tests'
-              ? `${result.tests.length} test${result.tests.length === 1 ? '' : 's'} across ${result.layers.length} layer${result.layers.length === 1 ? '' : 's'}`
-              : `${result.coverage.length} required chain${result.coverage.length === 1 ? '' : 's'}`)}
-          {status === 'idle' && 'No model yet'}
-        </span>
+        <span className="text-xs text-gray-700 font-semibold">{countLabel}</span>
         <div className="ml-auto">
           <ExportActions
             onCopy={() => {
-              if (!hasTests) return Promise.resolve();
+              if (!hasData) return Promise.resolve();
               return copyHtmlAndText(exportHtml(), exportCsv());
             }}
             onSave={() => {
-              if (!hasTests) return;
+              if (!hasData) return;
               downloadTextFile(
                 sessionFilename(sessionName, exportSuffix, 'csv'),
                 exportCsv(),
@@ -130,16 +154,16 @@ export function TestCasesView() {
             }}
             copyTitle={
               view === 'tests'
-                ? 'Copy test cases. HTML payload for Excel / Sheets / Word; plain-text payload is the CSV defined in tools/nswitch §6.1.'
-                : 'Copy coverage report. HTML payload for Excel / Sheets / Word; plain-text payload is the CSV defined in tools/nswitch §6.2.'
+                ? 'Copy Tests. HTML payload for Excel / Sheets / Word; plain-text payload is the columnar CSV defined in tools/nswitch §6.1.'
+                : 'Copy Scenarios. HTML payload for Excel / Sheets / Word; plain-text payload is the columnar CSV defined in tools/nswitch §6.2.'
             }
             saveLabel="Save .csv"
             saveTitle={
               view === 'tests'
-                ? 'Download the test-case CSV (§6.1). Filename encodes the current N-switch level.'
-                : 'Download the coverage-report CSV (§6.2). Filename encodes the current N-switch level.'
+                ? 'Download the Tests CSV (§6.1). Filename encodes the current N-switch level.'
+                : 'Download the Scenarios CSV (§6.2). Filename encodes the current N-switch level.'
             }
-            disabled={!hasTests}
+            disabled={!hasData}
           />
         </div>
       </div>
@@ -150,24 +174,26 @@ export function TestCasesView() {
         <UncoveredBanner uncovered={result.uncovered} />
       )}
 
-      {/* Table body: tests or coverage */}
+      {/* Table body: tests or scenarios */}
       <div
         className={`overflow-auto flex-1 p-2 ${isStale ? 'opacity-60' : ''}`}
         aria-busy={status === 'loading'}
       >
-        {hasTests ? (
+        {hasData ? (
           view === 'tests' ? (
-            <TestsTable result={result!} />
+            <TestsTable tests={result!.tests} />
           ) : (
-            <CoverageTable result={result!} />
+            <ScenariosTable scenarios={result!.scenarios} />
           )
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-gray-400">
             {status === 'idle'
-              ? 'The test case list appears once the model has at least one state.'
+              ? 'The list appears once the model has at least one state.'
               : status === 'loading'
-                ? 'Generating test cases…'
-                : 'No test cases yet.'}
+                ? 'Generating…'
+                : view === 'tests'
+                  ? 'No Tests yet.'
+                  : 'No Scenarios yet.'}
           </div>
         )}
       </div>
@@ -175,159 +201,121 @@ export function TestCasesView() {
   );
 }
 
-function TestsTable({
-  result,
-}: {
-  result: NonNullable<ReturnType<typeof useTestCasesStore.getState>['result']>;
-}) {
-  const headers = [
-    'test_id', 'kind', 'layer', 'length',
-    'start', 'sequence', 'end', 'inject', 'expect',
-  ];
+const TH =
+  'border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600 whitespace-nowrap';
+const TD = 'border border-gray-300 px-2 py-1 whitespace-nowrap';
+
+// Columnar header cells: #, id, start, (event_i, reached_i)…, tail.
+function stepHeaders(k: number, tail: string): string[] {
+  const h = ['#', 'id', 'start'];
+  for (let i = 1; i <= k; i++) h.push(`event_${i}`, `reached_${i}`);
+  h.push(tail);
+  return h;
+}
+
+function StepCells({ steps, k }: { steps: Step[]; k: number }) {
+  const cells: ReactNode[] = [];
+  for (let i = 0; i < k; i++) {
+    const s = steps[i];
+    cells.push(
+      <td key={`e${i}`} className={`${TD} font-mono text-gray-800`}>
+        {s ? s.event : ''}
+      </td>,
+      <td key={`r${i}`} className={`${TD} font-mono text-gray-800`}>
+        {s ? s.reached : ''}
+      </td>
+    );
+  }
+  return <>{cells}</>;
+}
+
+function TestsTable({ tests }: { tests: Test[] }) {
+  if (allInv(tests)) return <InvTestsTable tests={tests} />;
+  const k = maxSteps(tests);
+  const headers = stepHeaders(k, 'scenarios');
   return (
-    <table className="w-full text-xs border-collapse">
+    <table className="text-xs border-collapse">
       <thead>
         <tr>
-          {headers.map((h) => (
-            <th
-              key={h}
-              className="border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600"
-            >
+          {headers.map((h, i) => (
+            <th key={i} className={TH}>
               {h}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {result.tests.map((t) => {
-          const neg = t.kind === 'negative';
-          return (
-            <tr
-              key={t.test_id}
-              title={t.covers}
-              className={neg ? 'bg-red-50' : undefined}
-            >
-              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-                {t.test_id}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 whitespace-nowrap">
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    neg
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {t.kind}
-                </span>
-              </td>
-              <td className="border border-gray-300 px-2 py-1 text-gray-700 whitespace-nowrap">
-                {t.layer}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 text-right text-gray-700">
-                {t.length}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-                {t.start}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800">
-                {t.sequence}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-                {t.end}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 font-mono text-red-700 whitespace-nowrap">
-                {t.inject}
-              </td>
-              <td className="border border-gray-300 px-2 py-1 text-red-700 whitespace-nowrap">
-                {t.expect}
-              </td>
-            </tr>
-          );
-        })}
+        {tests.map((t, i) => (
+          <tr key={t.id}>
+            <td className={`${TD} text-right text-gray-500`}>{i + 1}</td>
+            <td className={`${TD} font-mono text-gray-800`}>{t.id}</td>
+            <td className={`${TD} font-mono text-gray-800`}>{t.start}</td>
+            <StepCells steps={t.steps} k={k} />
+            <td className={`${TD} font-mono text-indigo-700`}>
+              {t.scenarios.join('; ')}
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
   );
 }
 
-function CoverageTable({
-  result,
-}: {
-  result: NonNullable<ReturnType<typeof useTestCasesStore.getState>['result']>;
-}) {
-  const tests = result.tests;
+// Negative (INV) Tests use a fixed non-columnar shape (§6.1): one forbidden
+// event injected at `start`, expecting no transition. `reach` names a Scenario
+// whose walk passes through `start` (how to get there), or is empty.
+function InvTestsTable({ tests }: { tests: Test[] }) {
+  const headers = ['#', 'id', 'start', 'event', 'expect', 'reach'];
   return (
     <table className="text-xs border-collapse">
       <thead>
         <tr>
-          {['kind', 'layer', 'element'].map((h) => (
-            <th
-              key={h}
-              className="border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600 whitespace-nowrap"
-            >
-              {h}
-            </th>
-          ))}
-          {tests.map((t) => (
-            <th
-              key={t.test_id}
-              className="border border-gray-300 bg-gray-100 px-2 py-1 text-center font-medium text-gray-600 whitespace-nowrap"
-              title={t.covers}
-            >
-              {t.test_id}
-            </th>
-          ))}
-          {['status', 'reason'].map((h) => (
-            <th
-              key={h}
-              className="border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600 whitespace-nowrap"
-            >
+          {headers.map((h) => (
+            <th key={h} className={TH}>
               {h}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {result.coverage.map((row, i) => (
-          <tr key={`${row.layer}-${row.element}-${i}`}>
-            <td className="border border-gray-300 px-2 py-1 text-gray-700 whitespace-nowrap">
-              {row.kind}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 text-gray-700 whitespace-nowrap">
-              {row.layer}
-            </td>
-            <td className="border border-gray-300 px-2 py-1 font-mono text-gray-800 whitespace-nowrap">
-              {row.element}
-            </td>
-            {tests.map((t) => {
-              const marker = row.hits[t.test_id] ?? '';
-              const cellClass = marker === '#'
-                ? 'bg-indigo-100 text-indigo-800 font-semibold'
-                : marker === 'x'
-                  ? 'bg-gray-100 text-gray-500'
-                  : 'text-gray-300';
-              return (
-                <td
-                  key={t.test_id}
-                  className={`border border-gray-300 px-2 py-1 text-center ${cellClass}`}
-                >
-                  {marker}
-                </td>
-              );
-            })}
-            <td
-              className={`border border-gray-300 px-2 py-1 whitespace-nowrap ${
-                row.status ? 'text-amber-700' : 'text-gray-400'
-              }`}
-            >
-              {row.status}
-            </td>
-            <td
-              className={`border border-gray-300 px-2 py-1 ${
-                row.reason ? 'text-amber-700' : 'text-gray-400'
-              }`}
-            >
-              {row.reason}
+        {tests.map((t, i) => (
+          <tr key={t.id} className="bg-red-50">
+            <td className={`${TD} text-right text-gray-500`}>{i + 1}</td>
+            <td className={`${TD} font-mono text-gray-800`}>{t.id}</td>
+            <td className={`${TD} font-mono text-gray-800`}>{t.start}</td>
+            <td className={`${TD} font-mono text-red-700`}>{t.event}</td>
+            <td className={`${TD} text-red-700`}>{t.expect}</td>
+            <td className={`${TD} font-mono text-indigo-700`}>{t.reach}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ScenariosTable({ scenarios }: { scenarios: Scenario[] }) {
+  const k = maxSteps(scenarios);
+  const headers = stepHeaders(k, 'covers');
+  return (
+    <table className="text-xs border-collapse">
+      <thead>
+        <tr>
+          {headers.map((h, i) => (
+            <th key={i} className={TH}>
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {scenarios.map((s, i) => (
+          <tr key={s.id}>
+            <td className={`${TD} text-right text-gray-500`}>{i + 1}</td>
+            <td className={`${TD} font-mono text-gray-800`}>{s.id}</td>
+            <td className={`${TD} font-mono text-gray-800`}>{s.start}</td>
+            <StepCells steps={s.steps} k={k} />
+            <td className={`${TD} font-mono text-indigo-700`}>
+              {s.covers.join('; ')}
             </td>
           </tr>
         ))}
@@ -381,8 +369,6 @@ function UncoveredBanner({
     ReturnType<typeof useTestCasesStore.getState>['result']
   >['uncovered'];
 }) {
-  const base = getBaseUrl();
-  void base;
   return (
     <div className="px-3 py-2 bg-yellow-50 border-b border-yellow-200 text-xs text-yellow-900 shrink-0">
       <strong className="font-semibold">
@@ -394,7 +380,7 @@ function UncoveredBanner({
       <ul className="mt-1 space-y-0.5">
         {uncovered.slice(0, 5).map((u, i) => (
           <li key={i} className="font-mono">
-            <span className="text-yellow-700">[{u.layer}]</span>{' '}
+            <span className="text-yellow-700">[{u.scope}]</span>{' '}
             {u.chain
               .map(
                 (t, idx) =>

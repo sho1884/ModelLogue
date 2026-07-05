@@ -66,6 +66,7 @@ export async function generate(
     source,
     n: options.n ?? 1,
     invalid: options.invalid ?? false,
+    name: options.name ?? 'untitled',
     format: options.format,
     layered: options.layered ?? true,
     max_cycle_unroll: options.max_cycle_unroll ?? 3,

@@ -1,218 +1,150 @@
 import { describe, it, expect } from 'vitest';
 import {
-  coverageToCsv,
-  coverageToHtml,
+  scenariosToCsv,
+  scenariosToHtml,
   testCasesToCsv,
   testCasesToHtml,
 } from '../../src/engines/testCasesSerializer';
-import type { CoverageRow, TestCase } from '../../src/types/testCase';
+import type { Scenario, Test } from '../../src/types/testCase';
 
-const sample: TestCase[] = [
+// Positive Tests (§6.1, columnar). Byte-equivalent to generate.py tests_to_csv.
+const positive: Test[] = [
   {
-    test_id: 'top-001',
-    layer: 'top',
-    length: 3,
-    start: '[*]_init',
-    sequence: '()|start|done',
-    end: '[*]_final',
-    inject: '',
+    id: 'watch-1S-001',
+    type: '1S',
+    scope: 'watch',
+    start: 'Active',
+    steps: [
+      { event: 'stop', reached: 'Idle' },
+      { event: 'start', reached: 'Active' },
+    ],
+    event: '',
     expect: '',
-    kind: 'positive',
-    covers:
-      '[*]_init--()-->Idle;Idle--start-->Active;Active--done-->[*]_final',
+    reach: '',
+    scenarios: ['watch-SC-001'],
   },
   {
-    test_id: 'Operating-001',
-    kind: 'positive',
-    layer: 'Operating',
-    length: 2,
-    start: '[*]_init_Operating',
-    sequence: 'pause|resume',
-    end: 'Running',
-    inject: '',
+    id: 'watch-1S-002',
+    type: '1S',
+    scope: 'watch',
+    start: 'Idle',
+    steps: [{ event: 'start', reached: 'Active' }],
+    event: '',
     expect: '',
-    covers:
-      '[*]_init_Operating--()-->Running;Running--pause-->Paused;Paused--resume-->Running',
+    reach: '',
+    scenarios: ['watch-SC-001', 'watch-SC-002'],
   },
 ];
 
-const negativeSample: TestCase[] = [
+const invalid: Test[] = [
   {
-    test_id: 'top-101',
-    kind: 'negative',
-    layer: 'top',
-    length: 2,
-    start: '[*]_init',
-    sequence: '()|start',
-    end: 'Active',
-    inject: 'reset',
+    id: 'watch-INV-001',
+    type: 'INV',
+    scope: 'watch',
+    start: 'Idle',
+    steps: [],
+    event: 'stop',
     expect: 'no-transition',
-    covers: 'Active--reset--x',
+    reach: 'watch-SC-001',
+    scenarios: [],
   },
 ];
 
-describe('testCasesSerializer (SR-102)', () => {
-  it('CSV header matches §6.1', () => {
-    const csv = testCasesToCsv(sample);
+describe('testCasesToCsv (SR-103 §6.1)', () => {
+  it('positive Tests: columnar header padded to the longest chain', () => {
+    const csv = testCasesToCsv(positive);
     expect(csv.split('\n')[0]).toBe(
-      'test_id,kind,layer,length,start,sequence,end,inject,expect,covers'
+      'seq,id,start,event_1,reached_1,event_2,reached_2,scenarios'
     );
   });
 
-  it('CSV row preserves column order and types', () => {
-    const csv = testCasesToCsv(sample);
-    const rows = csv.split('\n');
-    expect(rows[1]).toBe(
-      'top-001,positive,top,3,[*]_init,()|start|done,[*]_final,,,' +
-        '[*]_init--()-->Idle;Idle--start-->Active;Active--done-->[*]_final'
+  it('positive Tests: rows carry seq, steps, and ;-joined scenarios (short rows padded)', () => {
+    const rows = testCasesToCsv(positive).split('\n');
+    expect(rows[1]).toBe('1,watch-1S-001,Active,stop,Idle,start,Active,watch-SC-001');
+    // Shorter chain pads the trailing (event_2, reached_2) cells.
+    expect(rows[2]).toBe(
+      '2,watch-1S-002,Idle,start,Active,,,watch-SC-001;watch-SC-002'
     );
   });
 
-  it('CSV negative test row carries kind, inject, expect, and the --x cell', () => {
-    const csv = testCasesToCsv(negativeSample);
-    expect(csv.split('\n')[1]).toBe(
-      'top-101,negative,top,2,[*]_init,()|start,Active,reset,no-transition,Active--reset--x'
-    );
+  it('output ends with a trailing newline (byte-equal to the CLI)', () => {
+    expect(testCasesToCsv(positive).endsWith('\n')).toBe(true);
   });
 
-  it('CSV RFC 4180: quotes cells containing commas, quotes, or newlines', () => {
-    const withSpecials: TestCase[] = [
-      {
-        test_id: 'x-01',
-        kind: 'positive',
-        layer: 'top',
-        length: 1,
-        start: 'A',
-        sequence: 'ev [g,h]',
-        end: 'B',
-        inject: '',
-        expect: '',
-        covers: 'A--ev [g,h]-->B',
-      },
-    ];
-    const csv = testCasesToCsv(withSpecials);
-    const row = csv.split('\n')[1];
-    expect(row).toBe(
-      'x-01,positive,top,1,A,"ev [g,h]",B,,,"A--ev [g,h]-->B"'
-    );
+  it('all-INV list switches to the negative shape', () => {
+    const rows = testCasesToCsv(invalid).split('\n');
+    expect(rows[0]).toBe('seq,id,start,event,expect,reach');
+    expect(rows[1]).toBe('1,watch-INV-001,Idle,stop,no-transition,watch-SC-001');
   });
 
   it('empty list yields header-only CSV', () => {
-    expect(testCasesToCsv([])).toBe(
-      'test_id,kind,layer,length,start,sequence,end,inject,expect,covers'
-    );
+    // No tests => not "all INV" => positive header with zero step columns.
+    expect(testCasesToCsv([])).toBe('seq,id,start,scenarios\n');
   });
 
-  it('HTML renders a <table> with every column as <th>/<td>', () => {
-    const html = testCasesToHtml(sample);
-    expect(html.startsWith('<table')).toBe(true);
-    expect(html).toContain('<th>test_id</th>');
-    expect(html).toContain('<th>covers</th>');
-    expect(html).toContain(
-      '<th scope="row" style="font-weight:normal;text-align:left;">top-001</th>'
-    );
-    // length is right-aligned
-    expect(html).toContain('<td style="text-align:right;">3</td>');
-  });
-
-  it('HTML escapes entities so embedded quotes render as &quot;', () => {
-    const tests: TestCase[] = [
+  it('RFC 4180: quotes cells containing commas', () => {
+    const withComma: Test[] = [
       {
-        test_id: 'q-01',
-        layer: 'top',
-        length: 1,
+        id: 'x-1S-001',
+        type: '1S',
+        scope: 'x',
         start: 'A',
-        sequence: 'e / log("hi")',
-        end: 'B',
-        covers: 'A--e-->B',
+        steps: [{ event: 'ev [g,h]', reached: 'B' }],
+        event: '',
+        expect: '',
+        reach: '',
+        scenarios: [],
       },
     ];
-    const html = testCasesToHtml(tests);
-    expect(html).toContain('e / log(&quot;hi&quot;)');
+    expect(testCasesToCsv(withComma).split('\n')[1]).toBe(
+      '1,x-1S-001,A,"ev [g,h]",B,'
+    );
+  });
+
+  it('HTML renders a <table> with the columnar headers', () => {
+    const html = testCasesToHtml(positive);
+    expect(html.startsWith('<table')).toBe(true);
+    expect(html).toContain('<th>event_1</th>');
+    expect(html).toContain('<th>scenarios</th>');
+    expect(html).toContain('<td>watch-1S-001</td>');
+  });
+
+  it('HTML for an all-INV list uses the negative headers', () => {
+    const html = testCasesToHtml(invalid);
+    expect(html).toContain('<th>expect</th>');
+    expect(html).toContain('<td>no-transition</td>');
   });
 });
 
-const coverageSample: CoverageRow[] = [
+const scenarios: Scenario[] = [
   {
-    kind: 'chain',
-    layer: 'top',
-    element: 'A --start--> B --done--> [*]_final',
-    hits: { 'top-001': '#', 'top-002': 'x' },
-    status: '',
-    reason: '',
-  },
-  {
-    kind: 'chain',
-    layer: 'top',
-    element: 'A --fail--> Err',
-    hits: { 'top-001': '', 'top-002': '' },
-    status: 'unreachable-within-cap',
-    reason: 'no final-reaching or cycle-closing suffix within cap',
+    id: 'watch-SC-001',
+    scope: 'watch',
+    start: 'Idle',
+    steps: [
+      { event: 'start', reached: 'Active' },
+      { event: 'stop', reached: 'Idle' },
+    ],
+    covers: ['watch-1S-001', 'watch-1S-002'],
   },
 ];
 
-const coverageTests: TestCase[] = [
-  {
-    test_id: 'top-001',
-    layer: 'top',
-    length: 2,
-    start: '[*]_init',
-    sequence: 'start|done',
-    end: '[*]_final',
-    covers: 'A--start-->B;B--done-->[*]_final',
-  },
-  {
-    test_id: 'top-002',
-    layer: 'top',
-    length: 2,
-    start: '[*]_init',
-    sequence: 'start|done',
-    end: '[*]_final',
-    covers: 'A--start-->B;B--done-->[*]_final',
-  },
-];
-
-describe('coverageToCsv / coverageToHtml (SR-102 §6.2)', () => {
-  it('CSV header has kind, layer, element, each test_id, then status, reason', () => {
-    const csv = coverageToCsv(coverageSample, coverageTests);
-    expect(csv.split('\n')[0]).toBe(
-      'kind,layer,element,top-001,top-002,status,reason'
+describe('scenariosToCsv (SR-103 §6.2)', () => {
+  it('columnar header ends with covers', () => {
+    expect(scenariosToCsv(scenarios).split('\n')[0]).toBe(
+      'seq,id,start,event_1,reached_1,event_2,reached_2,covers'
     );
   });
 
-  it('CSV hit markers land in the right test_id column; status/reason trail', () => {
-    const csv = coverageToCsv(coverageSample, coverageTests);
-    const rows = csv.split('\n');
-    expect(rows[1]).toBe(
-      'chain,top,A --start--> B --done--> [*]_final,#,x,,'
-    );
-    expect(rows[2]).toBe(
-      'chain,top,A --fail--> Err,,,unreachable-within-cap,' +
-        'no final-reaching or cycle-closing suffix within cap'
+  it('row carries seq, walk steps, and ;-joined covers', () => {
+    expect(scenariosToCsv(scenarios).split('\n')[1]).toBe(
+      '1,watch-SC-001,Idle,start,Active,stop,Idle,watch-1S-001;watch-1S-002'
     );
   });
 
-  it('CSV with zero tests still emits a well-formed header and rows', () => {
-    const csv = coverageToCsv(coverageSample, []);
-    const rows = csv.split('\n');
-    expect(rows[0]).toBe('kind,layer,element,status,reason');
-    expect(rows[1]).toBe(
-      'chain,top,A --start--> B --done--> [*]_final,,'
-    );
-  });
-
-  it('HTML renders a <table> whose <th>s match the test_id columns', () => {
-    const html = coverageToHtml(coverageSample, coverageTests);
+  it('HTML renders a <table>', () => {
+    const html = scenariosToHtml(scenarios);
     expect(html.startsWith('<table')).toBe(true);
-    expect(html).toContain('<th>top-001</th>');
-    expect(html).toContain('<th>top-002</th>');
-    // Element cell is <th scope="row"> so screen readers treat it as a row header
-    expect(html).toContain(
-      '<th scope="row" style="font-weight:normal;text-align:left;">' +
-        'A --start--&gt; B --done--&gt; [*]_final</th>'
-    );
-    // Hit marker cells are center-aligned
-    expect(html).toContain('<td style="text-align:center;">#</td>');
-    expect(html).toContain('<td style="text-align:center;">x</td>');
+    expect(html).toContain('<th>covers</th>');
   });
 });
