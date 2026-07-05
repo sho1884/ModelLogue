@@ -10,8 +10,9 @@ import { MODEL_TYPE_REGISTRY } from '../../modelTypes/registry';
 
 // SR-081: EBNF grammar is available as a download; no in-app viewer.
 function downloadEbnf() {
+  // .txt (not .ebnf) so it opens in any editor without a mime/handler prompt.
   downloadTextFile(
-    'modellogue-state-diagram-grammar.ebnf',
+    'modellogue-state-diagram-grammar.txt',
     grammarSpec,
     'text/plain'
   );
