@@ -1,6 +1,9 @@
 import { useMarkerStore } from '../../stores/markerStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useModelStore } from '../../stores/modelStore';
 import type { DiagramTool } from '../../types/marker';
+import { svgToPngBlob } from '../../engines/diagramExport';
+import { downloadBlob, downloadTextFile, sessionFilename } from '../../services/download';
 
 function PointerIcon() {
   return (
@@ -43,9 +46,31 @@ export function MarkerToolbar({ markersHidden = false }: MarkerToolbarProps) {
   const redoStack = useSessionStore((s) => s.redoStack);
   const undoSource = useSessionStore((s) => s.undoSource);
   const redoSource = useSessionStore((s) => s.redoSource);
+  const svgString = useModelStore((s) => s.svgString);
+  const sessionName = useSessionStore((s) => s.sessionName);
 
   const canUndo = sourceHistory.length > 0;
   const canRedo = redoStack.length > 0;
+
+  // Export the model diagram itself (SR-100 family). Markers are a volatile
+  // working overlay and are intentionally not included.
+  const saveSvg = () => {
+    if (!svgString) return;
+    downloadTextFile(
+      sessionFilename(sessionName, 'diagram', 'svg'),
+      svgString,
+      'image/svg+xml'
+    );
+  };
+  const savePng = async () => {
+    if (!svgString) return;
+    try {
+      const blob = await svgToPngBlob(svgString);
+      downloadBlob(sessionFilename(sessionName, 'diagram', 'png'), blob);
+    } catch {
+      // Rasterization failed (rare) — leave the SVG path as the fallback.
+    }
+  };
 
   return (
     <div className="flex items-center gap-1 px-2 py-1 border-b border-gray-200 bg-gray-50">
@@ -85,6 +110,26 @@ export function MarkerToolbar({ markersHidden = false }: MarkerToolbarProps) {
       >
         ↷
       </button>
+      {svgString && (
+        <>
+          <div className="mx-2 h-5 w-px bg-gray-300" />
+          <span className="text-xs text-gray-500 mr-1">Save:</span>
+          <button
+            onClick={saveSvg}
+            title="Download the model diagram as an SVG (vector). Review markers are not included."
+            className="px-2 py-1 text-xs rounded inline-flex items-center justify-center text-gray-600 hover:bg-gray-100 border border-gray-300"
+          >
+            SVG
+          </button>
+          <button
+            onClick={savePng}
+            title="Download the model diagram as a PNG (image). Review markers are not included."
+            className="px-2 py-1 text-xs rounded inline-flex items-center justify-center text-gray-600 hover:bg-gray-100 border border-gray-300"
+          >
+            PNG
+          </button>
+        </>
+      )}
     </div>
   );
 }

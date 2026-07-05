@@ -815,6 +815,22 @@ artifact_export:
       The final source IS the model. Reviewers and downstream tools
       need it stand-alone — not buried inside a JSON evidence bundle.
 
+  SR-104:
+    function: "Export the rendered model diagram from the diagram toolbar as SVG (vector) or PNG (image)"
+    parent: [UR-007]
+    component: DiagramView/MarkerToolbar (Save SVG / PNG) + src/engines/diagramExport.ts
+    status: implemented
+    acceptance_criteria:
+      - "Save SVG downloads the exact PlantUML SVG currently displayed (byte-faithful to what is on screen)"
+      - "Save PNG downloads a rasterized image of the same diagram (2x scale, white background)"
+      - "Review markers are NOT included — they are a volatile working overlay, not a deliverable"
+      - "Both buttons appear only when a diagram is displayed; filenames follow modellogue-<slug>-diagram-<YYYY-MM-DD-HHMM>.<ext>"
+    notes: |
+      The diagram is a volatile thinking canvas, but users still need to save
+      the artifact in front of them without regenerating from source. Markers
+      stay out because they are scratch annotations for the live review, not a
+      deliverable (per user direction).
+
   SR-101:
     function: "Export each state-transition matrix from its tab"
     parent: [UR-007]
