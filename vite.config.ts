@@ -30,4 +30,14 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: { proxy: backendProxy },
   preview: { proxy: backendProxy },
+  // Build-time JST timestamp shown next to the title so users / bug-reporters
+  // can identify exactly which build is running (sibling-project convention).
+  // Format: "YYYY-MM-DDTHH:mm:ss"; the header slices to "YYYY-MM-DD HH:mm".
+  define: {
+    __BUILD_TIME__: JSON.stringify(
+      new Date()
+        .toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' })
+        .replace(' ', 'T')
+    ),
+  },
 })
