@@ -45,7 +45,6 @@ const invalid: Test[] = [
     steps: [],
     event: 'stop',
     expect: 'no-transition',
-    reach: 'watch-SC-001',
     scenarios: [],
   },
 ];
@@ -73,8 +72,8 @@ describe('testCasesToCsv (SR-103 §6.1)', () => {
 
   it('all-INV list switches to the negative shape', () => {
     const rows = testCasesToCsv(invalid).split('\n');
-    expect(rows[0]).toBe('seq,id,start,event,expect,reach');
-    expect(rows[1]).toBe('1,watch-INV-001,Idle,stop,no-transition,watch-SC-001');
+    expect(rows[0]).toBe('seq,id,start,event,expect');
+    expect(rows[1]).toBe('1,watch-INV-001,Idle,stop,no-transition');
   });
 
   it('empty list yields header-only CSV', () => {

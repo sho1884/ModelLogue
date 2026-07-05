@@ -57,7 +57,50 @@ def test_invalid_mode_yields_negative_tests_only():
 def test_inv_csv_shape():
     result = generate(parse_puml(LOOP), n=0, invalid=True)
     header = tests_to_csv(result.tests).split("\n")[0]
-    assert header == "seq,id,start,event,expect,reach"
+    assert header == "seq,id,start,event,expect"
+
+
+ALIASED = (
+    "@startuml\n"
+    "[*] --> Idle\n"
+    'state "待機" as Idle\n'
+    "Idle --> Active : start\n"
+    'state "動作" as Active\n'
+    "Active --> [*] : done\n"
+    "@enduml\n"
+)
+
+
+def test_output_uses_diagram_labels_and_final_marker():
+    result = generate(parse_puml(ALIASED), n=1, name="watch")
+    states = {t.start for t in result.tests} | {
+        s.reached for t in result.tests for s in t.steps
+    }
+    # Real states show their diagram label, not the internal id.
+    assert "待機" in states and "動作" in states
+    assert "Idle" not in states and "Active" not in states
+    # Final marker rendered as (*), and no internal pseudo id leaks.
+    assert "(*)" in states
+    assert not any("[*]" in s for s in states)
+
+
+def test_initial_marker_and_entry_step_are_not_emitted():
+    result = generate(parse_puml(LOOP), n=1)
+    # No Test starts at the initial marker, and no step reaches it.
+    assert not any(t.start.startswith("[*]") for t in result.tests)
+    assert not any(
+        st.reached.startswith("[*]") for t in result.tests for st in t.steps
+    )
+    # Scenarios begin at the first real state, not the initial marker/() step.
+    for s in result.scenarios:
+        assert not s.start.startswith("[*]")
+        assert s.steps and s.steps[0].event != "()"  # LOOP has no unlabeled edges
+
+
+def test_invalid_mode_has_no_scenarios():
+    result = generate(parse_puml(LOOP), n=0, invalid=True)
+    assert result.tests
+    assert result.scenarios == []
 
 
 def test_scenarios_csv_and_cross_reference():

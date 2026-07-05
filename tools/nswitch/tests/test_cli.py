@@ -50,7 +50,7 @@ def test_cli_invalid_flag_emits_negative_tests():
     )
     r = _run(["--invalid"], stdin=source)
     assert r.returncode == 0
-    assert r.stdout.splitlines()[0] == "seq,id,start,event,expect,reach"
+    assert r.stdout.splitlines()[0] == "seq,id,start,event,expect"
     assert "no-transition" in r.stdout
 
 

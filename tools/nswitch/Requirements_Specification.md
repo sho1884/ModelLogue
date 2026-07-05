@@ -3,7 +3,7 @@
 | Item / 項目 | Content / 内容 |
 |------|---------|
 | Document / 文書 | Requirements Specification — N-switch coverage test case generator |
-| Version | 0.6 |
+| Version | 0.7 |
 | Created | 2026-04-21 |
 | Status / 状態 | Implemented in v0.1.0 at `tools/nswitch/src/modellogue_nswitch/` — batch CLI **and** HTTP API (`serve` subcommand, §9.2) both shipped. The HTTP mode is what ModelLogue's Test cases tab (SR-103) calls for reactive N-switch regeneration. |
 | Language / 実装言語 | **Python** (3.10+) |
@@ -20,12 +20,12 @@ ModelLogue とは独立に動くテスト生成 CLI。入力は **PlantUML サ�
 
 ### 1.1 Tests and Scenarios / テストとシナリオ (v8.x)
 
-A **Test** is one thing to verify. A **Scenario** is one executable walk that verifies several Tests at once. The Test is primary (what you want to check); the Scenario is the minimal-cover walk that realizes many Tests, offered so the whole suite can be driven in few runs.
+A **Test** is one thing to verify. A **Scenario** is one executable walk that verifies several *positive* Tests at once. The Test is primary (what you want to check); the Scenario is the minimal-cover walk that realizes many positive Tests, offered so the whole suite can be driven in few runs.
 
 - **Tests** (primary; default view in the GUI). Two kinds:
-  - **Positive** — one per required N-switch chain `A^(N+1)` (§7.2): a single transition (`0S`), a transition pair (`1S`), or a triple (`2S`). "Reach the chain's start, take these transitions, assert the expected states."
-  - **Negative / invalid** (`INV`) — one per invalid transition (an empty state-table cell, §7.2): "reach the source state, inject the forbidden event, assert no improper transition." Negatives are inherently single-transition; they are **not** 0-switch positives and must never be mixed into the 0S set.
-- **Scenarios** (`SC`; secondary). Greedy initial→final (or cycle-closing) walks that each cover multiple **positive** Tests (§7.4). **Negatives never appear in a Scenario** — a rejected event does not continue a walk. A negative Test may *reference* a prefix/Scenario to reach its source state, but is not part of the positive Scenario set.
+  - **Positive** — one per required N-switch chain `A^(N+1)` (§7.2): a single transition (`0S`), a transition pair (`1S`), or a triple (`2S`). "Starting at the chain's start state, take these transitions, expect the reached states."
+  - **Negative / invalid** (`INV`) — one per invalid transition (an empty state-table cell, §7.2). A negative Test's **condition** is exactly `(state, forbidden event) → no transition`: "in this state, the forbidden event must cause no transition." It carries **only** those three facts — not a path, not a walk. How to reach the state is a *procedure* for the downstream runner, not part of the test condition, so it is not emitted. Negatives are single-cell patterns; they are **not** 0-switch positives and must never be mixed into the 0S set.
+- **Scenarios** (`SC`; secondary, **positive only**). Greedy initial→final (or cycle-closing) walks that each cover multiple **positive** Tests (§7.4). A forbidden transition cannot be traversed, so it cannot sit on a walk: **negative Tests have no scenarios, and none can be constructed for them.** With `--invalid` (negatives only), the tool emits **zero** Scenarios.
 
 **Identifiers.** Every Test and Scenario has a stable id:
 
@@ -37,7 +37,7 @@ A **Test** is one thing to verify. A **Scenario** is one executable walk that ve
   - a composite state's id for its child layer (e.g. `Operating`);
   - the caller-supplied name for the outermost machine (ModelLogue passes the **session name**; CLI/API accept `--name` / `name`);
   - `untitled` when the outermost machine is unnamed. `untitled` is chosen because it matches ModelLogue's default session name ("Untitled Session") and is a distinctive placeholder that a later rename can find-replace in one pass (`untitled-` → `<realname>-`).
-- `<type>` — `0S` / `1S` / `2S` (positive), `INV` (negative), `SC` (scenario).
+- `<type>` — `0S` / `1S` / `2S` (positive), `INV` (negative), `SC` (positive scenario).
 - `<NNN>` — 3-digit sequence within each `(scope, type)`.
 
 Examples: `untitled-1S-001`, `untitled-INV-001`, `untitled-SC-001`, `Operating-1S-001`, `決済-1S-001`.
@@ -306,29 +306,36 @@ cat input.puml | modellogue-nswitch --format puml > tests.csv
 
 RFC 4180 CSV, UTF-8, LF line endings. Two outputs: **Tests** (§6.1, primary) and **Scenarios** (§6.2, secondary). Ids follow §1.1.
 
+**State naming — the output shows what the diagram shows (§7.5).** Every state cell (`start`, `reached_i`) carries the state's **diagram label**, not an internal id: if the source declares `state "待機" as Idle`, the tables say `待機`. The two pseudo-state markers, which appear on the diagram as circles rather than text, are handled specially:
+
+- The **initial marker** (`●`) is *not a state* — it only points at where the machine begins. It is **never emitted**, and neither is the automatic entry step out of it: a walk starts directly at the first real state.
+- The **final marker** (`◉`) is rendered as `(*)` in a `reached` cell (the transition into it — e.g. a real `done` event — is kept; only its destination is the terminal marker).
+
+`()` in an `event` cell still means "a real transition with no event name" (a completion transition such as `A --> B`); it is unrelated to the (now-removed) entry step.
+
 ### 6.1 Tests CSV (default)
 
 One row per **Test** (§1.1) — the primary artifact. **Machine-friendly columnar layout**: the `start` state, then each `(event, reached)` step in its **own columns** — no packed `A--e-->B` string. One consistent label `reached` = the state reached by that event (the last `reached` is *not* specially named — no "next" / "end"). Columns are uniform within a level, so a data-driven runner reads column *k* directly and a spreadsheet can sort/filter per step. Headers are English.
 
-**Positive Tests** (a level-N Test has N+1 transitions):
+**Positive Tests** (a level-N chain has N+1 transitions; a boundary chain whose first transition is the machine entry shows one fewer visible step, since that entry step is stripped — trailing `(event_i, reached_i)` cells are then padded empty, as in Scenarios):
 
 | Column | Meaning |
 |---|---|
 | `seq` | 1-based row number within the file (= the running count). |
 | `id` | `<scope>-<type>-<NNN>` (§1.1), e.g. `untitled-2S-001`. |
-| `start` | State the Test starts at. |
-| `event_i`, `reached_i` | for i = 1 … N+1: the i-th event and the state it reaches. `reached_{N+1}` is the final state. |
+| `start` | Diagram label of the real state the Test starts at (never the initial marker — that is not a state, so its entry step is stripped from the front of the chain). |
+| `event_i`, `reached_i` | the i-th visible event and the state it reaches (diagram label, or `(*)` for the final marker); empty past the visible length. |
 | `scenarios` | Semicolon-separated Scenario ids (§6.2) that exercise this Test. |
 
-Example (2-switch = 3 transitions → `event_1..3` / `reached_1..3`):
+Example (2-switch = 3 transitions → `event_1..3` / `reached_1..3`; labels shown, final as `(*)`):
 
 ```csv
 seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,scenarios
-1,untitled-2S-001,Idle,start,Active,fault,Failure,reset,Idle,untitled-SC-001
-2,untitled-2S-002,Idle,start,Active,stop,Idle,start,Active,untitled-SC-002
+1,untitled-2S-001,待機,start,動作,fault,故障,reset,待機,untitled-SC-001
+2,untitled-2S-002,待機,start,動作,stop,待機,start,動作,untitled-SC-002
 ```
 
-**Negative Tests (`INV`)** — a fixed, separate shape (one per invalid cell; §7.2). Selecting `INV` yields negative Tests **only** — positive `0S` Tests are never mixed in (they are a different type; §1.1).
+**Negative Tests (`INV`)** — a fixed, separate shape (one per invalid cell; §7.2). Selecting `INV` yields negative Tests **only** — positive `0S` Tests are never mixed in (they are a different type; §1.1). A negative Test is a pure `(state, forbidden event) → no-transition` condition; it carries no path and references no Scenario (§1.1).
 
 | Column | Meaning |
 |---|---|
@@ -337,29 +344,28 @@ seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,scenarios
 | `start` | The state where the forbidden event is injected. |
 | `event` | The forbidden event. |
 | `expect` | `no-transition` — must be rejected with no state change. |
-| `reach` | A Scenario id (§6.2) whose prefix reaches `start`, or empty. |
 
 ```csv
-seq,id,start,event,expect,reach
-1,untitled-INV-001,Active,reset,no-transition,untitled-SC-002
+seq,id,start,event,expect
+1,untitled-INV-001,Active,start,no-transition
 ```
 
 ### 6.2 Scenarios CSV (secondary)
 
-One row per **Scenario** (§1.1) — a greedy initial→final (or cycle-closing) walk covering several positive Tests (§7.4). Secondary output; negatives never appear here. Same columnar `(event, reached)` layout as positive Tests, but walks vary in length, so trailing `event_i` / `reached_i` cells are empty for shorter walks.
+One row per **Scenario** (§1.1) — a greedy walk (from the first real state to the final marker, or cycle-closing) covering several positive Tests (§7.4). Secondary output; negatives never appear here. Same columnar `(event, reached)` layout as positive Tests, but walks vary in length, so trailing `event_i` / `reached_i` cells are empty for shorter walks.
 
 | Column | Meaning |
 |---|---|
 | `seq` | 1-based row number. |
 | `id` | `<scope>-SC-<NNN>`. |
-| `start` | `[*]_init` (or the walk's start). |
-| `event_i`, `reached_i` | the i-th step; empty past the walk's length. |
+| `start` | Diagram label of the **first real state** the walk begins at (the initial marker and its entry step are not emitted; §7.5). |
+| `event_i`, `reached_i` | the i-th step; `reached` is a diagram label or `(*)` for the final marker; empty past the walk's length. |
 | `covers` | Semicolon-separated Test ids this Scenario exercises. |
 
 ```csv
 seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,covers
-1,untitled-SC-001,[*]_init,(),Idle,start,Active,fault,Failure,untitled-0S-001;untitled-1S-001
-2,untitled-SC-002,[*]_init,(),Idle,start,Active,stop,Idle,untitled-0S-002;untitled-1S-002
+1,untitled-SC-001,待機,start,動作,fault,故障,,,untitled-0S-001;untitled-1S-001
+2,untitled-SC-002,待機,start,動作,stop,待機,,,untitled-0S-002;untitled-1S-002
 ```
 
 ### 6.3 Canonicality / 決定論
@@ -471,17 +477,25 @@ Here there is no transition to `[*]_final`. Default behavior: generate cyclic te
 **Negative tests (invalid transitions).** When `--invalid` is set, after the positive cover the tool constructs one negative test per element of `Invalid[layer]` (§7.2 — every `(S, E)` with no drawn transition on `E` from `S`):
 
 1. Enumerate the invalid cells: for each state `S` (excluding pseudo-states) and each event `E ∈ Sigma`, if no transition leaves `S` on `E`, `(S, E)` is invalid.
-2. For each, find a **prefix** `p1` = greedy shortest path from the layer's initial pseudo-state to `S` (the same BFS as positive construction, subject to the cycle-unroll cap). If `S` is unreachable within the cap, the cell is reported `unreachable-within-cap` (exit 3 / `uncovered`), same as a positive chain.
-3. Emit a `negative` test: `start` = initial, `sequence` = `p1`, `end` = `S`, `inject` = `E`, `expect` = `no-transition`, `covers` = `<S>--<E>--x`.
+2. For each, confirm `S` is **reachable**: a greedy shortest path from the layer's initial pseudo-state to `S` must exist within the cycle-unroll cap. This reachability check is the *only* use of path finding here — the path itself is **not** emitted (reaching `S` is a runner procedure, not part of the test condition; §1.1). If `S` is unreachable within the cap, the cell is reported `unreachable-within-cap` (exit 3 / `uncovered`), same as a positive chain.
+3. Emit a `negative` test with exactly three facts: `start` = `S`, `event` = `E`, `expect` = `no-transition`. No `sequence`, no path, no Scenario reference.
 
-Negative construction is **deterministic and reachability-bounded** just like the positive side: only invalid cells whose source state is reachable produce a test; the injection itself is a single step and never extends the path, so the cycle cap is unaffected. Invalid cells add no chains to `A` and do not change positive N-switch output.
+Negative construction is **deterministic and reachability-bounded**: only invalid cells whose source state is reachable produce a test. Because a forbidden event cannot be traversed, a negative Test cannot sit on any walk, so **no Scenario is produced for it** — with `--invalid` (negatives only) the Scenario set is empty. Invalid cells add no chains to `A` and do not change positive N-switch output.
 
 ### 7.5 Pseudo-state spelling conventions
 
+**Internal ids** (used only inside the algorithm, never in §6 output):
+
 - Top-layer initial: `[*]_init`. Final: `[*]_final`.
 - Per-composite `X`: initial `[*]_init_X`, final `[*]_final_X`.
-- The synthetic "transition" from an initial pseudo-state to its target (and from a terminal regular state to the matching final pseudo-state) is spelled with an event of `()` in the `covers` / `element` columns.
-- An **invalid transition** (empty state-table cell) is spelled with a **blocked-arrow head**: `<S>--<E>--x` (ASCII, no target), read "event `<E>` is rejected in state `<S>`". This distinguishes it from a valid `<S>--<E>-->` in the `covers` / `element` / `inject` columns and is locale-safe.
+
+**Output rendering** (§6) maps these to what the diagram shows:
+
+- Real states → their **diagram label** (`Idle` declared as `state "待機" as Idle` → `待機`).
+- The **initial marker** (`●`) and the automatic entry step out of it are **not states/transitions to report** — they are dropped; a walk starts at the first real state. It never appears in `start` or `reached`.
+- The **final marker** (`◉`) → `(*)` in a `reached` cell. The transition *into* it (a real event, or `()` for an unlabeled completion transition) is kept; only its destination is the terminal marker.
+- `()` in an `event` cell means "a real transition with no event name" (e.g. `A --> B`).
+- An **invalid transition** (empty state-table cell) is a negative Test: `(state, event) → no-transition` (§6.1). It is not spelled as an arrow; there is no target.
 
 ### 7.6 Input handling
 

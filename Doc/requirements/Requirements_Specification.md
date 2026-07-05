@@ -282,10 +282,11 @@ SR-033（提案の視覚化）はこの SR-090 が返す差分データを使っ
 - テストケース生成は補助サービス（[`tools/nswitch/`](../../tools/nswitch/)）の責務。ModelLogue 本体はその HTTP API (§9.2) を叩いて結果を並べるだけ。重い計算ロジックは本体に取り込まない（ADR-010）。
 - **Tests / Scenarios の二層** ([tools/nswitch §1.1](../../tools/nswitch/Requirements_Specification.md))：検証すべき**パターン**が Tests（既定表示、ID `<scope>-<type>-<NNN>`、type=`0S/1S/2S/INV`）、それを覆う**一筆書きの実行経路**が Scenarios（おまけ、ID `<scope>-SC-<NNN>`）。View トグルで切り替え、既定は Tests。scope は ModelLogue のセッション名（空白は `_`、無題は `untitled`）を nswitch に `name` として渡して決まる。
 - **列展開出力 (§6)**：各 `(event, reached)` ステップを独立した列（`event_i / reached_i`）に展開し、機械処理しやすい CSV とする。Tests・Scenarios とも同形。
+- **状態名は図と一致 ([tools/nswitch §7.5](../../tools/nswitch/Requirements_Specification.md))**：表に出る状態は内部 id ではなく**図と同じラベル**（`state "待機" as Idle` なら `待機`）。図に文字が出ない擬似状態は、初期の丸（`●`）と入口の自動遷移は**出さない**（一筆書きは最初の実状態から始まる）、終了の丸（`◉`）は到達先に `(*)`。これで図・State×Event 表・テストの呼び名がそろう。
 - **件数表示**：ツールバーに `N tests / scenarios across M scopes` を常時表示。ID だけでは総数が読み取りにくいため。
 - タブ内での**リアクティブ更新**を最優先。パース成功時に SVG 取得と同じデバウンスで自動再計算する。ユーザーが N (0/1/2) を切り替えた時も即時反映。
 - エラーは **in-place 表示**：サービスが落ちていても、パースエラーがあっても、タブ内に原因を出すだけで UI 全体は動き続ける。
-- **Invalid モード**：被覆モード選択に 4 つ目 `Invalid` を追加（`0-switch / 1-switch / 2-switch / Invalid`）。`invalid=true` で nswitch を呼び、空欄セル（禁止遷移）の**負テストのみ**（INV、`event`／`expect=no-transition`／到達手段の `reach`）を表示する。負テストは正テストにも Scenarios にも混ざらない。UR-013 の「負の半分」の GUI 面で、State×Event 表が `-` で見せる禁止遷移（SR-020）に対応。nswitch の正側アルゴリズムは不変で、モードが増えるだけ。
+- **Invalid モード**：被覆モード選択に 4 つ目 `Invalid` を追加（`0-switch / 1-switch / 2-switch / Invalid`）。`invalid=true` で nswitch を呼び、空欄セル（禁止遷移）の**負テストのみ**を表示する。負テストは `状態 / 禁止イベント / no-transition` の 3 つだけのパターン（到達手順は持たない＝テストの条件ではないため）。**禁止遷移は一筆書きに乗せられない**ので、Invalid モードでは Scenarios は 0 件・トグルも隠す（Tests 固定）。UR-013 の「負の半分」の GUI 面で、State×Event 表が `-` で見せる禁止遷移（SR-020）に対応。nswitch の正側アルゴリズムは不変で、モードが増えるだけ。
 
 **設計意図**:
 

@@ -15,10 +15,9 @@ export interface Test {
   scope: string;
   start: string;
   steps: Step[]; // positive: the chain's (event, reached) steps; INV: []
-  // INV only:
+  // INV only — the pure (state, forbidden event) -> no-transition condition.
   event: string; // the forbidden event injected at `start`
   expect: string; // "no-transition"
-  reach: string; // a Scenario id reaching `start`, or ""
   // positive only:
   scenarios: string[]; // Scenario ids that exercise this Test
 }

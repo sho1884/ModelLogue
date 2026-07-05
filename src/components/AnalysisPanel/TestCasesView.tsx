@@ -113,6 +113,8 @@ export function TestCasesView() {
             </button>
           ))}
         </div>
+        {mode !== 'invalid' && (
+          <>
         <span className="text-xs text-gray-400">View:</span>
         <div role="radiogroup" aria-label="Test cases view" className="flex gap-1">
           {VIEWS.map((v) => (
@@ -137,6 +139,8 @@ export function TestCasesView() {
             </button>
           ))}
         </div>
+          </>
+        )}
         <span className="text-xs text-gray-700 font-semibold">{countLabel}</span>
         <div className="ml-auto">
           <ExportActions
@@ -261,11 +265,11 @@ function TestsTable({ tests }: { tests: Test[] }) {
   );
 }
 
-// Negative (INV) Tests use a fixed non-columnar shape (§6.1): one forbidden
-// event injected at `start`, expecting no transition. `reach` names a Scenario
-// whose walk passes through `start` (how to get there), or is empty.
+// Negative (INV) Tests are a pure pattern (§6.1): in `start`, the forbidden
+// `event` must cause no transition. No path is carried — how to reach the
+// state is a runner procedure, not part of the test condition.
 function InvTestsTable({ tests }: { tests: Test[] }) {
-  const headers = ['#', 'id', 'start', 'event', 'expect', 'reach'];
+  const headers = ['#', 'id', 'start', 'event', 'expect'];
   return (
     <table className="text-xs border-collapse">
       <thead>
@@ -285,7 +289,6 @@ function InvTestsTable({ tests }: { tests: Test[] }) {
             <td className={`${TD} font-mono text-gray-800`}>{t.start}</td>
             <td className={`${TD} font-mono text-red-700`}>{t.event}</td>
             <td className={`${TD} text-red-700`}>{t.expect}</td>
-            <td className={`${TD} font-mono text-indigo-700`}>{t.reach}</td>
           </tr>
         ))}
       </tbody>

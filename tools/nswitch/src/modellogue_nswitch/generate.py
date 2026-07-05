@@ -41,10 +41,11 @@ class Test:
     # Positive: the chain's (event, reached) steps. INV: empty (uses the
     # dedicated fields below).
     steps: list[Step] = field(default_factory=list)
-    # INV only:
+    # INV only — the pure (state, forbidden event) -> no-transition condition.
+    # `start` above is the state; these two complete it. No path/scenario is
+    # carried: reaching the state is a runner procedure, not a test condition.
     event: str = ""  # the forbidden event injected at `start`
     expect: str = ""  # "no-transition"
-    reach: str = ""  # a Scenario id whose walk passes through `start`, or ""
     # Positive only: Scenario ids that exercise this Test.
     scenarios: list[str] = field(default_factory=list)
 
@@ -92,8 +93,42 @@ def _path_contains_chain(path: tuple[Transition, ...], chain: Chain) -> bool:
     return False
 
 
-def _states_on(scenario: Scenario) -> set[str]:
-    return {scenario.start, *(s.reached for s in scenario.steps)}
+def _display_state(sid: str, layer: Layer, label_of: dict[str, str]) -> str:
+    """Render a state id for output (§6), matching what the diagram shows:
+
+    - a real state -> its diagram **label** (e.g. `Idle` -> `待機`);
+    - the layer's final marker (`◉`) -> `(*)`.
+
+    The initial marker (`●`) is never rendered — it is not a state, only a
+    pointer to where the machine begins; callers strip it so walks start at
+    the first real state (§1.1 / §7.5).
+    """
+    if sid == layer.final_id:
+        return "(*)"
+    return label_of.get(sid, sid)
+
+
+def _display_walk(
+    start: str,
+    steps: list[Step],
+    layer: Layer,
+    label_of: dict[str, str],
+) -> tuple[str, list[Step]]:
+    """Turn a raw (start, steps) walk into its display form (§6):
+
+    strip the leading initial-marker step so the walk begins at the first real
+    state (the initial marker is not a state), then render every state via
+    :func:`_display_state` (labels; final -> ``(*)``). Events are unchanged.
+    """
+    if start == layer.initial_id and steps:
+        start = steps[0].reached  # target of the (dropped) entry transition
+        steps = steps[1:]
+    d_start = _display_state(start, layer, label_of)
+    d_steps = [
+        Step(event=s.event, reached=_display_state(s.reached, layer, label_of))
+        for s in steps
+    ]
+    return d_start, d_steps
 
 
 # ---------- generation ----------
@@ -119,70 +154,80 @@ def generate(
 
     for layer in layers:
         scope = _scope_of(layer, name)
-
-        # Scenarios — the greedy cover walks (always produced; secondary).
-        lr = build_tests(
-            layer, n, max_cycle_unroll=max_cycle_unroll, require_final=require_final
-        )
-        uncovered.extend(lr.unreachable)
-        scenarios: list[Scenario] = [
-            Scenario(
-                id=f"{scope}-SC-{i:03d}",
-                scope=scope,
-                start=tp.start,
-                steps=_steps_of(tp.transitions),
-            )
-            for i, tp in enumerate(lr.tests, start=1)
-        ]
+        label_of = {s.id: s.label for s in layer.states}
 
         if invalid:
             # INV mode: negative Tests only (never mixed with positive 0S).
+            # A forbidden transition can't sit on a walk, so no Scenarios exist
+            # here (§1.1) — we don't even build the positive cover.
             negs, neg_unreach = build_negative_tests(
                 layer, max_cycle_unroll=max_cycle_unroll
             )
             uncovered.extend(neg_unreach)
             for i, nt in enumerate(negs, start=1):
-                reach = next(
-                    (
-                        sc.id
-                        for sc, tp in zip(scenarios, lr.tests)
-                        if nt.source_state in _states_on(sc)
-                    ),
-                    "",
-                )
                 all_tests.append(
                     Test(
                         id=f"{scope}-INV-{i:03d}",
                         type="INV",
                         scope=scope,
-                        start=nt.source_state,
+                        start=_display_state(nt.source_state, layer, label_of),
                         event=nt.inject_event,
                         expect="no-transition",
-                        reach=reach,
                     )
                 )
-        else:
-            # Positive Tests — one per required chain at level n.
-            chains = required_chains(layer, n)
-            type_ = f"{n}S"
-            pos: list[Test] = [
-                Test(
-                    id=f"{scope}-{type_}-{i:03d}",
-                    type=type_,
-                    scope=scope,
-                    start=c[0].source_state_id,
-                    steps=_steps_of(c),
-                )
-                for i, c in enumerate(chains, start=1)
-            ]
-            # Cross-reference Tests <-> Scenarios.
-            for t, c in zip(pos, chains):
-                for sc, tp in zip(scenarios, lr.tests):
-                    if _path_contains_chain(tp.transitions, c):
-                        t.scenarios.append(sc.id)
-                        sc.covers.append(t.id)
-            all_tests.extend(pos)
+            continue
 
+        # Positive mode: Scenarios (greedy cover walks) + positive Tests.
+        lr = build_tests(
+            layer, n, max_cycle_unroll=max_cycle_unroll, require_final=require_final
+        )
+        uncovered.extend(lr.unreachable)
+        scen_paths = lr.tests
+        scenarios: list[Scenario] = []
+        for i, tp in enumerate(scen_paths, start=1):
+            d_start, d_steps = _display_walk(
+                tp.start, _steps_of(tp.transitions), layer, label_of
+            )
+            scenarios.append(
+                Scenario(id=f"{scope}-SC-{i:03d}", scope=scope, start=d_start, steps=d_steps)
+            )
+
+        # Positive Tests — one per required chain. The chains keep the machine's
+        # entry/exit pseudo-transitions (they are what give boundary real
+        # transitions their neighbours at N≥1, so coverage stays complete), but
+        # the display strips the leading entry step (§7.5): the initial marker is
+        # not a state. A chain that is *nothing but* the entry transition has no
+        # steps left after stripping and is dropped — there is nothing to test.
+        type_ = f"{n}S"
+        built: list[tuple[Test, Chain]] = []
+        seq = 0
+        for c in required_chains(layer, n):
+            d_start, d_steps = _display_walk(
+                c[0].source_state_id, _steps_of(c), layer, label_of
+            )
+            if not d_steps:
+                continue  # pure machine-entry transition — not a real test
+            seq += 1
+            built.append(
+                (
+                    Test(
+                        id=f"{scope}-{type_}-{seq:03d}",
+                        type=type_,
+                        scope=scope,
+                        start=d_start,
+                        steps=d_steps,
+                    ),
+                    c,
+                )
+            )
+        # Cross-reference Tests <-> Scenarios on the raw transitions.
+        for t, c in built:
+            for sc, tp in zip(scenarios, scen_paths):
+                if _path_contains_chain(tp.transitions, c):
+                    t.scenarios.append(sc.id)
+                    sc.covers.append(t.id)
+
+        all_tests.extend(t for t, _ in built)
         all_scenarios.extend(scenarios)
 
     for t in all_tests:
@@ -212,9 +257,9 @@ def tests_to_csv(tests: list[Test]) -> str:
     is_inv = bool(tests) and all(t.type == "INV" for t in tests)
 
     if is_inv:
-        writer.writerow(["seq", "id", "start", "event", "expect", "reach"])
+        writer.writerow(["seq", "id", "start", "event", "expect"])
         for seq, t in enumerate(tests, start=1):
-            writer.writerow([seq, t.id, t.start, t.event, t.expect, t.reach])
+            writer.writerow([seq, t.id, t.start, t.event, t.expect])
         return buf.getvalue()
 
     k = _max_steps(tests)  # uniform within a positive level

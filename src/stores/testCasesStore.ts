@@ -48,7 +48,9 @@ export const useTestCasesStore = create<TestCasesStore>((set, get) => ({
   error: null,
 
   setMode: (mode) => {
-    set({ mode });
+    // Invalid mode has no Scenarios (a forbidden transition can't sit on a
+    // walk), so force the Tests view — the Scenarios toggle is hidden there.
+    set(mode === 'invalid' ? { mode, view: 'tests' } : { mode });
     // The effect in MainLayout re-triggers on mode change, so we do not
     // fire the request from the store itself — keeps the store pure and
     // the fetch-orchestration logic in one place.

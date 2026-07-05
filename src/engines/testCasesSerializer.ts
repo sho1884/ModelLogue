@@ -2,7 +2,7 @@
 //
 // CSV shapes match tools/nswitch/Requirements_Specification.md §6 (columnar):
 //   - §6.1 Tests — positive: seq,id,start,event_i,reached_i,…,scenarios;
-//                  INV:      seq,id,start,event,expect,reach
+//                  INV:      seq,id,start,event,expect
 //   - §6.2 Scenarios — seq,id,start,event_i,reached_i,…,covers
 // The emitters below mirror generate.py's tests_to_csv / scenarios_to_csv
 // exactly, so files saved here are byte-identical to the CLI's stdout. That
@@ -51,7 +51,7 @@ function stepCells(steps: { event: string; reached: string }[], k: number): stri
 
 // ---- Tests (§6.1) ----
 
-const INV_HEADER = ['seq', 'id', 'start', 'event', 'expect', 'reach'];
+const INV_HEADER = ['seq', 'id', 'start', 'event', 'expect'];
 
 function testsAllInv(tests: Test[]): boolean {
   return tests.length > 0 && tests.every((t) => t.type === 'INV');
@@ -62,9 +62,7 @@ export function testCasesToCsv(tests: Test[]): string {
   if (testsAllInv(tests)) {
     lines.push(INV_HEADER.join(','));
     tests.forEach((t, i) => {
-      lines.push(
-        [i + 1, t.id, t.start, t.event, t.expect, t.reach].map(csvCell).join(',')
-      );
+      lines.push([i + 1, t.id, t.start, t.event, t.expect].map(csvCell).join(','));
     });
     return lines.join('\n') + '\n';
   }
@@ -87,7 +85,7 @@ export function testCasesToHtml(tests: Test[]): string {
     `</tr></thead>`;
   const rows = tests.map((t, i) => {
     const cells = inv
-      ? [i + 1, t.id, t.start, t.event, t.expect, t.reach]
+      ? [i + 1, t.id, t.start, t.event, t.expect]
       : [i + 1, t.id, t.start, ...stepCells(t.steps, k), t.scenarios.join(';')];
     return `<tr>` + cells.map((c) => `<td>${htmlEscape(c)}</td>`).join('') + `</tr>`;
   });
