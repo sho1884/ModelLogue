@@ -192,21 +192,24 @@ def generate(
                 Scenario(id=f"{scope}-SC-{i:03d}", scope=scope, start=d_start, steps=d_steps)
             )
 
-        # Positive Tests — one per required chain. The chains keep the machine's
-        # entry/exit pseudo-transitions (they are what give boundary real
-        # transitions their neighbours at N≥1, so coverage stays complete), but
-        # the display strips the leading entry step (§7.5): the initial marker is
-        # not a state. A chain that is *nothing but* the entry transition has no
-        # steps left after stripping and is dropped — there is nothing to test.
+        # Positive Tests — one per required chain **over real transitions**.
+        # "Entering the machine" is not a transition to test, so a chain that
+        # begins at the initial marker is skipped: the real transition it would
+        # carry (e.g. the first `start`) is already covered by chains that begin
+        # at a real state, so keeping the entry chain only produces a redundant,
+        # entry-stripped duplicate (§1.1 / §7.5). N-switch semantics are pattern-
+        # over-real-transitions: a level-N Test needs N+1 *real* consecutive
+        # transitions; boundary transitions with no real neighbour are covered at
+        # a lower level, not padded out with the entry marker.
         type_ = f"{n}S"
         built: list[tuple[Test, Chain]] = []
         seq = 0
         for c in required_chains(layer, n):
+            if c[0].source_state_id == layer.initial_id:
+                continue  # machine-entry chain — not a real test
             d_start, d_steps = _display_walk(
                 c[0].source_state_id, _steps_of(c), layer, label_of
             )
-            if not d_steps:
-                continue  # pure machine-entry transition — not a real test
             seq += 1
             built.append(
                 (

@@ -317,14 +317,14 @@ RFC 4180 CSV, UTF-8, LF line endings. Two outputs: **Tests** (§6.1, primary) an
 
 One row per **Test** (§1.1) — the primary artifact. **Machine-friendly columnar layout**: the `start` state, then each `(event, reached)` step in its **own columns** — no packed `A--e-->B` string. One consistent label `reached` = the state reached by that event (the last `reached` is *not* specially named — no "next" / "end"). Columns are uniform within a level, so a data-driven runner reads column *k* directly and a spreadsheet can sort/filter per step. Headers are English.
 
-**Positive Tests** (a level-N chain has N+1 transitions; a boundary chain whose first transition is the machine entry shows one fewer visible step, since that entry step is stripped — trailing `(event_i, reached_i)` cells are then padded empty, as in Scenarios):
+**Positive Tests** — a level-N Test is N+1 **real** consecutive transitions (a chain that would begin at the machine-entry marker is not a Test; §7.5), so all rows at a level are uniform:
 
 | Column | Meaning |
 |---|---|
 | `seq` | 1-based row number within the file (= the running count). |
 | `id` | `<scope>-<type>-<NNN>` (§1.1), e.g. `untitled-2S-001`. |
-| `start` | Diagram label of the real state the Test starts at (never the initial marker — that is not a state, so its entry step is stripped from the front of the chain). |
-| `event_i`, `reached_i` | the i-th visible event and the state it reaches (diagram label, or `(*)` for the final marker); empty past the visible length. |
+| `start` | Diagram label of the real state the Test starts at (never the initial marker — that is not a state, and no Test begins there). |
+| `event_i`, `reached_i` | for i = 1 … N+1: the i-th event and the state it reaches (diagram label, or `(*)` for the final marker). |
 | `scenarios` | Semicolon-separated Scenario ids (§6.2) that exercise this Test. |
 
 Example (2-switch = 3 transitions → `event_1..3` / `reached_1..3`; labels shown, final as `(*)`):
@@ -492,7 +492,9 @@ Negative construction is **deterministic and reachability-bounded**: only invali
 **Output rendering** (§6) maps these to what the diagram shows:
 
 - Real states → their **diagram label** (`Idle` declared as `state "待機" as Idle` → `待機`).
-- The **initial marker** (`●`) and the automatic entry step out of it are **not states/transitions to report** — they are dropped; a walk starts at the first real state. It never appears in `start` or `reached`.
+- The **initial marker** (`●`) is not a state and "entering the machine" is not a transition to test. It never appears in `start` or `reached`. Concretely:
+  - **Tests** are patterns over *real* transitions: a chain that begins at the initial marker is excluded (the real transition it carries — e.g. the first `start` — is already covered by a chain that begins at a real state, so keeping it would only add a redundant, entry-stripped duplicate).
+  - **Scenarios** are walks from the machine's entry; the leading entry step is stripped for display so the walk simply starts at the first real state.
 - The **final marker** (`◉`) → `(*)` in a `reached` cell. The transition *into* it (a real event, or `()` for an unlabeled completion transition) is kept; only its destination is the terminal marker.
 - `()` in an `event` cell means "a real transition with no event name" (e.g. `A --> B`).
 - An **invalid transition** (empty state-table cell) is a negative Test: `(state, event) → no-transition` (§6.1). It is not spelled as an arrow; there is no target.

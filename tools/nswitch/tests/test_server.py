@@ -64,7 +64,9 @@ def _options(url: str) -> tuple[int, dict[str, str]]:
         return resp.status, dict(resp.headers)
 
 
-PUML_MIN = "@startuml\n[*] --> A\nA --> [*] : done\n@enduml\n"
+# A 3-state chain so there is a real 1-switch pair (go·done); a 2-state
+# `A --> [*]` model has a single transition and therefore no 1-switch Tests.
+PUML_MIN = "@startuml\n[*] --> A\nA --> B : go\nB --> [*] : done\n@enduml\n"
 
 
 def test_health():
