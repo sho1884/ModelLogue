@@ -41,14 +41,26 @@ This document defines security design guidelines for ModelLogue based on OWASP T
 
 ### A01:2021 – Broken Access Control / アクセス制御の不備
 
-**Relevance / 関連性**: Low (no authentication)
-**現状**: 認証なしのため関連性低
+**Relevance / 関連性**: High for the AI relay (public beta) / AI 中継については高（公開ベータ）
+**現状**: The review tool itself is public and needs no accounts. The **AI relay** is the one gated boundary (SR-136/137/138): only the authenticated operator may reach a Gemini call.
 
 **Design Decisions / 設計決定**:
-- No user accounts or access control needed for current scope
-- n8n webhook endpoints are local Docker services (not exposed to internet)
-- 現在のスコープではユーザーアカウントやアクセス制御は不要
-- n8n webhookはローカルDockerサービス（インターネットに公開しない）
+
+- **The gate is identity, never "n8n reachable."** The same stack serves the operator and anonymous visitors; n8n exists and its address is fixed. The *only* thing that switches AI on is *who* the requester is (SR-136 rationale). See [[modellogue-deploy-ai-gating-direction]].
+- **Two layers, with the server-side one authoritative (SR-137).** The frontend gate (SR-136 — hide the chat pane, suppress relay calls) is *insurance and UX only*. The real boundary is server-side: an unauthenticated request must never reach a Gemini call even if the SPA is bypassed or a hostile client crafts requests directly.
+- **Server-side enforcement = cryptographic verification of the gate's signed assertion, at the origin, in front of n8n.** In production the edge auth gate (Cloudflare Access + Tunnel, SR-138) authenticates the operator and attaches a signed assertion (a per-request JWT in `Cf-Access-Jwt-Assertion`). A small zero-dependency **auth-verify** service (`tools/authgate/`) verifies that JWT; Caddy `forward_auth`s every `/n8n/webhook/*` request through it and only proxies to n8n on a 2xx. Verification is **independent of the edge routing** — even if the tunnel/Access path config were wrong, an unauthenticated call is rejected here.
+
+  Verification (RS256, standard Cloudflare Access recipe — no client-asserted trust):
+  1. `alg` **must** be `RS256` (reject `none`/HS\* — algorithm-confusion defence).
+  2. Signature verified against the team JWKS (`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`), keyed by `kid`; JWKS cached with refetch on unknown `kid` (key rotation).
+  3. `iss` === the team domain; `aud` **must** contain this application's AUD tag (ties the token to *this* app — without it, any token in the team would pass); `exp` in the future (small skew).
+  4. `email` claim extracted as the operator identity.
+
+- **Fail-closed.** If the CF verification env (`CF_TEAM_DOMAIN`, `CF_ACCESS_AUD`) is unset, auth-verify **denies** by default. A local, gate-less run must opt in explicitly with `AUTHGATE_ALLOW_INSECURE=1` (dev only, logged loudly) — a misconfigured production denies rather than opens.
+- **Provider-agnostic seam (SR-138 / NFR-091).** The gate provider is swappable: auth-verify reads a signed assertion and the identity header is mapped in one place (`/auth/whoami` in Caddy). Swapping Cloudflare Access for a self-hosted OIDC forward-auth changes only auth-verify's verification config, not the SPA or the seam contract.
+- **n8n editor is never web-exposed.** Only `/n8n/webhook/*` (gated) and `/n8n/healthz` (liveness, open) are proxied; the editor/admin UI that holds the Gemini credential is reachable only via SSH / `docker compose exec`.
+
+現在のスコープの整理: レビューツール自体は公開・認証不要。**AI 中継のみ**が唯一のゲート境界で、サーバ側（auth-verify による Cloudflare Access JWT の暗号検証）が正であり、フロントの抑制は保険。環境変数未設定時は**既定で拒否**（fail-closed）。
 
 ---
 

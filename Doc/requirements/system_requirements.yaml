@@ -2052,8 +2052,8 @@ parser_diagnostics:
   SR-137:
     function: "Ensure the AI relay boundary serves only requests that have passed the auth gate — the origin is reachable only through the gate (or n8n verifies the gate's signed assertion) — so an unauthenticated request never reaches a Gemini call"
     parent: [UR-018]
-    component: the auth gate (managed access gate for the beta) in front of the AI route + origin network isolation and/or a verification step at the head of the n8n chat/relay workflows
-    status: planned  # v8.0 (public beta)
+    component: "auth gate (Cloudflare Access) in front of the AI route + the auth-verify service (tools/authgate) that cryptographically verifies the Access JWT, which Caddy forward_auth's every /n8n/webhook/* request through (deploy/Caddyfile); fails closed"
+    status: implemented  # v8.0 — auth-verify + Caddy forward_auth done & tested; edge Access is deploy-time config (Doc/Deploy_Runbook.md)
     notes: |
       The server-side half of UR-018's AI gate, and THE security
       boundary (SR-136 is only insurance). This must hold even if

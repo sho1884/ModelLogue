@@ -19,6 +19,7 @@ services:
       - plantuml
       - n8n
       - nswitch-api
+      - auth-verify
     restart: unless-stopped
 
   plantuml:
@@ -54,6 +55,26 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - ./tools/nswitch:/app:ro
+    restart: unless-stopped
+
+  # SR-137: server-side AI gate. Caddy forward_auth's /n8n/webhook/* through
+  # this zero-dependency verifier before proxying to n8n. Fail-closed: with no
+  # Cloudflare env it DENIES all AI calls; a local run opts out explicitly.
+  auth-verify:
+    image: node:20-slim
+    working_dir: /app
+    command: ["node", "src/index.js"]
+    environment:
+      - AUTHGATE_PORT=8092
+      # Production: set these to your Cloudflare Access team name + the AI
+      # application's AUD tag (see Doc/Deploy_Runbook.md).
+      - CF_TEAM_DOMAIN=${CF_TEAM_DOMAIN:-}
+      - CF_ACCESS_AUD=${CF_ACCESS_AUD:-}
+      # Local only: with no CF vars the gate fails closed. Set to 1 to run the
+      # stack locally without an edge gate. MUST be 0/unset in production.
+      - AUTHGATE_ALLOW_INSECURE=${AUTHGATE_ALLOW_INSECURE:-0}
+    volumes:
+      - ./tools/authgate:/app:ro
     restart: unless-stopped
 
 volumes:

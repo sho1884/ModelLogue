@@ -47,8 +47,24 @@
 	# n8n editor / admin UI (which holds the Gemini credential) is
 	# deliberately NOT proxied — the operator reaches it via SSH / compose
 	# exec. Any other /n8n/* path falls through to the SPA handler below.
-	@n8n path /n8n/webhook/* /n8n/healthz
-	handle @n8n {
+
+	# Liveness probe — open, carries no identity.
+	handle /n8n/healthz {
+		uri strip_prefix /n8n
+		reverse_proxy n8n:5678
+	}
+
+	# SR-137: the AI relay is the gated boundary. Every webhook request is
+	# verified by the auth-verify service (Cloudflare Access JWT); Caddy only
+	# proxies on to n8n when it answers 2xx, so an unauthenticated call never
+	# reaches a Gemini node — independently of the edge routing, and even if
+	# the SPA gate (SR-136) is bypassed. auth-verify fails closed when the CF
+	# env is unset (see tools/authgate).
+	handle /n8n/webhook/* {
+		forward_auth auth-verify:8092 {
+			uri /verify
+			copy_headers Cf-Access-Authenticated-User-Email
+		}
 		uri strip_prefix /n8n
 		reverse_proxy n8n:5678
 	}

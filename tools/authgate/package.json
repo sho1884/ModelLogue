@@ -1,0 +1,13 @@
+{
+  "name": "modellogue-authgate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-dependency Cloudflare Access JWT verifier for the ModelLogue AI relay (SR-137). Caddy forward_auth's /n8n/webhook/* through it.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  }
+}
