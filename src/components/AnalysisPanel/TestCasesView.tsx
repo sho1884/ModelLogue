@@ -106,7 +106,7 @@ export function TestCasesView() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-gray-700 font-semibold">
           {status === 'loading' && 'Generating…'}
           {status === 'success' && result &&
             (view === 'tests'

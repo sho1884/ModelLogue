@@ -913,6 +913,7 @@ artifact_export:
       - "A Tests / Scenarios toggle switches to the secondary Scenarios view: the one-stroke initial→final walks, each listing the Test ids it covers; negatives never appear as or within a Scenario"
       - "ModelLogue passes the session name to the service so ids read as `<session>-<type>-NNN`; an unnamed session yields `untitled-...`"
       - "Negative Tests are visually distinct from positive (badge / colour), so a forbidden-transition test is not mistaken for a coverage pattern"
+      - "The tab prominently shows the current count (number of Tests in the Tests view, number of Scenarios in the Scenarios view) — the count is not inferable from ids since they reset per (scope, type)"
       - "The list updates reactively after a successful parse (same debounce as SVG fetch) without requiring a manual refresh"
       - "When tools/nswitch/ responds with `uncovered` entries, a warning banner lists them above the table"
       - "When the nswitch service is unreachable, the tab shows a connection-error hint with the probed URL; the rest of the UI keeps working"
