@@ -384,22 +384,21 @@ This satisfies ADR-011: CI diffs on generated artifacts are meaningful.
 
 > **Bridge to §1.1:** the required chains (§7.2) are the positive **Tests**; the invalid cells (§7.2) are the negative (`INV`) **Tests**; the greedy cover paths (§7.4) are the **Scenarios**. The algorithm below is unchanged by the v8.x Tests/Scenarios reframe — only the output naming/ids (§6, §1.1) changed.
 
-### 7.1 Layered decomposition / レイヤ分解
+### 7.1 Flattening / 平坦化 (ADR-009 revision)
 
-ModelLogue's state-diagram subset permits **one level of composite states** (ADR-009). Layered testing treats each composite as an independent sub-model plus a "black box" in the parent.
+ModelLogue's state-diagram subset permits **one level of composite states** (ADR-009). For test generation, composites are **flattened** (inlined one level) into a **single layer**, and the ordinary N-switch of §7.2 runs over that flat machine.
 
-Two layers per composite are built from a single parsed model:
+**Why not layered testing.** An earlier design tested each composite as a black box in the parent *plus* its internals as a separate sub-model. That silently **drops boundary-crossing sequences** (enter a composite → transition internally → escape, as one chain) and makes the test count depend on how the model was drawn — a composite and its hand-flattened equivalent yield different suites, and the black-box view even reports a spurious invalid cell for an event the composite consumes internally. For a test-generation tool that under-coverage is unacceptable, so layered testing is not used. One-level composites (ADR-009) keep the flattened machine bounded.
 
-**Top layer** — the composed machine with each composite replaced by a single black-box node.
-- Transitions preserved at top: every transition whose source and target are both at the top level, AND every group-escape transition (source is a composite) and every entry transition (target is a composite).
-- The layer's pseudo-states: `[*]_init` and `[*]_final`.
+**Mechanical expansion** (per composite `C`, purely structural):
 
-**Child layer (one per composite `X`)** — `X`'s internal state machine.
-- States: the children of `X`.
-- Transitions: only those with both endpoints inside `X`.
-- Pseudo-states: `[*]_init_X` and `[*]_final_X`.
+- `C`'s children are **promoted** to the top level; the composite node itself disappears.
+- An **entry** into `C` (`X --ev--> C`) is redirected to `C`'s internal initial child (`X --ev--> Running`).
+- A **group-escape** from `C` (`C --ev--> Y`) is replicated from **every** child of `C` (`Running --ev--> Y`, `Paused --ev--> Y`).
+- Internal transitions are kept as-is.
+- `C`'s internal-initial edge is dropped (folded into the entry redirect); a transition into `C`'s internal final maps to the machine's `[*]_final`.
 
-Tests generated per layer are emitted with `layer=top` or `layer=<X>`.
+The result is one self-contained layer with pseudo-states `[*]_init` / `[*]_final`; every state cell is really handled, so no spurious invalids arise. **A composite model and its hand-flattened equivalent produce byte-identical tests.**
 
 ### 7.2 Path-algebra matrix / 経路代数行列
 

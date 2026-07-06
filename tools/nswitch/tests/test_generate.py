@@ -121,38 +121,66 @@ def test_output_is_byte_deterministic():
     assert scenarios_to_csv(a.scenarios) == scenarios_to_csv(b.scenarios)
 
 
-def test_layered_scopes():
-    model = parse_puml(
-        "@startuml\n"
-        "[*] --> Idle\n"
-        "Idle --> Outer : start\n"
-        "state Outer {\n"
-        "  [*] --> Running\n"
-        "  Running --> Paused : pause\n"
-        "  Paused --> Running : resume\n"
-        "}\n"
-        "Outer --> Idle : stop\n"
-        "@enduml\n"
-    )
-    result = generate(model, n=1, layered=True, name="M")
-    assert "M" in result.scopes  # top layer uses the supplied name
-    assert "Outer" in result.scopes  # composite keeps its id
+COMPOSITE = (
+    "@startuml\n"
+    "[*] --> Idle\n"
+    "Idle --> Outer : start\n"
+    "state Outer {\n"
+    "  [*] --> Running\n"
+    "  Running --> Paused : pause\n"
+    "  Paused --> Running : resume\n"
+    "}\n"
+    "Outer --> Idle : stop\n"
+    "@enduml\n"
+)
+
+# The same behaviour drawn flat (composite inlined by hand).
+MANUAL_FLAT = (
+    "@startuml\n"
+    "[*] --> Idle\n"
+    "Idle --> Running : start\n"
+    "Running --> Paused : pause\n"
+    "Paused --> Running : resume\n"
+    "Running --> Idle : stop\n"
+    "Paused --> Idle : stop\n"
+    "@enduml\n"
+)
 
 
-def test_no_layered_keeps_only_top():
-    model = parse_puml(
-        "@startuml\n"
-        "[*] --> Idle\n"
-        "Idle --> Outer : start\n"
-        "state Outer {\n"
-        "  [*] --> R\n"
-        "  R --> R : tick\n"
-        "}\n"
-        "Outer --> Idle : stop\n"
-        "@enduml\n"
-    )
-    result = generate(model, n=1, layered=False, name="M")
+def test_composite_is_flattened_into_one_scope():
+    result = generate(parse_puml(COMPOSITE), n=1, name="M")
+    # Composite inlined → a single flat scope, not a separate child layer.
     assert result.scopes == ["M"]
+    states = {t.start for t in result.tests} | {
+        s.reached for t in result.tests for s in t.steps
+    }
+    # Children promoted; the composite node itself is gone.
+    assert "Running" in states and "Paused" in states
+    assert "Outer" not in states
+    # Entry redirected to the composite's initial, and the group-escape
+    # (Outer --stop--> Idle) replicated from every child.
+    firsts = {(t.start, t.steps[0].event, t.steps[0].reached) for t in result.tests}
+    assert ("Idle", "start", "Running") in firsts  # entry redirect
+    assert ("Running", "stop", "Idle") in firsts  # escape from Running
+    assert ("Paused", "stop", "Idle") in firsts  # escape from Paused
+
+
+def test_flattening_matches_a_hand_flattened_model():
+    # Coverage must not depend on how the model was drawn: a composite and its
+    # manually flattened equivalent produce the SAME tests (ADR-009 revision).
+    def sig(src, n):
+        r = generate(parse_puml(src), n=n)
+        return {
+            (t.start, tuple((s.event, s.reached) for s in t.steps)) for t in r.tests
+        }
+
+    for n in (0, 1, 2):
+        assert sig(COMPOSITE, n) == sig(MANUAL_FLAT, n)
+    # And no spurious invalid on the composite (every cell is really handled).
+    assert (
+        len(generate(parse_puml(COMPOSITE), n=0, invalid=True).tests)
+        == len(generate(parse_puml(MANUAL_FLAT), n=0, invalid=True).tests)
+    )
 
 
 def test_result_to_dict_is_json_serializable():
