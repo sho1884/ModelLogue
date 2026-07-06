@@ -85,6 +85,15 @@ test('rejects malformed token', () => {
   assert.throws(() => parseJwt('a.b'), /malformed/);
 });
 
-test('rejects when verifier is misconfigured (no aud)', () => {
-  assert.throws(() => verifyAccessJwt(makeToken(), { ...opts, aud: '' }), /misconfigured/);
+test('aud is optional: verifies without an aud configured (single-app team)', () => {
+  assert.deepEqual(verifyAccessJwt(makeToken(), { ...opts, aud: '' }), { email: 'op@example.com' });
+});
+
+test('but a configured aud is still enforced when wrong', () => {
+  const t = makeToken({ payload: { aud: 'someone-elses-app' } });
+  assert.throws(() => verifyAccessJwt(t, opts), /bad aud/);
+});
+
+test('rejects when verifier is misconfigured (no issuer)', () => {
+  assert.throws(() => verifyAccessJwt(makeToken(), { ...opts, issuer: '' }), /misconfigured/);
 });

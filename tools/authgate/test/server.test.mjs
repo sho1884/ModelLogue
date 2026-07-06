@@ -80,10 +80,12 @@ test('health reports the mode', async () => {
   assert.equal(r.body.mode, 'deny');
 });
 
-test('configFromEnv: fail-closed by default, insecure opt-in, enforce when set', () => {
+test('configFromEnv: fail-closed by default, insecure opt-in, enforce when team set', () => {
   assert.equal(configFromEnv({}).mode, 'deny');
   assert.equal(configFromEnv({ AUTHGATE_ALLOW_INSECURE: '1' }).mode, 'insecure');
-  const enf = configFromEnv({ CF_TEAM_DOMAIN: 'myteam', CF_ACCESS_AUD: 'aud' });
+  // A team domain alone is enough to enforce; aud is optional.
+  const enf = configFromEnv({ CF_TEAM_DOMAIN: 'myteam' });
   assert.equal(enf.mode, 'enforce');
   assert.equal(enf.issuer, 'https://myteam.cloudflareaccess.com');
+  assert.equal(configFromEnv({ CF_TEAM_DOMAIN: 'myteam', CF_ACCESS_AUD: 'aud' }).mode, 'enforce');
 });

@@ -59,7 +59,7 @@ export function parseJwt(token) {
  * @param {number} [opts.skewSeconds]  allowed clock skew (default 60)
  */
 export function verifyAccessJwt(token, { issuer, aud, jwks, now = Date.now(), skewSeconds = 60 }) {
-  if (!issuer || !aud) throw new AuthError('verifier misconfigured');
+  if (!issuer) throw new AuthError('verifier misconfigured');
   const { header, payload, signingInput, signature } = parseJwt(token);
 
   // 1. Algorithm must be RS256 — reject `none`/HS* to block algorithm confusion.
@@ -79,10 +79,16 @@ export function verifyAccessJwt(token, { issuer, aud, jwks, now = Date.now(), sk
   const sigOk = crypto.verify('RSA-SHA256', Buffer.from(signingInput), key, signature);
   if (!sigOk) throw new AuthError('bad signature');
 
-  // 3. Claims. iss exact; aud must contain our tag; exp in the future.
+  // 3. Claims. iss exact; aud must contain our tag WHEN an aud is configured
+  // (optional: with a single Access app in the team, iss + signature + email
+  // already pin the token to the operator's login. Set CF_ACCESS_AUD to also
+  // tie it to a specific app — required only when the team hosts more than one
+  // gated app). exp in the future.
   if (payload.iss !== issuer) throw new AuthError('bad iss');
-  const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-  if (!auds.includes(aud)) throw new AuthError('bad aud');
+  if (aud) {
+    const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!auds.includes(aud)) throw new AuthError('bad aud');
+  }
   const nowSec = Math.floor(now / 1000);
   if (typeof payload.exp !== 'number' || payload.exp + skewSeconds < nowSec) {
     throw new AuthError('expired');

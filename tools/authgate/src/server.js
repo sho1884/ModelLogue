@@ -47,7 +47,9 @@ export function configFromEnv(env = process.env) {
   const aud = env.CF_ACCESS_AUD || '';
   const allowInsecure = env.AUTHGATE_ALLOW_INSECURE === '1';
   const issuer = team ? `https://${team}.cloudflareaccess.com` : '';
-  const mode = team && aud ? 'enforce' : allowInsecure ? 'insecure' : 'deny';
+  // Enforce as soon as a team domain is set. CF_ACCESS_AUD is optional and,
+  // when present, additionally pins the token to a specific Access app.
+  const mode = team ? 'enforce' : allowInsecure ? 'insecure' : 'deny';
   const jwksProvider =
     mode === 'enforce'
       ? cloudflareJwksProvider(`${issuer}/cdn-cgi/access/certs`, {

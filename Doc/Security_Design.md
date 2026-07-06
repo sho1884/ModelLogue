@@ -53,7 +53,7 @@ This document defines security design guidelines for ModelLogue based on OWASP T
   Verification (RS256, standard Cloudflare Access recipe — no client-asserted trust):
   1. `alg` **must** be `RS256` (reject `none`/HS\* — algorithm-confusion defence).
   2. Signature verified against the team JWKS (`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`), keyed by `kid`; JWKS cached with refetch on unknown `kid` (key rotation).
-  3. `iss` === the team domain; `aud` **must** contain this application's AUD tag (ties the token to *this* app — without it, any token in the team would pass); `exp` in the future (small skew).
+  3. `iss` === the team domain; `exp` in the future (small skew); `aud` must contain this application's AUD tag **when `CF_ACCESS_AUD` is configured** — optional: with a single gated Access app in the team, `iss` + signature + `email` already pin a valid token to the operator's login (only that app's policy can mint one). Set the aud to additionally tie the token to a specific app, which matters once the team hosts more than one gated app.
   4. `email` claim extracted as the operator identity.
 
 - **Fail-closed.** If the CF verification env (`CF_TEAM_DOMAIN`, `CF_ACCESS_AUD`) is unset, auth-verify **denies** by default. A local, gate-less run must opt in explicitly with `AUTHGATE_ALLOW_INSECURE=1` (dev only, logged loudly) — a misconfigured production denies rather than opens.

@@ -21,17 +21,25 @@ Uses only the Node standard library (`http`, `crypto`) — no npm dependencies.
 2. Signature checked against the team JWKS
    (`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`), keyed by `kid`;
    cached, refetched on unknown `kid` (rotation), rate-limited.
-3. `iss` === the team domain; `aud` must contain this application's AUD tag;
-   `exp` in the future (60 s skew).
+3. `iss` === the team domain; `exp` in the future (60 s skew); `aud` must
+   contain this application's AUD tag **when `CF_ACCESS_AUD` is set** (optional —
+   see below).
 4. `email` claim is returned as the operator identity.
+
+**`aud` is optional.** With a single gated Access app in the team, `iss` +
+signature + `email` already pin a valid token to the operator's login (only
+that app's policy — the operator's email — can mint one). Set `CF_ACCESS_AUD`
+to additionally tie the token to a specific app; this matters only when the
+team hosts more than one gated app (so a token minted for a more permissive app
+can't be replayed here).
 
 ## Modes (fail-closed)
 
 | Env | Mode | Behaviour |
 |---|---|---|
-| `CF_TEAM_DOMAIN` + `CF_ACCESS_AUD` set | `enforce` | verify every assertion |
-| neither set, `AUTHGATE_ALLOW_INSECURE=1` | `insecure` | allow all — **local/dev only**, logged loudly |
-| neither set | `deny` | **block all AI calls** (safe default) |
+| `CF_TEAM_DOMAIN` set (`CF_ACCESS_AUD` optional) | `enforce` | verify every assertion |
+| unset, `AUTHGATE_ALLOW_INSECURE=1` | `insecure` | allow all — **local/dev only**, logged loudly |
+| unset | `deny` | **block all AI calls** (safe default) |
 
 ## Config
 
