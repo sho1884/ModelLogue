@@ -238,9 +238,21 @@ function pickString(
  * changing the ChatResponse interface.
  */
 export function extractPlantUmlBlock(text: string): string | undefined {
-  const pattern = /```plantuml\s*\n([\s\S]*?)```/;
-  const match = text.match(pattern);
-  return match ? match[1].trim() : undefined;
+  // 1. Fenced block tagged plantuml / puml / uml (the format the prompt asks
+  //    for, and the common case).
+  const tagged = text.match(/```(?:plantuml|puml|uml)\s*\n([\s\S]*?)```/i);
+  if (tagged) return tagged[1].trim();
+  // 2. Any fenced block whose body is a PlantUML diagram (untagged ``` fence).
+  const fenced = text.match(/```[a-z-]*\s*\n([\s\S]*?)```/i);
+  if (fenced && /@startuml[\s\S]*@enduml/i.test(fenced[1])) {
+    return fenced[1].trim();
+  }
+  // 3. A bare @startuml … @enduml block — the model returned the DSL without
+  //    fencing it. Without this, the proposal (Apply) silently degrades to
+  //    plain text.
+  const bare = text.match(/@startuml[\s\S]*?@enduml/i);
+  if (bare) return bare[0].trim();
+  return undefined;
 }
 
 /**

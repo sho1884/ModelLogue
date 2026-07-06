@@ -409,7 +409,10 @@ function AssistantContent({
 
   const displayText = message.suggestedSource
     ? message.content
-        .replace(/```plantuml\s*\n[\s\S]*?```/, '')
+        // Strip the proposal source from the prose (it's shown in the
+        // ProposalView): tagged fences, and a bare @startuml…@enduml block.
+        .replace(/```(?:plantuml|puml|uml)\s*\n[\s\S]*?```/i, '')
+        .replace(/@startuml[\s\S]*?@enduml/i, '')
         .replace(/```csv\s*\n[\s\S]*?```/i, '')
         .trim()
     : message.content;
