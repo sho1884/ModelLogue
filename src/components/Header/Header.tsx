@@ -5,7 +5,7 @@ import { useUiStore } from '../../stores/uiStore';
 import { SaveAndFinishDialog } from '../SaveAndFinishDialog';
 import grammarSpec from '../../grammars/stateDiagram.ebnf?raw';
 import { downloadTextFile } from '../../services/download';
-import type { SeedBundle } from '../../types/session';
+import type { ReviewSession, SeedBundle } from '../../types/session';
 import { MODEL_TYPE_REGISTRY } from '../../modelTypes/registry';
 
 // SR-081: EBNF grammar is available as a download; no in-app viewer.
@@ -18,10 +18,11 @@ function downloadEbnf() {
   );
 }
 
-// SR-083 (v7.2): accept either a SeedBundle or a full ReviewSession JSON.
-// A ReviewSession has a `messages` array; in that case we extract just
-// the seed-relevant fields and discard chat / history / markers / outcome
-// (Volatile Canvas: only static seeds round-trip).
+// SR-083: a bare SeedBundle (source / requirements only) seeds a fresh
+// session. A full ReviewSession (has a `messages` array) is instead fully
+// restored (see restoreFromReview) so the operator can CONTINUE the
+// discussion — conversation, version history, markers and model all come back.
+// This coercion is the seed path, used only for bundles without a conversation.
 function coerceToSeedBundle(parsed: unknown): SeedBundle {
   if (typeof parsed !== 'object' || parsed === null) {
     throw new Error('File is not a JSON object');
@@ -71,6 +72,7 @@ export function Header() {
   const setModelTypeId = useSessionStore((s) => s.setModelTypeId);
   const requirementsText = useRequirementsStore((s) => s.requirementsText);
   const bootstrapFromBundle = useSessionStore((s) => s.bootstrapFromBundle);
+  const restoreFromReview = useSessionStore((s) => s.restoreFromReview);
   const aiAvailable = useUiStore((s) => s.aiAvailable);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -121,8 +123,17 @@ export function Header() {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      const seed = coerceToSeedBundle(parsed);
-      bootstrapFromBundle(seed);
+      // A full ReviewSession (carries a conversation) is restored whole so the
+      // discussion can continue; a bare seed bundle just seeds the source.
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray((parsed as Record<string, unknown>).messages)
+      ) {
+        restoreFromReview(parsed as ReviewSession);
+      } else {
+        bootstrapFromBundle(coerceToSeedBundle(parsed));
+      }
     } catch (err) {
       setImportError(
         err instanceof Error ? err.message : 'Failed to open file'

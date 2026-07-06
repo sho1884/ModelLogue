@@ -55,6 +55,10 @@ interface SessionStore {
   closeSession: (status: SessionOutcomeStatus, note: string | null) => void;
   exportSession: () => ReviewSession;
   bootstrapFromBundle: (bundle: SeedBundle) => void;
+  // SR-083 (v8.x): fully restore a saved ReviewSession so the operator can
+  // CONTINUE the discussion — the whole conversation, version history, markers,
+  // and model come back, and the session reopens editable (outcome cleared).
+  restoreFromReview: (review: ReviewSession) => void;
   markModelEstablished: () => void;
 }
 
@@ -177,6 +181,46 @@ export const useSessionStore: UseBoundStore<StoreApi<SessionStore>> = create<Ses
         // hasEstablishedModel will flip when modelStore.parseSource succeeds
       });
     }
+  },
+
+  restoreFromReview: (review) => {
+    // SR-083 (v8.x): full round-trip for "continue the discussion". Unlike a
+    // seed (source only), this brings the whole session back so the AI keeps
+    // the prior conversation as context and the operator resumes editing.
+    let resolvedType = resolveModelTypeId(review.modelTypeId);
+    if (review.modelTypeId === undefined && review.plantUmlSource) {
+      const detected = pickBestType(review.plantUmlSource);
+      if (detected !== null) resolvedType = detected;
+    }
+    if (resolvedType !== get().modelTypeId) {
+      useUiStore.getState().setActiveAnalysisTab('requirements');
+    }
+    // Conversation (the canonical store the ChatPanel + AI history read).
+    useChatStore.setState({
+      messages: review.messages ?? [],
+      lastError: null,
+      pendingGuardrail: null,
+      isSending: false,
+    });
+    // Review annotations; auto-markers are transient and start clear.
+    useMarkerStore.setState({ markers: review.markers ?? [], autoMarkers: [] });
+    useRequirementsStore.setState({
+      requirementsText: review.requirementsText ?? '',
+    });
+    if (review.name) {
+      set({ sessionName: review.name });
+    }
+    set({
+      modelTypeId: resolvedType,
+      currentSource: review.plantUmlSource,
+      sourceHistory: review.sourceHistory ?? [],
+      redoStack: [],
+      messages: review.messages ?? [], // keep the legacy field consistent
+      outcome: null, // reopen: the session is active again, not closed
+      hasEstablishedModel: true, // REVIEW phase — editable, chat enabled
+    });
+    // The source-change effect (MainLayout) re-parses currentSource and
+    // fetches the SVG, restoring the diagram.
   },
 
   updateSource: (source, triggeredBy) => {

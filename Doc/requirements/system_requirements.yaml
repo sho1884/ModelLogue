@@ -757,18 +757,20 @@ requirements_text:
     acceptance_criteria:
       - "Header action is labelled 'Open saved review…' (NOT 'Seed Import' — that label was opaque to most users)"
       - "Accept a JSON file in either of two shapes, transparently to the user:"
-      - "  - SeedBundle: { requirementsText?, plantUmlSource?, sessionName? } — produced by an external workflow (n8n / CI)"
-      - "  - ReviewSession: a JSON file produced by Save & finish (SR-041) — the importer extracts requirementsText, plantUmlSource, sessionName and discards chat log / source history / markers / outcome (Volatile Canvas: only the seed parts round-trip)"
+      - "  - SeedBundle: { requirementsText?, plantUmlSource?, sessionName? } — produced by an external workflow (n8n / CI). Seeds a fresh session (source path)."
+      - "  - ReviewSession (Save & finish output, SR-041 — detected by a `messages` array): FULLY restored so the operator can CONTINUE the discussion — conversation, source/version history, markers, requirements and model all come back."
+      - "On full restore the session REOPENS editable: outcome is cleared, hasEstablishedModel is set (REVIEW phase), and subsequent AI turns carry the restored conversation as context so the dialogue resumes seamlessly"
       - "All seed fields are optional; any missing field is treated as an empty seed"
-      - "Imported values go through the same seed path as manual paste; if the imported source parses successfully the session enters REVIEW phase immediately"
+      - "Imported values go through the same source path as manual paste; if the imported source parses successfully the session enters REVIEW phase immediately"
       - "If a non-empty session is being replaced, confirm first"
       - "Tooltip: 'Load a previously saved review (.json) to continue, or a starter file prepared by an external workflow.'"
     notes: |
-      v7.2 widens the importer to accept the Save-and-finish output so
-      reviewers have an obvious save → reload round-trip without any
-      external tooling. The Volatile Canvas property is preserved by
-      not rehydrating chat / markers / history — only the static seed
-      fields come back.
+      v8.x revision: a full ReviewSession is now REHYDRATED, not reduced to a
+      seed. The earlier 'Volatile Canvas: only seeds round-trip' behavior
+      silently discarded the conversation and history on load, which defeated
+      the operator's actual need — reopening a saved session to CONTINUE the
+      discussion (the dialogue log is the design asset; UR-005/UR-006). A bare
+      SeedBundle (no conversation) still seeds a fresh session.
 
 # =============================================================================
 # Model-Level Diff (new in v7.1, feeds SR-033)
