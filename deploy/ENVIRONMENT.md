@@ -39,20 +39,32 @@ ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
 
 ---
 
-## 動いているもの（Docker コンテナ 6 個）
+## 動いているもの（Docker コンテナ 7 個）
 
 `docker ps` で見えるはずのもの。すべて `/opt/modellogue` の docker compose で管理されています。
 
 | コンテナ | 役割 | 公開ポート |
 |---|---|---|
-| `modellogue-web-1` | Caddy。SPA を配信し、`/plantuml` `/nswitch` `/n8n` `/auth` を各コンテナへ中継 | `127.0.0.1:8088`（外部非公開） |
+| `modellogue-web-1` | Caddy。SPA を配信し、`/plantuml` `/nswitch` `/pict` `/n8n` `/auth` を各コンテナへ中継 | `127.0.0.1:8088`（外部非公開） |
 | `modellogue-n8n-1` | AI 中継。**OpenAI の API キーを保持**。エディタは非公開 | `127.0.0.1:5678`（外部非公開） |
 | `modellogue-auth-verify-1` | Cloudflare Access の署名を検証（origin 側の二重ゲート、fail-closed） | なし |
 | `modellogue-cloudflared-1` | Cloudflare Tunnel。外からはこれ経由でしか届かない | なし（外向き接続のみ） |
 | `modellogue-plantuml-1` | PlantUML サーバ（SVG 生成）。秘密なし | なし |
 | `modellogue-nswitch-api-1` | N-switch テスト生成。秘密なし | なし |
+| `modellogue-pict-service-1` | **姉妹プロジェクト NeoCombi の PICT デモ API**（相乗り）。秘密なし | なし |
 
 - **外から開いているポートは SSH(22) だけ**。Web は Cloudflare Tunnel 経由でのみ到達します。ポートを新規に開けないこと。
+
+### 相乗りの姉妹プロジェクト・デモ API（パスベース）
+
+この箱は ModelLogue 専用ではなく、**姉妹プロジェクトの CLI デモ API を同居**させています（`modellogue.com/<prefix>` で公開・非ゲート）。現状：
+
+| prefix | 中身 | ソースの場所 | サービス定義 | ルート |
+|---|---|---|---|---|
+| `/pict` | NeoCombi の PICT ラッパ（`/health`・`/generate?order=N`・`/decision-table`） | **`/opt/pict-service`**（`/opt/modellogue` の外＝`deploy.sh` の rsync --delete で消えない） | `docker-compose.override.yml`（サーバ専用） | `deploy/Caddyfile` の `handle_path /pict/*` |
+
+- 追加するときの型：**ソースを `/opt/<name>` に置く → `override.yml` に build サービスを足す → `deploy/Caddyfile` に `handle_path /<prefix>/*` を足す → 公開・非ゲート（秘密が無い前提）**。
+- これらは `deploy.sh` を壊しません（ソースは modellogue ツリー外、サービス定義は rsync 除外の override、ルートは repo の Caddyfile）。
 
 ---
 
