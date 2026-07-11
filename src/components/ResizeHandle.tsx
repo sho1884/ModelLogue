@@ -111,7 +111,7 @@ export function ResizeHandle({
 
   return (
     <div
-      className="bg-gray-200 hover:bg-indigo-300 transition-colors"
+      className="bg-gray-200 hover:bg-emerald-300 transition-colors"
       style={style}
       onPointerDown={onPointerDown}
       role="separator"

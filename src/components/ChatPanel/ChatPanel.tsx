@@ -150,7 +150,7 @@ export function ChatPanel() {
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Type a message (Ctrl/Cmd + Enter to send)"
             rows={2}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500"
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                 e.preventDefault();
@@ -163,7 +163,7 @@ export function ChatPanel() {
             <button
               type="submit"
               disabled={isSending || draft.trim() === ''}
-              className="px-3 py-1 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300"
+              className="px-3 py-1 text-xs font-medium rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-300"
             >
               Send
             </button>
@@ -324,17 +324,17 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   }, []);
 
   // Visual classes by source (SR-134):
-  //   facilitator  → right-aligned, indigo
+  //   facilitator  → right-aligned, emerald
   //   ai           → left-aligned, gray
   //   slack:<name> → left-aligned, gray bubble with green left border
   const bubbleClass = isFacilitator
-    ? 'bg-indigo-600 text-white px-3 py-2'
+    ? 'bg-emerald-600 text-white px-3 py-2'
     : isSlack
       ? 'bg-gray-100 text-gray-800 border border-gray-200 border-l-4 border-l-emerald-500'
       : 'bg-gray-100 text-gray-800 border border-gray-200';
 
   const labelClass = isFacilitator
-    ? 'text-[10px] uppercase tracking-wide text-indigo-200 mb-0.5'
+    ? 'text-[10px] uppercase tracking-wide text-emerald-200 mb-0.5'
     : isSlack
       ? 'text-[10px] uppercase tracking-wide text-emerald-700 px-3 pt-1'
       : 'text-[10px] uppercase tracking-wide text-gray-500 px-3 pt-1';

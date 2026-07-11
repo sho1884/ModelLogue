@@ -84,7 +84,7 @@ export function MarkerToolbar({ markersHidden = false }: MarkerToolbarProps) {
               title={tool.label}
               className={`px-2 py-1 text-base rounded inline-flex items-center justify-center ${
                 activeTool === tool.type
-                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
+                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
                   : 'text-gray-600 hover:bg-gray-100 border border-transparent'
               }`}
             >

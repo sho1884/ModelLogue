@@ -106,7 +106,7 @@ export function RequirementsTab() {
         <button
           onClick={handleGenerate}
           disabled={!canGenerate}
-          className="px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          className="px-3 py-1 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
           title={
             !aiAvailable
               ? 'サインインすると AI にモデル生成を依頼できます（ヘッダーの「Sign in」）'

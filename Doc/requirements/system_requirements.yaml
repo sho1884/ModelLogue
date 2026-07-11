@@ -2271,6 +2271,41 @@ parser_diagnostics:
       - "Activating it opens the published manual site in a new browser tab (target=_blank, rel=noopener)"
       - "The link is always available, independent of AI availability or auth"
 
+  SR-143:
+    function: "Make the SPA an installable PWA (web app manifest + service worker) whose offline scope is the app shell and client-side processing only"
+    parent: [UR-009]
+    component: vite-plugin-pwa (Workbox) generating the manifest + service worker; icons under public/; SW registration in the app entry (src/main.tsx)
+    status: planned  # v8.x
+    notes: |
+      Make ModelLogue installable to the home screen / dock and launch in a
+      standalone window, with fast repeat startup from a cached shell. This is
+      additive UX (progressive enhancement): when not installed / on an
+      unsupporting browser, the app behaves exactly as today.
+
+      Offline scope is deliberately PARTIAL and stated honestly:
+        - Works offline: opening the app, editing the PlantUML source, and the
+          client-side analyses (e.g. the state-transition matrix) — these are
+          pure frontend algorithms and need no server.
+        - Needs the network: diagram rendering (PlantUML server), AI chat
+          (n8n + the auth gate), N-switch test generation (nswitch-api), and
+          loading ?file= samples (SR-141). These are server-backed.
+
+      Caching policy (guarantees are in NFR-092):
+        - The service worker PRECACHES only the static build output (the app
+          shell: HTML / JS / CSS / icons).
+        - The API / auth / render prefixes (/n8n/*, /auth/*, /plantuml/*,
+          /nswitch/*) are NETWORK-ONLY — never cached — so the identity gate
+          (SR-137) stays correct and diagrams / AI responses stay fresh.
+        - registerType 'autoUpdate': a new deploy replaces the cached shell so
+          clients are never stuck on a stale build; the header build-time
+          stamp (already present) remains the human-visible version signal.
+    acceptance_criteria:
+      - "The app serves a valid web app manifest (name, theme color, standalone display, icons) and is installable on supporting browsers"
+      - "Once installed it launches in a standalone window; on a return visit the shell loads from the service-worker cache"
+      - "The service worker precaches only static build assets; /n8n, /auth, /plantuml, /nswitch are never served from cache (network-only)"
+      - "After a new deploy, an installed/open client updates to the new build without a manual cache clear (autoUpdate)"
+      - "With no service worker / an unsupporting browser, behaviour is identical to the non-PWA app (progressive enhancement)"
+
 # =============================================================================
 # Data Model
 # =============================================================================

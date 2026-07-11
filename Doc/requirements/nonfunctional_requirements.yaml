@@ -234,3 +234,27 @@ requirements:
         standard: "The AI boundary depends only on 'an authenticated request reached the seam', not on any specific provider's specifics beyond the seam"
       - item: "Deploy portability"
         standard: "The SPA deploys to a different host by changing only a small env / the domain (no per-host rebuild); a static host MAY front the SPA but is not required"
+
+  NFR-092:
+    parent: [UR-009]
+    category: performance
+    name: "PWA is performance-neutral and always fresh"
+    rationale: |
+      Adding a service worker (SR-143) must neither slow the app down nor
+      hide new deploys behind a stale cache. The service worker only
+      precaches the static shell (which makes repeat startup faster) and
+      passes server calls straight through, so the heavy operations
+      (diagram rendering, AI, N-switch) see no added latency. Freshness and
+      the identity gate are preserved by keeping the API / auth / render
+      paths out of the cache and by auto-updating the shell on each deploy.
+    criteria:
+      - item: "No runtime slowdown"
+        standard: "Server-backed requests (/plantuml, /n8n, /nswitch, /auth) are network-only pass-throughs; the service worker adds no measurable latency to them"
+      - item: "Faster repeat startup"
+        standard: "On a return visit the app shell is served from the service-worker cache rather than re-fetched from the network"
+      - item: "No stale build"
+        standard: "A new deploy is adopted automatically (autoUpdate); an installed or open client is never left on an old build without a manual cache clear"
+      - item: "Cache never weakens the gate"
+        standard: "No gated or dynamic response (/n8n, /auth, /plantuml, /nswitch) is ever served from cache, so the identity gate (NFR-090 / SR-137) and data freshness are unaffected"
+      - item: "Progressive enhancement"
+        standard: "With no service worker or on an unsupporting browser, behaviour and performance are identical to the non-PWA app"

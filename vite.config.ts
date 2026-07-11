@@ -1,6 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
+
+// SR-143 / NFR-092: server-backed prefixes are NEVER cached or SPA-fallbacked
+// by the service worker — they must always hit the network so the identity
+// gate (SR-137) stays correct and diagrams / AI responses stay fresh.
+const NETWORK_ONLY_PREFIXES = ['/n8n', '/auth', '/plantuml', '/nswitch']
+const networkOnlyDenylist = NETWORK_ONLY_PREFIXES.map(
+  (p) => new RegExp(`^${p}(/|$)`)
+)
 
 // SR-139: the SPA calls its backend services under same-origin relative
 // prefixes (/plantuml, /n8n, /nswitch) so the built bundle carries no
@@ -27,7 +36,49 @@ const backendProxy = {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // SR-143: installable PWA. registerType 'autoUpdate' + injected registration
+    // means a new deploy replaces the cached shell with no manual cache clear
+    // (NFR-092). The service worker precaches only the static build output; the
+    // network-only prefixes above are never cached or SPA-fallbacked.
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      includeAssets: ['favicon.svg', 'favicon-32.png', 'favicon-16.png', 'apple-touch-icon.png'],
+      manifest: {
+        name: 'ModelLogue',
+        short_name: 'ModelLogue',
+        description: 'モデルレビューを支援するツール（状態遷移図・要求図・プロセス図）',
+        lang: 'ja',
+        theme_color: '#22ce86',
+        background_color: '#ffffff',
+        display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        icons: [
+          { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Navigations to server-backed prefixes must reach the network, not the
+        // SPA index fallback — critical for /auth/login and /n8n/webhook.
+        navigateFallbackDenylist: networkOnlyDenylist,
+        runtimeCaching: [
+          {
+            // Self-contained RegExp (no closure) so it serializes into the SW.
+            // Matches same-origin /n8n, /auth, /plantuml, /nswitch (and subpaths).
+            urlPattern: /\/(n8n|auth|plantuml|nswitch)(\/|$)/,
+            handler: 'NetworkOnly',
+          },
+        ],
+      },
+    }),
+  ],
   server: { proxy: backendProxy },
   preview: { proxy: backendProxy },
   // Build-time JST timestamp shown next to the title so users / bug-reporters

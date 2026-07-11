@@ -135,7 +135,7 @@ export function SaveAndFinishDialog({ onClose }: SaveAndFinishDialogProps) {
                 key={o.status}
                 className={`block w-full text-left px-3 py-2 rounded border cursor-pointer ${
                   outcome === o.status
-                    ? 'border-indigo-400 bg-indigo-50'
+                    ? 'border-emerald-400 bg-emerald-50'
                     : 'border-gray-200 bg-white hover:bg-gray-50'
                 }`}
               >
@@ -167,7 +167,7 @@ export function SaveAndFinishDialog({ onClose }: SaveAndFinishDialogProps) {
             onChange={(e) => setNote(e.target.value)}
             rows={2}
             placeholder="Anything to add about this outcome…"
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
         </div>
 
@@ -181,7 +181,7 @@ export function SaveAndFinishDialog({ onClose }: SaveAndFinishDialogProps) {
           <button
             onClick={handleSave}
             disabled={!outcome}
-            className="px-4 py-2 text-sm font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-medium rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             Download JSON
           </button>

@@ -349,7 +349,7 @@ export function ScenarioRunner() {
             <button
               onClick={handlePlay}
               disabled={!scenario}
-              className="flex-1 px-2 py-1 border border-indigo-300 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100 disabled:opacity-50"
+              className="flex-1 px-2 py-1 border border-emerald-300 bg-emerald-50 text-emerald-700 rounded hover:bg-emerald-100 disabled:opacity-50"
             >
               {status === 'paused' ? '▶ Resume' : '▶ Play'}
             </button>

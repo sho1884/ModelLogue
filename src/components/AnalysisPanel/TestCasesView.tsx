@@ -105,7 +105,7 @@ export function TestCasesView() {
               }
               className={`px-2 py-0.5 text-xs border rounded ${
                 mode === opt.id
-                  ? 'bg-indigo-500 text-white border-indigo-500'
+                  ? 'bg-emerald-500 text-white border-emerald-500'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -131,7 +131,7 @@ export function TestCasesView() {
               }
               className={`px-2 py-0.5 text-xs border rounded ${
                 view === v.id
-                  ? 'bg-indigo-500 text-white border-indigo-500'
+                  ? 'bg-emerald-500 text-white border-emerald-500'
                   : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
@@ -255,7 +255,7 @@ function TestsTable({ tests }: { tests: Test[] }) {
             <td className={`${TD} font-mono text-gray-800`}>{t.id}</td>
             <td className={`${TD} font-mono text-gray-800`}>{t.start}</td>
             <StepCells steps={t.steps} k={k} />
-            <td className={`${TD} font-mono text-indigo-700`}>
+            <td className={`${TD} font-mono text-emerald-700`}>
               {t.scenarios.join('; ')}
             </td>
           </tr>
@@ -317,7 +317,7 @@ function ScenariosTable({ scenarios }: { scenarios: Scenario[] }) {
             <td className={`${TD} font-mono text-gray-800`}>{s.id}</td>
             <td className={`${TD} font-mono text-gray-800`}>{s.start}</td>
             <StepCells steps={s.steps} k={k} />
-            <td className={`${TD} font-mono text-indigo-700`}>
+            <td className={`${TD} font-mono text-emerald-700`}>
               {s.covers.join('; ')}
             </td>
           </tr>

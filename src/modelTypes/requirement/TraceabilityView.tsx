@@ -72,7 +72,7 @@ export function TraceabilityView() {
                   return (
                     <td
                       key={colId}
-                      className="border border-gray-300 px-2 py-1 text-center font-semibold text-indigo-700 bg-indigo-50"
+                      className="border border-gray-300 px-2 py-1 text-center font-semibold text-emerald-700 bg-emerald-50"
                       title={ks.join(', ')}
                     >
                       {ks.join(',')}
