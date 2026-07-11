@@ -21,6 +21,16 @@
 		reverse_proxy nswitch-api:8090
 	}
 
+	# Sister-project demo API, co-located on this shared box (path-based).
+	# NeoCombi's PICT service: public, no gate — it runs untrusted DSL through
+	# the PICT binary and holds no secrets; its own rate-limit / timeout /
+	# body-size guardrails apply (see pict-service/server.mjs). The service is
+	# defined in docker-compose.override.yml (server-only), built from
+	# /opt/pict-service. handle_path strips /pict, so /pict/health -> /health.
+	handle_path /pict/* {
+		reverse_proxy pict-service:8765
+	}
+
 	# SR-136/137: identity probe for the front-end AI gate. Reports the
 	# operator's authenticated identity as seen by the edge auth gate
 	# (Cloudflare Access sets Cf-Access-Authenticated-User-Email once it has
