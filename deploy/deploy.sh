@@ -50,9 +50,10 @@ echo "==> 3/5  Rebuild the web image on the server (takes a few minutes)"
 $SSH "$SERVER" "cd $REMOTE_DIR && $COMPOSE build web"
 
 echo "==> 4/5  Restart the whole stack"
-echo "         (bringing up the whole stack avoids the n8n port race that a"
-echo "          single 'up -d web' can trigger; expect a brief blip)"
-$SSH "$SERVER" "cd $REMOTE_DIR && $COMPOSE up -d"
+echo "         (recreating containers can briefly race on n8n's 127.0.0.1:5678"
+echo "          while the old container releases the port — so retry once after"
+echo "          a short pause; expect a brief blip)"
+$SSH "$SERVER" "cd $REMOTE_DIR && ($COMPOSE up -d || { echo '   port still busy, retrying in 5s...'; sleep 5; $COMPOSE up -d; })"
 
 echo "==> 5/5  Verify"
 echo "     --- containers ---"
