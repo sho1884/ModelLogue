@@ -28,6 +28,18 @@ export const stateMachineDefinition: ModelTypeDefinition = {
     return source;
   },
 
+  // "Generate Model" nudge (SR-082): ask for a state diagram in a
+  // ```plantuml block — matches extractSuggestedSource and the n8n
+  // state-machine system prompt.
+  buildGenerateModelPrompt(requirementsText: string): string {
+    return (
+      'Generate a PlantUML state diagram (in the supported subset) that ' +
+      'satisfies the following requirements. Return the source inside a ' +
+      '```plantuml code block.\n\n---\n' +
+      requirementsText
+    );
+  },
+
   // ProposalView uses this to build the colored add/remove/change overlay.
   // Requirement type leaves diff undefined, in which case ProposalView
   // falls back to side-by-side SVGs without an overlay.

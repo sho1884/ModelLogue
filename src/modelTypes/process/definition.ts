@@ -33,6 +33,18 @@ export const processDefinition: ModelTypeDefinition = {
     return source;
   },
 
+  // "Generate Model" nudge (SR-082): ask for an ACTIVITY diagram in a
+  // ```plantuml block. Same block as state-machine, but the diagram
+  // kind must say "activity" so the AI doesn't emit a state diagram.
+  buildGenerateModelPrompt(requirementsText: string): string {
+    return (
+      'Generate a PlantUML activity diagram (in the supported subset) that ' +
+      'satisfies the following requirements. Return the source inside a ' +
+      '```plantuml code block.\n\n---\n' +
+      requirementsText
+    );
+  },
+
   // AI replies carry a ```plantuml block. PlantUML is the canonical
   // form — unlike the requirement type, we do NOT exchange CSV here.
   extractSuggestedSource(aiText: string): string | null {

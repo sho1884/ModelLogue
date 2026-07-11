@@ -97,6 +97,20 @@ export interface ModelTypeDefinition {
   defaultSeedSource?: string;
 
   /**
+   * Build the chat message that the "Generate Model" shortcut sends
+   * (SR-082). Each type nudges the AI toward ITS OWN canonical reply
+   * format — state-machine asks for a state diagram in a ```plantuml
+   * block, process for an activity diagram in a ```plantuml block, and
+   * requirement for an SR-113 ```csv block. Keeping this per-type is
+   * what stops "Generate Model" in a requirement / process session from
+   * asking the AI for a state diagram (the old hard-coded prefix).
+   *
+   * The return value is the FULL user message: the type-specific
+   * instruction followed by the requirements text.
+   */
+  buildGenerateModelPrompt: (requirementsText: string) => string;
+
+  /**
    * Extract and transform an AI chat reply into the canonical PlantUML
    * source for this model type (v7.5). The return value, if any, is
    * stored as ChatMessage.suggestedSource and becomes the new session

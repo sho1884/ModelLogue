@@ -28,7 +28,6 @@ export function MainLayout() {
   const setChatPanelWidth = useUiStore((s) => s.setChatPanelWidth);
   const setPlantUmlStatus = useUiStore((s) => s.setPlantUmlStatus);
   const setN8nStatus = useUiStore((s) => s.setN8nStatus);
-  const aiAvailable = useUiStore((s) => s.aiAvailable);
   const setAiAvailable = useUiStore((s) => s.setAiAvailable);
   const requestTestCases = useTestCasesStore((s) => s.requestGeneration);
   const resetTestCases = useTestCasesStore((s) => s.reset);
@@ -139,26 +138,19 @@ export function MainLayout() {
         <AnalysisPanel />
       </div>
 
-      {/* Right: Chat — SR-136: only for the authenticated operator. An
-          anonymous visitor gets the full review tool without AI, so the
-          chat pane (and its resize handle) is not rendered at all. */}
-      {aiAvailable && (
-        <>
-          <ResizeHandle
-            edge="left"
-            value={chatPanelWidth}
-            onChange={setChatPanelWidth}
-            min={MIN_CHAT_WIDTH}
-            max={Math.max(
-              MIN_CHAT_WIDTH,
-              window.innerWidth * MAX_CHAT_WIDTH_RATIO
-            )}
-          />
-          <div style={{ width: chatPanelWidth }} className="shrink-0">
-            <ChatPanel />
-          </div>
-        </>
-      )}
+      {/* Right: Chat — SR-136 (revised): the pane is ALWAYS rendered so a
+          loaded review's conversation is readable by anyone. Only the
+          composer inside ChatPanel is gated on the authenticated operator. */}
+      <ResizeHandle
+        edge="left"
+        value={chatPanelWidth}
+        onChange={setChatPanelWidth}
+        min={MIN_CHAT_WIDTH}
+        max={Math.max(MIN_CHAT_WIDTH, window.innerWidth * MAX_CHAT_WIDTH_RATIO)}
+      />
+      <div style={{ width: chatPanelWidth }} className="shrink-0">
+        <ChatPanel />
+      </div>
 
       {/* Debug: scripted scenario runner (only when mock AI is active) */}
       {isMockMode() && <ScenarioRunner />}

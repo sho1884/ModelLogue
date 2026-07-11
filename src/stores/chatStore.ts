@@ -13,6 +13,7 @@ import { useSessionStore } from './sessionStore';
 import { useModelStore } from './modelStore';
 import { useMarkerStore } from './markerStore';
 import { useRequirementsStore } from './requirementsStore';
+import { useUiStore } from './uiStore';
 import { buildMarkerContext } from '../services/markerContext';
 import stateMachineGrammar from '../grammars/stateDiagram.ebnf?raw';
 import processGrammar from '../grammars/processDiagram.ebnf?raw';
@@ -267,6 +268,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const trimmed = content.trim();
     if (trimmed === '') return;
     if (get().isSending) return;
+    // SR-136 backstop: never send AI/relay traffic for a non-operator, even if
+    // a caller (composer, Generate Model) reaches here. The identity gate is
+    // insurance; the real boundary is server-side (SR-137).
+    if (!useUiStore.getState().aiAvailable) return;
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),

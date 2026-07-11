@@ -41,6 +41,21 @@ export const requirementDefinition: ModelTypeDefinition = {
     return renderFromSource(source, (model as RequirementModel | null) ?? null);
   },
 
+  // "Generate Model" nudge (SR-082): requirement sessions exchange the
+  // model as CSV, NOT PlantUML — so ask for an SR-113 ```csv block, not
+  // a diagram. The n8n requirement system prompt owns the detailed
+  // column/axis rules; this just points the AI at the right format so
+  // extractSuggestedSource (```csv → parse → regenerate) can consume it.
+  buildGenerateModelPrompt(requirementsText: string): string {
+    return (
+      'Generate a requirement model that satisfies the following ' +
+      'requirements. Return the requirements as CSV inside a ```csv code ' +
+      'block (columns: id, statement, type, text, contained_in, ' +
+      'derives_from, hidden, deleted, note, level, group).\n\n---\n' +
+      requirementsText
+    );
+  },
+
   // v7.5: AI exchanges requirements as CSV (the list is canonical; the
   // diagram is a visualization derived mechanically from the list).
   // Extract the ```csv block, parse into a model, regenerate canonical

@@ -917,12 +917,16 @@ UI: `MarkerToolbar` の右隣に `↶ Undo` / `↷ Redo` を 2 ボタンで配�
 
 ### 14.4 Open saved review（旧 Seed Import）
 
-Header ボタン名を `Seed Import` → `Open saved review…` に変更。`bootstrapFromBundle` を以下のいずれの shape も受理するように拡張:
+Header ボタン名を `Seed Import` → `Open saved review…` に変更。読み込んだファイルの shape に応じて 2 経路に振り分ける:
 
-- **SeedBundle**: `{ requirementsText?, plantUmlSource?, sessionName? }`（外部ワークフロー由来）
-- **ReviewSession**: Save & finish が出力する完全な ReviewSession JSON。importer は `requirementsText` / `plantUmlSource` / `sessionName` だけを抽出し、`messages` / `sourceHistory` / `markers` / `outcome` は破棄（Volatile Canvas を維持）
+- **SeedBundle**: `{ requirementsText?, plantUmlSource?, sessionName? }`（外部ワークフロー由来）。`bootstrapFromBundle` で fresh session を seed する（source のみ）。
+- **ReviewSession**: Save & finish が出力する完全な ReviewSession JSON。SR-083 以降は `restoreFromReview` で丸ごと復元して会話を続けられる — `messages` / `sourceHistory` / `markers` / `currentSource` / `modelTypeId` が戻る（`outcome` は再アクティブ化のため null にリセット、`redoStack` は空から開始）。
 
-判定ロジック: パース後の object に `messages` フィールドがあれば ReviewSession として扱い、抽出 → SeedBundle 化 → 既存パスへ。
+判定ロジック: パース後の object に `messages` 配列があれば ReviewSession として `restoreFromReview`（完全復元）、なければ SeedBundle として seed する。
+
+**起動時 `?file=<url>` ロード（SR-141）**: 同じ振り分けロジックを、URL クエリ `?file` からの起動時読込でも再利用する。App マウント時に `URLSearchParams` を読み、`file` があればその URL を fetch → `JSON.parse` → 上の判定（`messages`→`restoreFromReview`／それ以外→`bootstrapFromBundle`）へ流す。Header の `handleFileChange` と共通のローダに切り出して重複を避ける。認証（SR-136）とは**直交**し、匿名でも読み込める。エラー（ネットワーク／非 JSON／不正形状）は Open saved review と同じ非ブロッキング・バナーで表示し、アプリは空のまま使える。姉妹プロジェクトの `?file=` と同型で、公開サンプル（`public-files/ModelLogue/Samples/`）を指す。https のみ許可、取得内容はデータとして扱い実行しない。
+
+**チャット枠の入力ゲート（SR-136 改訂）**: チャット枠（メッセージ履歴）は常時マウントし、読み込んだレビューの対話を匿名でも読める。`aiAvailable`（認証 identity）が false のときは **composer（入力欄＋Send）と Slack relay ポーリングだけ**を止め、履歴の下に「サインインすると送信できる」旨の一言を出す。MainLayout の従来の `aiAvailable && <ChatPanel>` ゲートは撤去し、ゲートは ChatPanel 内の composer に移す。Header には常時表示の「マニュアル」リンク（SR-142）も追加する。
 
 ### 14.5 DiagramView エンプティステート（SR-070）
 

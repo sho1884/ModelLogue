@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useModelStore } from '../../stores/modelStore';
+import { useUiStore } from '../../stores/uiStore';
 import { stashAutoMarkerBeforeIfApplicable } from '../../stores/autoMarkerApply';
 import {
   getDefaultModelTypeDefinition,
@@ -37,6 +38,9 @@ export function ChatPanel() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const pendingGuardrail = useChatStore((s) => s.pendingGuardrail);
   const hasEstablishedModel = useSessionStore((s) => s.hasEstablishedModel);
+  // SR-136 (revised): the pane always renders (history is readable by anyone);
+  // only the composer + relay traffic are gated on the authenticated operator.
+  const aiAvailable = useUiStore((s) => s.aiAvailable);
 
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -55,6 +59,7 @@ export function ChatPanel() {
   // surface — we never tear down the chat pane on relay failure
   // (NFR-081).
   useEffect(() => {
+    if (!aiAvailable) return; // SR-136: no relay traffic for non-operators
     if (!hasEstablishedModel) return;
     if (!isSlackRelayEnabled()) return;
 
@@ -92,7 +97,7 @@ export function ChatPanel() {
       cancelled = true;
       clearInterval(handle);
     };
-  }, [hasEstablishedModel]);
+  }, [hasEstablishedModel, aiAvailable]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,34 +137,43 @@ export function ChatPanel() {
         )}
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="p-2 border-t border-gray-200 shrink-0"
-      >
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Type a message (Ctrl/Cmd + Enter to send)"
-          rows={2}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-              e.preventDefault();
-              handleSubmit(e as unknown as React.FormEvent);
-            }
-          }}
-          disabled={isSending}
-        />
-        <div className="flex justify-end mt-1">
-          <button
-            type="submit"
-            disabled={isSending || draft.trim() === ''}
-            className="px-3 py-1 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300"
-          >
-            Send
-          </button>
+      {/* SR-136 (revised): the composer is shown only to the authenticated
+          operator. Anonymous visitors can read the conversation but see a
+          sign-in hint in place of the input (Sign-in is in the header). */}
+      {aiAvailable ? (
+        <form
+          onSubmit={handleSubmit}
+          className="p-2 border-t border-gray-200 shrink-0"
+        >
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Type a message (Ctrl/Cmd + Enter to send)"
+            rows={2}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmit(e as unknown as React.FormEvent);
+              }
+            }}
+            disabled={isSending}
+          />
+          <div className="flex justify-end mt-1">
+            <button
+              type="submit"
+              disabled={isSending || draft.trim() === ''}
+              className="px-3 py-1 text-xs font-medium rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300"
+            >
+              Send
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="p-3 border-t border-gray-200 shrink-0 text-xs text-gray-500 text-center">
+          サインインすると AI に相談できます（ヘッダーの「Sign in」）。
         </div>
-      </form>
+      )}
 
       {pendingGuardrail && <PendingGuardrailHandler />}
     </div>

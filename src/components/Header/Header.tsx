@@ -5,8 +5,11 @@ import { useUiStore } from '../../stores/uiStore';
 import { SaveAndFinishDialog } from '../SaveAndFinishDialog';
 import grammarSpec from '../../grammars/stateDiagram.ebnf?raw';
 import { downloadTextFile } from '../../services/download';
-import type { ReviewSession, SeedBundle } from '../../types/session';
+import { importParsedJson } from '../../services/reviewImport';
 import { MODEL_TYPE_REGISTRY } from '../../modelTypes/registry';
+
+// SR-142: the published user manual, opened from the header.
+const MANUAL_URL = 'https://sho1884.github.io/public-files/ModelLogue/';
 
 // SR-081: EBNF grammar is available as a download; no in-app viewer.
 function downloadEbnf() {
@@ -16,45 +19,6 @@ function downloadEbnf() {
     grammarSpec,
     'text/plain'
   );
-}
-
-// SR-083: a bare SeedBundle (source / requirements only) seeds a fresh
-// session. A full ReviewSession (has a `messages` array) is instead fully
-// restored (see restoreFromReview) so the operator can CONTINUE the
-// discussion — conversation, version history, markers and model all come back.
-// This coercion is the seed path, used only for bundles without a conversation.
-function coerceToSeedBundle(parsed: unknown): SeedBundle {
-  if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error('File is not a JSON object');
-  }
-  const obj = parsed as Record<string, unknown>;
-  const seed: SeedBundle = {};
-  if (typeof obj.requirementsText === 'string') {
-    seed.requirementsText = obj.requirementsText;
-  }
-  if (typeof obj.plantUmlSource === 'string') {
-    seed.plantUmlSource = obj.plantUmlSource;
-  }
-  if (typeof obj.sessionName === 'string') {
-    seed.sessionName = obj.sessionName;
-  } else if (typeof obj.name === 'string') {
-    // ReviewSession uses `name` (not `sessionName`)
-    seed.sessionName = obj.name;
-  }
-  // SR-073 (v7.5): preserve the saved session's model type on re-open.
-  // Unknown ids are tolerated by sessionStore.resolveModelTypeId.
-  if (typeof obj.modelTypeId === 'string') {
-    seed.modelTypeId = obj.modelTypeId;
-  }
-  if (
-    seed.requirementsText === undefined &&
-    seed.plantUmlSource === undefined
-  ) {
-    throw new Error(
-      'No requirementsText or plantUmlSource found in the file'
-    );
-  }
-  return seed;
 }
 
 const OUTCOME_LABELS: Record<string, string> = {
@@ -71,11 +35,10 @@ export function Header() {
   const hasEstablishedModel = useSessionStore((s) => s.hasEstablishedModel);
   const setModelTypeId = useSessionStore((s) => s.setModelTypeId);
   const requirementsText = useRequirementsStore((s) => s.requirementsText);
-  const bootstrapFromBundle = useSessionStore((s) => s.bootstrapFromBundle);
-  const restoreFromReview = useSessionStore((s) => s.restoreFromReview);
   const aiAvailable = useUiStore((s) => s.aiAvailable);
+  const importError = useUiStore((s) => s.importError);
+  const setImportError = useUiStore((s) => s.setImportError);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasContent =
@@ -125,15 +88,7 @@ export function Header() {
       const parsed = JSON.parse(text);
       // A full ReviewSession (carries a conversation) is restored whole so the
       // discussion can continue; a bare seed bundle just seeds the source.
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        Array.isArray((parsed as Record<string, unknown>).messages)
-      ) {
-        restoreFromReview(parsed as ReviewSession);
-      } else {
-        bootstrapFromBundle(coerceToSeedBundle(parsed));
-      }
+      importParsedJson(parsed);
     } catch (err) {
       setImportError(
         err instanceof Error ? err.message : 'Failed to open file'
@@ -202,6 +157,16 @@ export function Header() {
               Sign in
             </button>
           )}
+          {/* SR-142: link to the published user manual (always available). */}
+          <a
+            href={MANUAL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+            title="ユーザーマニュアルを新しいタブで開く"
+          >
+            Manual
+          </a>
           <input
             ref={fileInputRef}
             type="file"

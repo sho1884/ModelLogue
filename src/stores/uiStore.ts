@@ -17,10 +17,15 @@ interface UiStore {
   plantUmlStatus: 'connected' | 'disconnected' | 'checking';
   n8nStatus: 'connected' | 'disconnected' | 'checking';
 
-  // SR-136: whether AI (the chat pane + n8n relay) is available for the
+  // SR-136: whether AI (the chat composer + n8n relay) is available for the
   // current user. Driven by authenticated identity, NOT by n8n reachability.
   // Fail-safe default false: anonymous visitors get the AI-free app.
   aiAvailable: boolean;
+
+  // SR-083 / SR-141: last error from loading a review (Open saved review or
+  // the ?file= startup loader). Shared so both entry points render the same
+  // non-blocking banner. null when the last load succeeded or none happened.
+  importError: string | null;
 
   setAnalysisPanelHeight: (height: number) => void;
   toggleAnalysisPanel: () => void;
@@ -29,6 +34,7 @@ interface UiStore {
   setPlantUmlStatus: (status: UiStore['plantUmlStatus']) => void;
   setN8nStatus: (status: UiStore['n8nStatus']) => void;
   setAiAvailable: (available: boolean) => void;
+  setImportError: (message: string | null) => void;
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -40,6 +46,7 @@ export const useUiStore = create<UiStore>((set) => ({
   plantUmlStatus: 'disconnected',
   n8nStatus: 'disconnected',
   aiAvailable: false,
+  importError: null,
 
   setAnalysisPanelHeight: (height) => set({ analysisPanelHeight: height }),
   toggleAnalysisPanel: () =>
@@ -49,4 +56,5 @@ export const useUiStore = create<UiStore>((set) => ({
   setPlantUmlStatus: (status) => set({ plantUmlStatus: status }),
   setN8nStatus: (status) => set({ n8nStatus: status }),
   setAiAvailable: (available) => set({ aiAvailable: available }),
+  setImportError: (message) => set({ importError: message }),
 }));

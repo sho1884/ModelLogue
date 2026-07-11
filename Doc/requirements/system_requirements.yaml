@@ -743,7 +743,7 @@ requirements_text:
     acceptance_criteria:
       - "A Generate Model button is shown on the Requirements tab"
       - "The button is ENABLED only when: requirements text is non-empty AND current PlantUML source is empty"
-      - "Pressing the button sends a chat message through the normal chat pipeline (SR-030), with a fixed prefix such as 'Generate a PlantUML state diagram that satisfies the following requirements:' followed by the requirements text"
+      - "Pressing the button sends a chat message through the normal chat pipeline (SR-030). The prefix is MODEL-TYPE-SPECIFIC (ModelTypeDefinition.buildGenerateModelPrompt, ADR-012), so the nudge matches the type's own reply format: state-machine asks for a state diagram in a ```plantuml block, process for an activity diagram in a ```plantuml block, and requirement for an SR-113 ```csv block — never a state diagram for a non-state-machine session. The requirements text is appended after the prefix"
       - "The message appears in the chat log as a user turn, so that the intent is captured in the dialogue log (Dialogue as Asset)"
       - "The resulting assistant message flows through the normal suggestedSource → Apply path (SR-032, SR-034); there is no hidden side-channel"
       - "Since the initial generation runs while the session source is empty, SR-034's auto-apply kicks in — the user does not have to click Apply to adopt the very first model. Subsequent proposals (after a model already exists) follow the normal click-to-apply flow"
@@ -2032,17 +2032,30 @@ parser_diagnostics:
       - "The Phase B follow-up (per-session channel selection) is captured as a documented future SR rather than left implicit"
 
   SR-136:
-    function: "Hide the chat pane and suppress every n8n / AI relay call unless the current user is the authenticated operator"
+    function: "Keep the chat pane visible to everyone so conversations from opened / loaded reviews stay readable, but gate the chat INPUT (composer) and all n8n / AI-relay traffic on the authenticated operator"
     parent: [UR-018]
-    component: src/components/MainLayout.tsx (ChatPanel mount gate) + src/services/n8nService.ts + src/services/slackRelay.ts + an AI-availability flag derived from auth state
+    component: src/components/MainLayout.tsx (pane always mounted) + src/components/ChatPanel/ChatPanel.tsx (composer + relay-poll gate) + src/services/n8nService.ts + src/services/slackRelay.ts + an AI-availability flag derived from auth state
     status: planned  # v8.0 (public beta)
     notes: |
-      The frontend half of UR-018's AI gate. Today ChatPanel is
-      rendered unconditionally in MainLayout (~line 143) and
-      n8nService / slackRelay call their webhooks whenever
-      configured. SR-136 makes the chat pane and all AI/relay
-      traffic conditional on the user being the authenticated
-      operator.
+      The frontend half of UR-018's AI gate.
+
+      REVISED (2026-07-11): the chat pane is NOT hidden for anonymous
+      visitors. Reading a saved review's conversation (the "dialogue
+      as asset") is a first-class reason to open the app WITHOUT AI —
+      e.g. viewing a published example (SR-141) or an opened review.
+      So the gate moves from the whole pane to the input only:
+        - The pane (message history) ALWAYS renders.
+        - The composer (textarea + Send) renders only for the
+          authenticated operator; a non-operator sees a short
+          "sign in to chat" hint in its place (Sign-in is SR-140).
+        - No n8n chat call and no Slack-relay poll happens for a
+          non-operator, even after a restored review set
+          hasEstablishedModel.
+
+      Orthogonality: this identity gate is INDEPENDENT of the ?file=
+      startup load (SR-141). A review may be loaded (by URL param or
+      Open saved review) for anyone; identity decides only whether the
+      composer + live AI/relay are active, not what is displayed.
 
       Critical framing (see NFR-090):
         - The switch is the AUTHENTICATED IDENTITY, never whether
@@ -2055,16 +2068,17 @@ parser_diagnostics:
           boundary. It is bypassable (a modified client can call
           n8n anyway), so the system's safety must NOT depend on
           it. The real boundary is SR-137 (server-side). SR-136
-          exists for UX (anonymous users see a clean AI-free app)
-          and to avoid doomed calls.
+          exists for UX and to avoid doomed calls.
 
-      Anonymous experience: full review tool minus AI — display,
-      tables, markers, save evidence all work; the chat pane does
-      not appear.
+      Anonymous experience: full review tool INCLUDING reading the
+      conversation of any opened / loaded review; only sending new
+      messages (live AI + relay) requires sign-in.
     acceptance_criteria:
-      - "When the user is not the authenticated operator, the chat pane is not rendered and zero requests are sent to the n8n chat or Slack-relay webhooks"
-      - "When the user is the authenticated operator, the chat pane is shown and the AI relay works normally"
-      - "The visibility switch is driven by authenticated identity, never by whether VITE_N8N_BASE_URL / the n8n endpoint is configured or reachable"
+      - "The chat pane (message history) renders for every visitor, so a conversation restored from an opened or ?file=-loaded review is readable without signing in"
+      - "The chat composer (input + Send) renders only for the authenticated operator; for a non-operator it is replaced by a sign-in hint"
+      - "For a non-operator, zero requests are sent to the n8n chat webhook and the Slack-relay is not polled, even after a review with hasEstablishedModel is loaded"
+      - "When the user is the authenticated operator, the composer is shown and the AI relay works normally"
+      - "The switch is driven by authenticated identity, never by whether the n8n endpoint is configured or reachable"
       - "Removing this gate entirely does not expose the AI to anonymous users, because SR-137 still rejects unauthenticated calls server-side"
 
   SR-137:
@@ -2200,6 +2214,62 @@ parser_diagnostics:
       - "Behind the auth gate, a successful login returns the operator to the app authenticated: the chat pane appears after the redirect without a further manual step"
       - "With no gate in front, /auth/login 302-redirects to / and the user remains unauthenticated (fail-safe); the control does not error"
       - "The SPA hard-codes no gate-specific detail beyond the /auth/login path — the gate provider stays swappable (NFR-091)"
+
+  SR-141:
+    function: "Load a review or seed bundle from a ?file=<url> query parameter at startup, routing it through the same dispatch as Open saved review (SR-083)"
+    parent: [UR-007, UR-009]
+    component: startup effect in src/App.tsx (reads URLSearchParams) + a shared loader extracted from Header.handleFileChange (restoreFromReview / bootstrapFromBundle)
+    status: planned  # v8.0 (public beta)
+    notes: |
+      Parity with the sibling projects (NeoCEG / NeoCombi), which load
+      published sample files via ?file=<url> from GitHub Pages. This
+      lets the manual link "open this example", and lets a deep link
+      restore a shared review.
+
+      Behaviour:
+        - On startup, read ?file from the URL. Absent -> start empty
+          (unchanged).
+        - Present -> fetch the URL, JSON-parse, and dispatch BY SHAPE
+          exactly like SR-083: a `messages` array -> restoreFromReview
+          (continue the discussion); otherwise -> bootstrapFromBundle
+          (seed). The Open-saved-review loader is reused, not
+          duplicated.
+        - Independent of auth (SR-136): a file loads for anyone; it
+          decides only what is shown, not whether AI is enabled.
+        - Errors (network / non-JSON / unusable shape) surface as the
+          same non-blocking banner as Open saved review; the app stays
+          usable (empty).
+
+      Samples are published under public-files/ModelLogue/Samples/ and
+      served from GitHub Pages; the manual links to them (SR-142 area).
+
+      Security: the fetched JSON is untrusted DATA, rendered through the
+      same safe paths as an opened file (message text is React-escaped;
+      PlantUML source goes to the PlantUML server; markers are geometry).
+      Only https URLs are honoured; no code from the file is executed.
+    acceptance_criteria:
+      - "?file=<url> at startup fetches the URL and loads it via the same dispatch as Open saved review (messages -> restore, else -> seed)"
+      - "With no ?file, the app starts empty as before"
+      - "Loading works regardless of authenticated identity (orthogonal to SR-136)"
+      - "A fetch / parse / shape error shows the non-blocking import-error banner and leaves the app usable"
+      - "Only https URLs are fetched; the file content is treated as data (never executed)"
+
+  SR-142:
+    function: "Provide an in-app link to the published user manual"
+    parent: [UR-009]
+    component: a 'Manual' link in the app header (src/components/Header/Header.tsx) opening the published MkDocs site in a new tab
+    status: planned  # v8.0 (public beta)
+    notes: |
+      There is currently no way to reach the user manual from the tool.
+      Add a header link that opens the published manual
+      (https://sho1884.github.io/public-files/ModelLogue/) in a new tab
+      (target=_blank, rel=noopener). The manual is maintained under
+      Doc/manual/ and published via the publish-manual flow; the app
+      only links to it. Always available (not gated on AI / auth).
+    acceptance_criteria:
+      - "The header shows a 'Manual' (マニュアル) link"
+      - "Activating it opens the published manual site in a new browser tab (target=_blank, rel=noopener)"
+      - "The link is always available, independent of AI availability or auth"
 
 # =============================================================================
 # Data Model
