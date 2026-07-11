@@ -583,15 +583,20 @@ All successful responses are JSON with `Content-Type: application/json; charset=
 
 ```json
 {
-  "source": "@startuml\n[*] --> A\n...\n@enduml",
+  "source": "@startuml\n[*] --> A\nA --> B : go\nB --> [*] : done\n@enduml",
   "format": "puml",
   "n": 1,
   "invalid": false,
+  "name": "order",
   "layered": true,
   "max_cycle_unroll": 3,
   "require_final": false
 }
 ```
+
+The `name` above is why the §9.2.3 response ids read `order-1S-001` / `order-SC-001`
+(`<name>-<type>-<NNN>`). Callers that just want to try it can omit every optional
+field and send only `source` — see the demo `curl` in §9.2.7.
 
 Fields:
 
