@@ -1,6 +1,12 @@
 # 限定公開ベータ デプロイ手順 / Limited Public Beta Deployment Guide
 
-**対象**: ModelLogue を Hetzner の VPS ＋ Cloudflare で「限定公開ベータ」として立ち上げる管理者（＝operator）
+> **⚠ 最初に [deploy/ENVIRONMENT.md](../../deploy/ENVIRONMENT.md) を読んでください。**
+> このガイドは「ゼロから立ち上げる手順」で、実際に動いている箱とは一部違います。
+> 食い違ったら ENVIRONMENT.md が正。今の相違点：実サーバは **XServer VPS**（Hetzner ではない）、
+> コード更新は **`./deploy/deploy.sh`**（`git pull` は効かない＝サーバは git チェックアウトではない）、
+> AI は **OpenAI gpt-5.5**（Gemini ではない）、起動は compose ファイル **3 つ**・プロジェクト名 `modellogue`。
+
+**対象**: ModelLogue を VPS ＋ Cloudflare で「限定公開ベータ」として立ち上げる管理者（＝operator）
 **バージョン**: 1.0（v8.0 planned）
 **関連**: UR-018 / SR-136〜139 / NFR-090・NFR-091、[Requirements_Specification.md §3.18](../requirements/Requirements_Specification.md)
 
@@ -35,7 +41,7 @@
 - **Hetzner Cloud** の VPS 1 台（目安 CX22 相当：2 vCPU / 4GB。US ロケーションを選ぶと日本からの体感が良い）
 - **ドメイン 1 つ**を **Cloudflare** に登録済み（例では `beta.example.com` を使う）
 - **Cloudflare Zero Trust**（無料枠で可）
-- **Gemini API キー**（後で n8n の Credential に入れる。**課金上限を先に設定**しておくこと）
+- **AI プロバイダの API キー**（実サーバは **OpenAI `gpt-5.5`**。後で n8n の Credential に入れる。**課金上限を先に設定**しておくこと）
 - 手元に `git` / SSH クライアント
 
 ---
@@ -145,7 +151,7 @@ ssh -L 5678:localhost:5678 root@<vps-ip>
 やること：
 
 1. **ワークフロー取込**: [n8n/workflows/](../../n8n/workflows/) の JSON を import（chat リレー、Slack リレー read/write）。
-2. **Gemini Credential 登録**: n8n の Credentials に API キーを入れる（コード・env には置かない）。**Gemini 側で課金上限（budget cap）を必ず設定**。
+2. **AI プロバイダの Credential 登録**: n8n の Credentials に API キーを入れる（コード・env には置かない）。実サーバは **OpenAI（`gpt-5.5`）** を使用。**プロバイダ側で課金上限（budget cap）を必ず設定**。
 3. **Slack を使うなら**: `SLACK_RELAY_CHANNEL_ID` を n8n に渡す（[slack-setup.md](slack-setup.md) 参照）。使わないなら未設定でよい（中継は無効のまま）。
 
 ---
@@ -164,8 +170,12 @@ ssh -L 5678:localhost:5678 root@<vps-ip>
 
 ## 8. 運用メモ
 
-- **更新**: `git pull && docker compose -p modellogue-prod -f docker-compose.prod.yml up -d --build`
-- **停止**: `docker compose -p modellogue-prod -f docker-compose.prod.yml down`（n8n データは named volume `n8n_data` に残る）
+- **更新（通常はこれだけ）**: 手元のリポジトリのルートで **`./deploy/deploy.sh`**。
+  ソース同期 → web 再ビルド → スタック再起動 → 動作確認まで自動。詳細は [deploy/ENVIRONMENT.md](../../deploy/ENVIRONMENT.md)。
+  ※ このサーバは git チェックアウトではないので `git pull` は使えません。
+- **手作業で操作する場合の compose**（実サーバは 3 ファイル・プロジェクト名 `modellogue`）:
+  `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.override.yml <...>`
+- **停止**: 上記 compose に `down`（n8n データは named volume `n8n_data` に残る）
 - **バックアップ**: `n8n_data` volume（Credentials・ワークフロー・Slack バッファ）を控える
 - **プロバイダ差し替え（NFR-091）**: 認証を別のもの（自前 forward-auth / OIDC / 社内 SSO）に変える場合も、`/auth/whoami` が同じ contract（identity ヘッダ→`authenticated:true/false`）を返すよう手前の部品を差し替えるだけ。n8n・SPA は不変。
 

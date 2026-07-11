@@ -1,5 +1,13 @@
 # ModelLogue Deploy Runbook — limited public beta
 
+> **⚠ Read [deploy/ENVIRONMENT.md](../deploy/ENVIRONMENT.md) first.** That file
+> describes the box that is *actually running*; this runbook is the *from-scratch
+> setup*. Where the two differ, ENVIRONMENT.md wins. Known differences today:
+> the live box is an **XServer VPS** (not Hetzner), the code is updated with
+> **`./deploy/deploy.sh`** (not `git pull` — the server is not a git checkout),
+> the AI provider is **OpenAI gpt-5.5** (not Gemini), and the stack is brought
+> up with **three** compose files under project name `modellogue`.
+
 Goal: the review tool is **public** (anyone can use it without AI); only **you**
 (the authenticated operator) get the AI chat. No inbound ports are opened; TLS
 and identity are handled by Cloudflare in front of a small box.
@@ -81,6 +89,12 @@ CF_ACCESS_AUD=<aud-tag>          # from step 4.4
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+> **On the live box** the stack is brought up with three files and a
+> server-only override (see ENVIRONMENT.md):
+> `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.override.yml up -d`.
+> After the first setup, you never type this by hand — routine updates are just
+> `./deploy/deploy.sh` from the repo.
+
 Confirm the gate is enforcing (not insecure/deny):
 ```bash
 docker compose -f docker-compose.prod.yml exec auth-verify \
@@ -88,7 +102,11 @@ docker compose -f docker-compose.prod.yml exec auth-verify \
 # → { status: 'ok', mode: 'enforce', issuer: 'https://<team>.cloudflareaccess.com' }
 ```
 
-## 6. Configure n8n (the AI relay + Gemini key)
+## 6. Configure n8n (the AI relay + the AI provider key)
+
+> **On the live box the AI provider is OpenAI (`gpt-5.5`), not Gemini.** The
+> steps below are identical either way — add whichever provider's credential in
+> n8n and point the workflow at it. The key lives only in n8n, never in the repo.
 
 The n8n editor is **not** web-exposed. Reach it over SSH:
 ```bash
