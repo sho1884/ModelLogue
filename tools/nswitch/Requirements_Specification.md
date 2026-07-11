@@ -612,37 +612,52 @@ Fields:
 {
   "tests": [
     {
-      "test_id": "top-001",
-      "layer": "top",
-      "length": 3,
-      "start": "[*]_init",
-      "sequence": "()|start|done",
-      "end": "[*]_final",
-      "covers": "[*]_init--()-->A;A--start-->B;B--done-->[*]_final"
-    }
-  ],
-  "coverage": [
+      "id": "order-1S-001",
+      "type": "1S",
+      "scope": "order",
+      "start": "A",
+      "steps": [
+        { "event": "go", "reached": "B" },
+        { "event": "done", "reached": "(*)" }
+      ],
+      "event": "",
+      "expect": "",
+      "scenarios": ["order-SC-001"]
+    },
     {
-      "kind": "chain",
-      "layer": "top",
-      "element": "A --start--> B --done--> [*]_final",
-      "hits": { "top-001": "#" },
-      "status": "",
-      "reason": ""
+      "id": "order-INV-001",
+      "type": "INV",
+      "scope": "order",
+      "start": "B",
+      "steps": [],
+      "event": "go",
+      "expect": "no-transition",
+      "scenarios": []
     }
   ],
-  "uncovered": [
+  "scenarios": [
     {
-      "layer": "top",
-      "chain": [{ "source": "...", "target": "...", "event": "...", "guard": null, "action": null }],
-      "reason": "no final-reaching or cycle-closing suffix within cap"
+      "id": "order-SC-001",
+      "scope": "order",
+      "start": "A",
+      "steps": [
+        { "event": "go", "reached": "B" },
+        { "event": "done", "reached": "(*)" }
+      ],
+      "covers": ["order-1S-001"]
     }
   ],
-  "layers": ["top"]
+  "uncovered": [],
+  "scopes": ["order"]
 }
 ```
 
-The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is a JSON transport on top of the Python API, so behavior is identical. Each `tests[]` entry carries `kind` (`positive` / `negative`) plus the `inject` / `expect` fields for negative tests (§6.1); when `invalid: true`, `coverage[]` additionally contains `invalid-transition` rows (§6.2).
+The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is a JSON transport on top of the Python API (§1.1, Tests / Scenarios), so behaviour is identical.
+
+- **`tests[]`** — one verification pattern each. A **positive** N-switch Test (`type` = `0S` / `1S` / `2S`) carries the covered chain as `steps[]` (`{event, reached}`, where `reached` is `(*)` for the final state) plus the `scenarios[]` that exercise it; its `event` / `expect` stay empty. A **negative** Test (`type` = `INV`, emitted only when `invalid: true`) has empty `steps` and instead names the forbidden `event` injected at `start` with `expect: "no-transition"` (§7.2). Ids are `<scope>-<type>-<NNN>`.
+- **`scenarios[]`** — executable walks, each covering one or more positive Tests via `covers[]`. Ids are `<scope>-SC-<NNN>`. (Negative `INV` Tests have no scenarios.)
+- **`uncovered[]`** — chains that can neither reach a final state nor close a cycle within `max_cycle_unroll` (§7.3). Each entry is `{ "scope", "chain": [{ "source", "target", "event", "guard", "action" }], "reason" }`. This is a warning surfaced in the payload, **not** an error — the HTTP status stays `200` (§9.2.4). Empty when everything is covered.
+- **`scopes[]`** — the scope names present: the outermost machine plus any nested composites (§1.1).
 
 #### 9.2.4 POST /generate — error responses
 

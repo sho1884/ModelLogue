@@ -254,6 +254,28 @@ Requirements・Source の共通タブに続いて、この型では次のタブ�
 
 > テストケースは、モデルが最低 1 つの状態を持ち、ソースにパースエラーがないときに生成されます。
 
+#### 開発者向け：API として呼び出す（デモ環境）
+
+同じ N-switch 生成器を、デモ環境が **認証なしの HTTP API**（ベース URL
+`https://modellogue.com/nswitch`）として公開しています。インストール不要で、
+`curl` から直接テストを生成できます。
+
+```bash
+# 疎通確認
+curl https://modellogue.com/nswitch/health
+# → {"status": "ok", "version": "0.1.0"}
+
+# PlantUML の状態遷移から 1-switch テストを生成
+curl -X POST https://modellogue.com/nswitch/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"source":"@startuml\n[*] --> A\nA --> B : go\nB --> [*] : done\n@enduml","n":1}'
+```
+
+主なパラメータ：`source`（PlantUML ソース、必須）、`n`（`0`/`1`/`2` の N-switch 水準）、
+`"invalid": true`（不正遷移テストを追加）、`"format": "csv"`（PlantUML の代わりに正準遷移表
+CSV を投入）。レスポンスは JSON（`tests` / `scenarios` / `uncovered` / `scopes`）で返ります。
+デモ環境はベストエフォートのため、本番 CI に組み込む場合はローカルでの自前ホストを推奨します。
+
 ---
 
 ## この型のレビューの進め方（目安）
