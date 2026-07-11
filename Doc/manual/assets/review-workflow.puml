@@ -1,0 +1,35 @@
+@startuml
+' ModelLogue のレビュー作業フロー
+' 状態遷移図サブセット（ADR-009）に準拠
+
+state "モデル型を選択" as SelectType
+state "AIに生成を依頼" as AIGenerate
+state "自分でPlantUMLを記述" as HumanWrite
+state "モデルの確認・マーカー付け" as Inspecting
+state "AIへ質問・指示" as Asking
+state "AIの回答・修正提案" as Answering
+state "モデルへ反映(Apply)・直接修正" as Editing
+state "合意 (Agreed)" as Agreed
+state "保留 (Postponed)" as Postponed
+state "仕様側の課題 (Spec issue)" as SpecIssue
+
+[*] --> SelectType : 新規レビュー
+SelectType --> AIGenerate : 要求を書いて Generate Model
+SelectType --> HumanWrite : Source に PlantUML を貼る
+AIGenerate --> Inspecting : 初期モデル完成
+HumanWrite --> Inspecting : 初期モデル完成
+
+Inspecting --> Asking : 気になる点がある
+Asking --> Answering
+Answering --> Editing : 提案を受け入れる
+Editing --> Inspecting
+Inspecting --> Editing : ソースを直接編集
+
+Inspecting --> Agreed : 指摘がすべて解消
+Inspecting --> Postponed : 未解決の論点が残る
+Inspecting --> SpecIssue : 上流の要求に問題
+
+Agreed --> [*] : Save & finish
+Postponed --> [*] : Save & finish
+SpecIssue --> [*] : Save & finish
+@enduml
