@@ -60,6 +60,14 @@ Examples: `untitled-1S-001`, `untitled-INV-001`, `untitled-SC-001`, `Operating-1
 
 ## 2. Installation / インストール
 
+> **Just want to try it? No install needed.** A public, no-auth demo API is live
+> on the ModelLogue demo environment — a single `curl` generates N-switch tests
+> without cloning or installing anything. See §9.2.7.
+>
+> **すぐ試すだけなら、インストール不要です。** ModelLogue のデモ環境に認証なしの
+> 公開 API が動いています。`curl` 一発で、クローンもインストールもせず N-switch
+> テストを生成できます（§9.2.7 参照）。
+
 ### Prerequisites / 前提条件
 
 - Python 3.10 or later
@@ -660,6 +668,73 @@ When the server runs inside docker-compose alongside the SPA's dev server, set `
 #### 9.2.6 Determinism & caching
 
 Identical request bodies yield byte-identical responses (ADR-011). Clients MAY cache responses keyed by a hash of the request JSON; the server does not implement HTTP caching headers because the generation is cheap for review-scale models (sub-10ms typical) and cache invalidation would need to track code version plus input anyway.
+
+#### 9.2.7 Try it on the demo environment / デモ環境で試す
+
+A public, **no-auth** instance of this API runs on the ModelLogue demo
+environment, so anyone can try N-switch generation **without installing
+anything**. It is the same code as the CLI (`serve` mode), reached through the
+app's same-origin `/nswitch` prefix.
+
+- **Base URL:** `https://modellogue.com/nswitch`
+- No API key / no sign-in — test generation holds no secrets.
+- Best-effort demo / staging: expect occasional brief restarts; don't depend on
+  it for production CI (install locally per §2 for that).
+
+**Liveness check:**
+
+```bash
+curl https://modellogue.com/nswitch/health
+# → {"status": "ok", "version": "0.1.0"}
+```
+
+**Generate 1-switch tests from a PlantUML state machine:**
+
+```bash
+curl -X POST https://modellogue.com/nswitch/generate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source": "@startuml\n[*] --> A\nA --> B : go\nB --> [*] : done\n@enduml",
+    "n": 1,
+    "name": "smoke"
+  }'
+```
+
+Response (the current **Tests + Scenarios** shape, §1.1; trimmed):
+
+```json
+{
+  "tests": [
+    { "id": "smoke-1S-001", "type": "1S", "scope": "smoke", "start": "A",
+      "steps": [ {"event": "go", "reached": "B"}, {"event": "done", "reached": "(*)"} ],
+      "scenarios": ["smoke-SC-001"] }
+  ],
+  "scenarios": [
+    { "id": "smoke-SC-001", "scope": "smoke", "start": "A",
+      "steps": [ {"event": "go", "reached": "B"}, {"event": "done", "reached": "(*)"} ],
+      "covers": ["smoke-1S-001"] }
+  ],
+  "uncovered": [],
+  "scopes": ["smoke"]
+}
+```
+
+Tune with the same fields as §9.2.2 — for example `"n": 2` for 2-switch coverage,
+`"invalid": true` to add negative (invalid-transition) tests, or `"format": "csv"`
+to feed a canonical transition table (§4.2) instead of PlantUML.
+
+**日本語：** この API は ModelLogue の**デモ環境で認証なしの公開インスタンス**として
+動いており、誰でも**インストールせずに** N-switch 生成を試せます。CLI と同じコード
+（`serve` モード）で、アプリと同一オリジンの `/nswitch` 経由で到達します。
+
+- **ベース URL：** `https://modellogue.com/nswitch`
+- API キー不要・サインイン不要（テスト生成に秘密情報は無いため）。
+- デモ／ステージングにつきベストエフォート（時々の短い再起動あり）。本番 CI の依存先には
+  せず、その用途は §2 のローカルインストールを使ってください。
+
+疎通確認と生成は上の `curl` のとおり。パラメータは §9.2.2 と同じで、`"n": 2`（2-switch）、
+`"invalid": true`（無効遷移の否定テストを追加）、`"format": "csv"`（PlantUML の代わりに
+正準遷移表 CSV を投入）などを指定できます。
 
 ---
 
