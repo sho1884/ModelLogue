@@ -31,6 +31,16 @@
 		reverse_proxy pict-service:8765
 	}
 
+	# Sister-project demo API, co-located on this shared box (path-based).
+	# NeoCEG's cause-effect-graph API (serve mode, CLI spec §7): public, no gate
+	# — it holds no secrets and applies its own body-size / rate-limit
+	# guardrails in-process. Defined in docker-compose.override.yml
+	# (server-only), built from /opt/neoceg. handle_path strips /neoceg, so
+	# /neoceg/health -> /health.
+	handle_path /neoceg/* {
+		reverse_proxy neoceg-api:8091
+	}
+
 	# SR-136/137: identity probe for the front-end AI gate. Reports the
 	# operator's authenticated identity as seen by the edge auth gate
 	# (Cloudflare Access sets Cf-Access-Authenticated-User-Email once it has
