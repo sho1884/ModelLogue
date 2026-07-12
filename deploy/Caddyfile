@@ -51,7 +51,7 @@
 	# Once past the gate we bounce back to the app, which re-probes
 	# /auth/whoami and shows the chat pane. With no gate in front this simply
 	# returns to / and the user stays unauthenticated (fail-safe).
-	redir /auth/login / 302
+	redir /auth/login /app 302
 
 	# n8n: ONLY the relay webhooks and the liveness probe are exposed. The
 	# n8n editor / admin UI (which holds the Gemini credential) is
@@ -79,7 +79,17 @@
 		reverse_proxy n8n:5678
 	}
 
-	# SPA (everything else) with History-API fallback.
+	# The app (SPA) lives under /app. It is built with base /app/, so its assets
+	# are /app/assets/… served from /srv/app. History-API fallback to the SPA
+	# shell (/srv/app/index.html) for client-side routes under /app.
+	handle /app* {
+		root * /srv
+		try_files {path} /app/index.html
+		file_server
+	}
+
+	# Static landing page at the site root (everything else). /srv/index.html is
+	# the landing; the SPA's own shell is /srv/app/index.html above.
 	handle {
 		root * /srv
 		try_files {path} /index.html

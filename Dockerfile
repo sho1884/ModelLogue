@@ -13,8 +13,11 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# --- Serve the SPA + reverse-proxy the API prefixes ---
+# --- Serve the static landing (/) + the SPA (/app) + reverse-proxy the APIs ---
 FROM caddy:2-alpine
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
-COPY --from=build /app/dist /srv
+# The SPA is built with base /app/, so it lives under /srv/app.
+COPY --from=build /app/dist /srv/app
+# Simple static landing page at the site root (real content added later).
+COPY deploy/landing/index.html /srv/index.html
 EXPOSE 80

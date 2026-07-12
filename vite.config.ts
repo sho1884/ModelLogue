@@ -36,6 +36,10 @@ const backendProxy = {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // The SPA is served under /app; a static landing page lives at the site root
+  // (see deploy/Caddyfile + deploy/landing). base makes all built asset URLs,
+  // the manifest, and the service worker resolve under /app/.
+  base: '/app/',
   plugins: [
     react(),
     tailwindcss(),
@@ -55,8 +59,8 @@ export default defineConfig({
         theme_color: '#22ce86',
         background_color: '#ffffff',
         display: 'standalone',
-        start_url: '/',
-        scope: '/',
+        start_url: '/app/',
+        scope: '/app/',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
