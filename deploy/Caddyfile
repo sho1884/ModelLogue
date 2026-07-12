@@ -88,6 +88,15 @@
 		file_server
 	}
 
+	# The app's own service worker must never be edge/browser-cached, or an
+	# autoUpdate after a deploy can be blocked by a stale copy (same failure mode
+	# as the legacy root worker above). Serve it revalidated.
+	handle /app/sw.js {
+		root * /srv
+		header Cache-Control "no-cache, no-store, must-revalidate"
+		file_server
+	}
+
 	# The app (SPA) lives under /app. It is built with base /app/, so its assets
 	# are /app/assets/… served from /srv/app. History-API fallback to the SPA
 	# shell (/srv/app/index.html) for client-side routes under /app.
