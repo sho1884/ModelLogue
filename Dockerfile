@@ -20,4 +20,6 @@ COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv/app
 # Simple static landing page at the site root (real content added later).
 COPY deploy/landing/index.html /srv/index.html
+# Self-destroying worker at /sw.js that retires the app's old root-scoped SW.
+COPY deploy/landing/sw.js /srv/sw.js
 EXPOSE 80
