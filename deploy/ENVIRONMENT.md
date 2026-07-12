@@ -46,7 +46,7 @@ ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
 | コンテナ | 役割 | 公開ポート |
 |---|---|---|
 | `modellogue-web-1` | Caddy。SPA を配信し、`/plantuml` `/nswitch` `/pict` `/n8n` `/auth` を各コンテナへ中継 | `127.0.0.1:8088`（外部非公開） |
-| `modellogue-n8n-1` | AI 中継。**OpenAI の API キーを保持**。エディタは非公開 | `127.0.0.1:5678`（外部非公開） |
+| `modellogue-n8n-1` | AI 中継。**OpenAI の API キーを保持**。エディタは非公開 | なし（ホスト非公開・内部のみ） |
 | `modellogue-auth-verify-1` | Cloudflare Access の署名を検証（origin 側の二重ゲート、fail-closed） | なし |
 | `modellogue-cloudflared-1` | Cloudflare Tunnel。外からはこれ経由でしか届かない | なし（外向き接続のみ） |
 | `modellogue-plantuml-1` | PlantUML サーバ（SVG 生成）。秘密なし | なし |
@@ -72,11 +72,15 @@ ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
 
 - **OpenAI の `gpt-5.5`** を使っています。※ 手順書に出てくる **Gemini ではありません**（無料枠が実質使えず乗り換えました）。
 - キーは **n8n の Credential** の中だけにあります（リポジトリにも `.env` にもソースにも置かない）。
-- ワークフロー名は `modellogue-chat`。n8n エディタは Web に晒していないので、触るときは SSH ポートフォワード：
+- ワークフロー名は `modellogue-chat`。n8n エディタは Web に晒しておらず、**ホストポートも公開していません**（毎デプロイで起きていた 5678 のポート競合を根絶し、露出も無くすため。アプリは Docker ネットワーク内で n8n を叩くのでホスト公開は不要）。override.yml で `n8n.ports: !override []` により無効化。エディタを触るときは n8n コンテナの IP へ直接 SSH フォワード：
   ```bash
-  ssh -i ~/.ssh/id_ed25519_modellogue -L 5678:localhost:5678 root@162.43.92.10
-  # → 手元のブラウザで http://localhost:5678
+  # 1) n8n コンテナの IP を取得
+  ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10 \
+    "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' modellogue-n8n-1"
+  # 2) その IP へフォワード（<ip> を置換）→ 手元のブラウザで http://localhost:5678
+  ssh -i ~/.ssh/id_ed25519_modellogue -L 5678:<ip>:5678 root@162.43.92.10
   ```
+  > **DNS の教訓**：n8n が外部（OpenAI 等）を解決できず `EAI_AGAIN` を出すときは、コンテナの `/etc/resolv.conf` が `127.0.0.53`（ホストの stub）になっている疑い。他コンテナと同じ `127.0.0.11`（Docker 埋め込み DNS）になるよう **n8n を作り直す**と直る（`… up -d --force-recreate n8n`）。
 
 ---
 
