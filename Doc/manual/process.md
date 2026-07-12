@@ -1,41 +1,49 @@
-# プロセス図（Process：業務フロー）
+# Process diagram (business flow) / プロセス図（Process：業務フロー）
 
-← [マニュアルのトップに戻る](index.md)
+← [Back to the manual top](index.md) / [マニュアルのトップに戻る](index.md)
+
+A model type for reviewing business flows and procedures. It does not distinguish BPMN from activity diagrams; it handles a **subset of PlantUML activity** narrowed to the part the two have in common. From the flow of processing, you can extract and survey **scenarios (the basis for E2E / UAT tests)** and the **roles, artifacts, events, and externals** that appear.
 
 業務フロー・手続きをレビューするためのモデル型です。BPMN とアクティビティ図を区別せず、
 両者の共通部分に絞った **PlantUML activity のサブセット** を扱います。
 処理の流れから **シナリオ（E2E / UAT テストの土台）** や、登場する **ロール・成果物・イベント・外部**
 を抽出して俯瞰できます。
 
+This page assumes the common operations (screen layout, chat, markers, saving, etc.). If you have not read them yet, read the [top page](index.md) first.
+
 このページは共通操作（画面構成・チャット・マーカー・保存など）を前提にしています。
 まだの場合は先に [トップページ](index.md) を読んでください。
 
 ---
 
-## この型でできること
+## What you can do with this type / この型でできること
 
-- 処理の流れ（開始 → 各アクション → 分岐 → 終了）を描く
-- 誰が（ロール／レーン）何を受け渡す（成果物）フローかを俯瞰する
-- 流れをたどった **シナリオ** を洗い出し、E2E / UAT テストの土台にする
+- Draw the flow of processing (start → each action → branch → end) / 処理の流れ（開始 → 各アクション → 分岐 → 終了）を描く
+- Survey who (role / lane) hands off what (artifact) in the flow / 誰が（ロール／レーン）何を受け渡す（成果物）フローかを俯瞰する
+- Enumerate the **scenarios** that trace the flow, and use them as the basis for E2E / UAT tests / 流れをたどった **シナリオ** を洗い出し、E2E / UAT テストの土台にする
 
 ---
 
-## ソースの書き方（対応サブセット）
+## How to write the source (supported subset) / ソースの書き方（対応サブセット）
+
+In the Source tab, write in the PlantUML activity (activity diagram) subset. A new session starts from a template containing only `start`. The main syntax you will use is as follows.
 
 Source タブに、PlantUML の activity（アクティビティ図）サブセットで記述します。
 新しいセッションは `start` だけを含む雛形から始まります。主に使う構文は次のとおりです。
 
-- `start` … 開始、`stop` … 終了
-- `:アクション;` … 1 つの処理（アクション）
-- `if (条件?) then (yes) ... else (no) ... endif` … 分岐
-- `|ロール名|` … スイムレーン（そのアクションの担当）
-- `-> 成果物;` … 次に受け渡される成果物（データ・ドキュメント）
-- `title ...` … 図のタイトル
+- `start` … start, `stop` … end / `start` … 開始、`stop` … 終了
+- `:アクション;` … one process (an action) / `:アクション;` … 1 つの処理（アクション）
+- `if (条件?) then (yes) ... else (no) ... endif` … branch / `if (条件?) then (yes) ... else (no) ... endif` … 分岐
+- `|ロール名|` … swimlane (who is responsible for that action) / `|ロール名|` … スイムレーン（そのアクションの担当）
+- `-> 成果物;` … the artifact handed off next (data / document) / `-> 成果物;` … 次に受け渡される成果物（データ・ドキュメント）
+- `title ...` … the diagram title / `title ...` … 図のタイトル
+
+Not supported: nested fork, nested partition, `while` / `repeat` loops, `elseif`, `detach` / `kill`, legacy syntax, and so on (limited to the common part needed for review).
 
 対応しないもの：入れ子の fork、ネストした partition、`while` / `repeat` ループ、`elseif`、
 `detach` / `kill`、旧記法など（レビュー目的の共通部分に限定しています）。
 
-### 例（単純な分岐）
+### Example (a simple branch) / 例（単純な分岐）
 
 ```plantuml
 @startuml
@@ -54,7 +62,7 @@ endif
 @enduml
 ```
 
-### 例（レーンをまたぐ受け渡し）
+### Example (handoff across lanes) / 例（レーンをまたぐ受け渡し）
 
 ```plantuml
 @startuml
@@ -77,13 +85,19 @@ stop
 @enduml
 ```
 
+The exact syntax is given in full in the **"Grammar definition (EBNF)"** below.
+
 正確な構文は、下記の **「文法定義（EBNF）」** に全文を載せています。
 
 ---
 
-## 文法定義（EBNF）
+## Grammar definition (EBNF) / 文法定義（EBNF）
+
+This is the **formal definition** of the syntax ModelLogue accepts for this model type. Any syntax not listed here is rejected as a line-numbered syntax error. The full text is reproduced below as-is, so you can copy and use it.
 
 このモデル型で ModelLogue が受け付ける構文の**正式な定義**です。ここに載っていない構文は、行番号付きの構文エラーとして拒否されます。全文は下記にそのまま掲載しているので、コピーして使えます。
+
+**How to use it**: Paste this definition block straight to the AI and tell it "generate PlantUML following this grammar," and you are more likely to get output that stays within the subset. ModelLogue itself uses the same definition when instructing the AI.
 
 **使い方**: この定義ブロックをそのまま AI に貼り付け、「この文法に従って PlantUML を生成して」と伝えると、サブセットから外れない出力を得やすくなります。ModelLogue 自身も、同じ定義を AI への指示に使っています。
 
@@ -533,57 +547,70 @@ any_char_except_quote        = ?any Unicode scalar except "\"" or newline? ;
 
 ```
 
-## AI との対話
+## Dialogue with the AI / AI との対話
 
-- プロセス図では、AI との受け渡しは **PlantUML**（状態遷移図と同じ方式。要求図のような CSV ではありません）。
-- 要求から生成するときは Requirements タブに要求文を書いて **Generate Model**。
+- In process diagrams, the exchange with the AI is in **PlantUML** (the same method as state machines; not CSV like requirement diagrams). / プロセス図では、AI との受け渡しは **PlantUML**（状態遷移図と同じ方式。要求図のような CSV ではありません）。
+- To generate from requirements, write the requirement text in the Requirements tab and press **Generate Model**.
+  The AI returns activity-diagram source within the subset in a ```` ```plantuml ```` block. / 要求から生成するときは Requirements タブに要求文を書いて **Generate Model**。
   AI はサブセット内のアクティビティ図ソースを ```` ```plantuml ```` ブロックで返します。
-- レビュー中は「在庫切れの分岐を追加して」等と指示すると、AI が修正後のソースを提案します。
+- During review, if you instruct it with something like "add an out-of-stock branch," the AI proposes revised source. / レビュー中は「在庫切れの分岐を追加して」等と指示すると、AI が修正後のソースを提案します。
 
-### 提案の反映（自動）と自動マーカー
+### Applying proposals (automatic) and automatic markers / 提案の反映（自動）と自動マーカー
 
-- プロセス図の提案は **自動で反映** されます（状態遷移図のような Apply ボタン付きの提案ビューは出ません）。
-- 変更箇所は図の上に **自動マーカー** で示されます。**追加＝緑の実線**、**変更＝橙の破線**。
-- 反映は図ツールバーの **↶ Undo / ↷ Redo** で戻せます。
+- Process-diagram proposals are **applied automatically** (there is no proposal view with an Apply button like state machines have). / プロセス図の提案は **自動で反映** されます（状態遷移図のような Apply ボタン付きの提案ビューは出ません）。
+- Changed parts are shown on the diagram with **automatic markers**: **added = solid green**, **changed = dashed orange**. / 変更箇所は図の上に **自動マーカー** で示されます。**追加＝緑の実線**、**変更＝橙の破線**。
+- An apply can be reverted with **↶ Undo / ↷ Redo** on the diagram toolbar. / 反映は図ツールバーの **↶ Undo / ↷ Redo** で戻せます。
 
 ---
 
-## 分析タブ
+## Analysis tabs / 分析タブ
+
+After the shared Requirements and Source tabs, this type shows the following tabs.
 
 Requirements・Source の共通タブに続いて、この型では次のタブが並びます。
 
-### Scenarios（シナリオ）
+### Scenarios / Scenarios（シナリオ）
+
+A list of the paths that trace the flow from start to end. It becomes the **basis for E2E tests and UAT (acceptance test) cases**. By enumerating the paths taken at each branch, you can check for gaps in test coverage.
 
 開始から終了までの流れをたどった経路の一覧です。**E2E テストや UAT（受け入れテスト）のケースの土台**
 になります。分岐ごとに通る経路を洗い出し、テスト観点の抜けを確認できます。
 
-### Events（イベント）
+### Events / Events（イベント）
+
+A list of the events (triggers and occurrences) that appear in the flow.
 
 フロー中に現れるイベント（トリガーや発生事象）の一覧です。
 
-### Roles（ロール）
+### Roles / Roles（ロール）
+
+A list of the people and roles that appear as swimlanes (`|ロール名|`). Use it to survey the division of responsibility.
 
 スイムレーン（`|ロール名|`）として登場する担当者・役割の一覧です。責任分担の俯瞰に使います。
 
-### Artifacts（成果物）
+### Artifacts / Artifacts（成果物）
+
+A list of the artifacts handed off in the flow (`-> 成果物;`: data, documents, etc.).
 
 フローで受け渡される成果物（`-> 成果物;`：データ・ドキュメントなど）の一覧です。
 
-### Externals（外部）
+### Externals / Externals（外部）
+
+A list of the external references the process involves (external systems, external stakeholders, etc.).
 
 プロセスが関わる外部の参照（外部システム・外部関係者など）の一覧です。
 
 ---
 
-## この型のレビューの進め方（目安）
+## How to proceed with a review of this type (a guide) / この型のレビューの進め方（目安）
 
-1. Requirements に要求を書き **Generate Model**、または Source に直接記述。
-2. **Roles / Artifacts** で、担当と受け渡しが妥当かを確認。
-3. **Scenarios** で経路を洗い出し、E2E / UAT の観点として抜けがないかを確認。
-4. 分岐追加・修正をチャットで AI に指示 → 自動反映（緑／橙のマーカーで差分を確認）。
-5. 気になる箇所にマーカーを描く。
-6. **Save & finish** で結論を選んで証跡を保存。
+1. Write requirements in Requirements and press **Generate Model**, or write directly in Source. / Requirements に要求を書き **Generate Model**、または Source に直接記述。
+2. In **Roles / Artifacts**, check that the responsibilities and handoffs are appropriate. / **Roles / Artifacts** で、担当と受け渡しが妥当かを確認。
+3. In **Scenarios**, enumerate the paths and check for gaps from an E2E / UAT perspective. / **Scenarios** で経路を洗い出し、E2E / UAT の観点として抜けがないかを確認。
+4. Instruct the AI in chat to add or fix branches → applied automatically (check the diff with the green / orange markers). / 分岐追加・修正をチャットで AI に指示 → 自動反映（緑／橙のマーカーで差分を確認）。
+5. Draw markers on the parts you are concerned about. / 気になる箇所にマーカーを描く。
+6. In **Save & finish**, choose a conclusion and save the evidence. / **Save & finish** で結論を選んで証跡を保存。
 
 ---
 
-← [マニュアルのトップに戻る](index.md) ｜ 他の型：[状態遷移図](state-machine.md) ／ [要求図](requirement.md)
+← [Back to the manual top](index.md) ｜ Other types: [State machine](state-machine.md) / [Requirement](requirement.md)　／　[マニュアルのトップに戻る](index.md) ｜ 他の型：[状態遷移図](state-machine.md) ／ [要求図](requirement.md)

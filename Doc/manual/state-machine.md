@@ -1,36 +1,44 @@
-# 状態遷移図（State machine）
+# State machine / 状態遷移図（State machine）
 
-← [マニュアルのトップに戻る](index.md)
+← [Back to the manual top / マニュアルのトップに戻る](index.md)
+
+A model type for reviewing states and transitions. It expresses a UML-style state machine in a PlantUML subset and automatically generates a **transition table (matrix)** and **N-switch coverage test cases**.
 
 状態と遷移をレビューするためのモデル型です。UML 風の状態遷移図を PlantUML のサブセットで表現し、
 **遷移表（マトリクス）** と **N-switch カバレッジのテストケース** を自動生成します。
+
+This page assumes the common operations (screen layout, chat, markers, saving, etc.). If you have not read it yet, read the [top page](index.md) first.
 
 このページは共通操作（画面構成・チャット・マーカー・保存など）を前提にしています。
 まだの場合は先に [トップページ](index.md) を読んでください。
 
 ---
 
-## この型でできること
+## What you can do with this type / この型でできること
 
-- 状態・遷移・イベント・ガード・アクションのモデルを描く
-- 抜けや不整合を **遷移表** で俯瞰する
-- **N-switch テスト**（0/1/2-switch と不正遷移）でテスト観点を洗い出す
+- Draw a model of states, transitions, events, guards, and actions / 状態・遷移・イベント・ガード・アクションのモデルを描く
+- Get an overview of gaps and inconsistencies with the **transition table** / 抜けや不整合を **遷移表** で俯瞰する
+- Enumerate test perspectives with **N-switch tests** (0/1/2-switch and invalid transitions) / **N-switch テスト**（0/1/2-switch と不正遷移）でテスト観点を洗い出す
 
 ---
 
-## ソースの書き方（対応サブセット）
+## How to write the source (supported subset) / ソースの書き方（対応サブセット）
+
+In the **Source** tab, write in the PlantUML state-diagram subset. The supported range is as follows.
 
 Source タブに、PlantUML の状態図サブセットで記述します。対応するのは次の範囲です。
 
-- 状態と遷移、初期擬似状態 `[*] -->`、終了擬似状態 `--> [*]`、状態の別名
-- **イベント / ガード / アクション付きの遷移**（`遷移 : イベント [ガード] / アクション`）
-- **1 階層の複合状態**（`state X { ... }`）と、その内部の初期遷移
-- 複合状態を起点にしたグループ脱出遷移、複合状態を終点にした進入遷移
+- States and transitions, the initial pseudo-state `[*] -->`, the final pseudo-state `--> [*]`, and state aliases / 状態と遷移、初期擬似状態 `[*] -->`、終了擬似状態 `--> [*]`、状態の別名
+- **Transitions with an event / guard / action** (`遷移 : イベント [ガード] / アクション`) / **イベント / ガード / アクション付きの遷移**（`遷移 : イベント [ガード] / アクション`）
+- **One-level composite states** (`state X { ... }`) and their internal initial transitions / **1 階層の複合状態**（`state X { ... }`）と、その内部の初期遷移
+- Group-exit transitions from a composite state, and entry transitions into a composite state / 複合状態を起点にしたグループ脱出遷移、複合状態を終点にした進入遷移
+
+Main unsupported constructs: nested nesting, orthogonal regions, history pseudo-states, dot notation, entry/exit points, styling, colors, and notes.
 
 対応しない主なもの：入れ子の入れ子、直交領域、ヒストリ擬似状態、ドット記法、entry/exit point、
 スタイル・色・ノート。
 
-### 例
+### Example / 例
 
 ```plantuml
 @startuml
@@ -43,14 +51,20 @@ Error --> [*]
 @enduml
 ```
 
+The exact syntax is given in full under **“Grammar definition (EBNF)”** below (you can download the same thing via **“Download grammar”** in the header).
+
 正確な構文は、下記の **「文法定義（EBNF）」** に全文を載せています
 （ヘッダーの **「Download grammar」** でも同じものをダウンロードできます）。
 
 ---
 
-## 文法定義（EBNF）
+## Grammar definition (EBNF) / 文法定義（EBNF）
+
+This is the **formal definition** of the syntax ModelLogue accepts for this model type. Any construct not listed here is rejected as a syntax error with a line number. The full text is reproduced below as-is, so you can copy and use it (you can also download it via **“Download grammar”** in the header).
 
 このモデル型で ModelLogue が受け付ける構文の**正式な定義**です。ここに載っていない構文は、行番号付きの構文エラーとして拒否されます。全文は下記にそのまま掲載しているので、コピーして使えます（ヘッダーの **「Download grammar」** からもダウンロードできます）。
+
+**How to use it**: paste this definition block straight to the AI and tell it “generate PlantUML following this grammar,” and you are more likely to get output that stays within the subset. ModelLogue itself uses the same definition when instructing the AI.
 
 **使い方**: この定義ブロックをそのまま AI に貼り付け、「この文法に従って PlantUML を生成して」と伝えると、サブセットから外れない出力を得やすくなります。ModelLogue 自身も、同じ定義を AI への指示に使っています。
 
@@ -206,55 +220,67 @@ any_char         = (* any character except newline *) ;
 (*       @enduml                                                *)
 ```
 
-## AI との対話
+## Dialogue with the AI / AI との対話
 
-- 要求から生成するときは、Requirements タブに要求文を書いて **Generate Model** を押します。
+- When generating from requirements, write the requirement text in the **Requirements** tab and press **Generate Model**. The AI returns the state-diagram source, within the subset, as a ```` ```plantuml ```` block. / 要求から生成するときは、Requirements タブに要求文を書いて **Generate Model** を押します。
   AI はサブセット内の状態図ソースを ```` ```plantuml ```` ブロックで返します。
-- レビュー中は、チャットで「Error から復帰する遷移が抜けている」等と指示すると、
+- During review, if you tell it something like “the transition to recover from Error is missing” in the chat, the AI proposes a revised source. / レビュー中は、チャットで「Error から復帰する遷移が抜けている」等と指示すると、
   AI が修正後のソースを提案します。
 
-### 提案の反映（Apply）
+### Applying proposals (Apply) / 提案の反映（Apply）
+
+For state machines, an AI proposal is shown as a **before/after proposal view**.
 
 状態遷移図では、AI の提案は **変更前／変更後の提案ビュー** として表示されます。
 
-- 追加・削除・変更が色分けされた差分で確認できます。
-- 内容を確認して **Apply** を押すと、モデルに反映されます。
-- ただし **最初のモデル生成**（まだ図が空のとき）は、比較対象がないため提案ビューを出さず、
+- You can check additions, deletions, and changes as a color-coded diff. / 追加・削除・変更が色分けされた差分で確認できます。
+- Review the content and press **Apply** to reflect it into the model. / 内容を確認して **Apply** を押すと、モデルに反映されます。
+- However, the **first model generation** (when the diagram is still empty) has nothing to compare against, so no proposal view is shown and it is applied directly. / ただし **最初のモデル生成**（まだ図が空のとき）は、比較対象がないため提案ビューを出さず、
   そのまま反映されます。
-- 反映した変更は、図ツールバーの **↶ Undo / ↷ Redo** で戻せます。
+- Applied changes can be reverted with **↶ Undo / ↷ Redo** on the diagram toolbar. / 反映した変更は、図ツールバーの **↶ Undo / ↷ Redo** で戻せます。
 
 ---
 
-## 分析タブ
+## Analysis tabs / 分析タブ
+
+After the shared **Requirements** and **Source** tabs, this type adds the following tabs.
 
 Requirements・Source の共通タブに続いて、この型では次のタブが並びます。
 
-### State×Event（状態 × イベント）
+### State×Event / State×Event（状態 × イベント）
+
+A transition table with states on the rows and events on the columns. Each cell shows “the destination when that event is received.” An empty cell means “that event is not defined,” which helps you find gaps and omissions.
 
 行に状態、列にイベントを取った遷移表です。各セルは「そのイベントを受けたときの遷移先」を示します。
 空のセルは「そのイベントは定義されていない」ことを表し、抜けや取りこぼしの発見に役立ちます。
 
-### State×State（状態 × 状態）
+### State×State / State×State（状態 × 状態）
+
+A table with states on both rows and columns, giving an overview of whether transitions exist between states. Use it to grasp reachability relationships and isolated states.
 
 行・列ともに状態を取り、状態間の遷移の有無を俯瞰する表です。到達関係や孤立した状態の把握に使います。
 
-### Test cases（N-switch テストケース）
+### Test cases / Test cases（N-switch テストケース）
+
+From the state machine model, it automatically generates test cases according to a coverage criterion.
 
 状態遷移モデルから、カバレッジ基準に沿ったテストケースを自動生成します。
 
-- **カバレッジの選択**
-  - **0-switch** … 各遷移を 1 回ずつ通す（遷移網羅）。
-  - **1-switch** … 連続する 2 遷移の組み合わせを網羅。
-  - **2-switch** … 連続する 3 遷移の組み合わせを網羅。
-  - **Invalid** … 定義されていない（禁止された）遷移を試す不正系テスト。
-- **表示の切り替え**
-  - **Tests** … 検証パターン（テストケース）の一覧。
-  - **Scenarios** … シナリオ形式の一覧（Invalid モードにはシナリオはありません）。
-- 一覧は **CSV でダウンロード** できます。ファイル名にカバレッジ水準が入ります。
+- **Choose the coverage** / **カバレッジの選択**
+  - **0-switch** … pass through each transition once (transition coverage). / **0-switch** … 各遷移を 1 回ずつ通す（遷移網羅）。
+  - **1-switch** … cover all combinations of two consecutive transitions. / **1-switch** … 連続する 2 遷移の組み合わせを網羅。
+  - **2-switch** … cover all combinations of three consecutive transitions. / **2-switch** … 連続する 3 遷移の組み合わせを網羅。
+  - **Invalid** … negative tests that try undefined (forbidden) transitions. / **Invalid** … 定義されていない（禁止された）遷移を試す不正系テスト。
+- **Switch the display** / **表示の切り替え**
+  - **Tests** … a list of verification patterns (test cases). / **Tests** … 検証パターン（テストケース）の一覧。
+  - **Scenarios** … a list in scenario form (there are no scenarios in Invalid mode). / **Scenarios** … シナリオ形式の一覧（Invalid モードにはシナリオはありません）。
+- The list can be **downloaded as CSV**. The coverage level is included in the file name. / 一覧は **CSV でダウンロード** できます。ファイル名にカバレッジ水準が入ります。
 
-> テストケースは、モデルが最低 1 つの状態を持ち、ソースにパースエラーがないときに生成されます。
+> Test cases are generated when the model has at least one state and the source has no parse errors. / テストケースは、モデルが最低 1 つの状態を持ち、ソースにパースエラーがないときに生成されます。
 
-#### 開発者向け：API として呼び出す（デモ環境）
+#### For developers: calling it as an API (demo environment) / 開発者向け：API として呼び出す（デモ環境）
+
+The demo environment exposes the same N-switch generator as an **authentication-free HTTP API** (base URL `https://modellogue.com/nswitch`). No installation is needed; you can generate tests directly from `curl`.
 
 同じ N-switch 生成器を、デモ環境が **認証なしの HTTP API**（ベース URL
 `https://modellogue.com/nswitch`）として公開しています。インストール不要で、
@@ -271,6 +297,8 @@ curl -X POST https://modellogue.com/nswitch/generate \
   -d '{"source":"@startuml\n[*] --> A\nA --> B : go\nB --> [*] : done\n@enduml","n":1}'
 ```
 
+Main parameters: `source` (PlantUML source, required), `n` (the N-switch level `0`/`1`/`2`), `"invalid": true` (add invalid-transition tests), `"format": "csv"` (feed a canonical transition-table CSV instead of PlantUML). The response is returned as JSON (`tests` / `scenarios` / `uncovered` / `scopes`). The demo environment is best-effort, so if you build it into production CI, self-hosting locally is recommended.
+
 主なパラメータ：`source`（PlantUML ソース、必須）、`n`（`0`/`1`/`2` の N-switch 水準）、
 `"invalid": true`（不正遷移テストを追加）、`"format": "csv"`（PlantUML の代わりに正準遷移表
 CSV を投入）。レスポンスは JSON（`tests` / `scenarios` / `uncovered` / `scopes`）で返ります。
@@ -278,15 +306,15 @@ CSV を投入）。レスポンスは JSON（`tests` / `scenarios` / `uncovered`
 
 ---
 
-## この型のレビューの進め方（目安）
+## How to run a review of this type (a rough guide) / この型のレビューの進め方（目安）
 
-1. Requirements に要求を書き **Generate Model**、または Source に直接記述。
-2. **State×Event** で、想定するイベントに対して遷移が定義されているかを確認。
-3. 抜けや誤りをチャットで AI に指摘 → 提案を **Apply**。
-4. **Test cases** でテスト観点（特に Invalid）を洗い出し、必要なら CSV を保存。
-5. 気になる箇所にマーカーを描く。
-6. **Save & finish** で結論を選んで証跡を保存。
+1. Write requirements in **Requirements** and **Generate Model**, or write directly in **Source**. / Requirements に要求を書き **Generate Model**、または Source に直接記述。
+2. In **State×Event**, check whether transitions are defined for the events you expect. / **State×Event** で、想定するイベントに対して遷移が定義されているかを確認。
+3. Point out gaps and errors to the AI in the chat → **Apply** the proposal. / 抜けや誤りをチャットで AI に指摘 → 提案を **Apply**。
+4. In **Test cases**, enumerate test perspectives (especially Invalid) and save CSV if needed. / **Test cases** でテスト観点（特に Invalid）を洗い出し、必要なら CSV を保存。
+5. Draw markers on the parts you are concerned about. / 気になる箇所にマーカーを描く。
+6. Choose a conclusion in **Save & finish** and save the evidence. / **Save & finish** で結論を選んで証跡を保存。
 
 ---
 
-← [マニュアルのトップに戻る](index.md) ｜ 他の型：[要求図](requirement.md) ／ [プロセス図](process.md)
+← [Back to the manual top / マニュアルのトップに戻る](index.md) ｜ Other types / 他の型：[Requirement / 要求図](requirement.md) ／ [Process / プロセス図](process.md)

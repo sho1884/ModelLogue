@@ -1,54 +1,62 @@
-# 要求図（Requirement）
+# Requirement diagram / 要求図（Requirement）
 
-← [マニュアルのトップに戻る](index.md)
+← [Back to the manual top / マニュアルのトップに戻る](index.md)
+
+A model type for reviewing requirements and their relationships. It expresses a SysML-style requirement diagram in a PlantUML subset DSL, and automatically generates a **traceability matrix** and a **list of orphan requirements (Orphans)**.
 
 要求とその関係をレビューするためのモデル型です。SysML 風の要求図を PlantUML のサブセット DSL で表現し、
 **トレーサビリティ（追跡）マトリクス** と **孤立要求（Orphans）の一覧** を自動生成します。
+
+This page assumes the common operations (screen layout, chat, markers, saving, etc.). If you have not read it yet, read the [top page](index.md) first.
 
 このページは共通操作（画面構成・チャット・マーカー・保存など）を前提にしています。
 まだの場合は先に [トップページ](index.md) を読んでください。
 
 ---
 
-## この型でできること
+## What you can do with this type / この型でできること
 
-- 要求（利用者要求・機能要求・非機能要求・設計制約）と、その間の関係を描く
-- 要求どうしの **トレーサビリティ** を俯瞰する
-- どの要求ともつながっていない **孤立要求** を洗い出す
+- Draw requirements (user requirements, functional requirements, non-functional requirements, design constraints) and the relationships between them / 要求（利用者要求・機能要求・非機能要求・設計制約）と、その間の関係を描く
+- Get an overview of the **traceability** among requirements / 要求どうしの **トレーサビリティ** を俯瞰する
+- Find **orphan requirements** that are not connected to any other requirement / どの要求ともつながっていない **孤立要求** を洗い出す
 
 ---
 
-## ソースの書き方（対応サブセット）
+## Writing the source (supported subset) / ソースの書き方（対応サブセット）
+
+Because PlantUML does not have a native requirement diagram, ModelLogue treats the **`!procedure` macro call form** as a first-class construct of the DSL. When you start a new session, a **preamble** that defines these macros (a definition block including `hide circle` and the like) is **automatically inserted** into the edit buffer. Leave the preamble as is (if you delete it, the source can no longer be rendered by the PlantUML Server as is).
 
 PlantUML は要求図を標準では持たないため、ModelLogue は **`!procedure` マクロ呼び出し形式** を
 DSL の一級構文として扱います。新しいセッションを始めると、これらのマクロを定義した **プリアンブル**
 （`hide circle` などを含む定義ブロック）が編集バッファに **自動で挿入** されます。
 プリアンブルはそのまま残してください（消すとそのままでは PlantUML Server で描画できなくなります）。
 
-### 要求を宣言するマクロ
+### Macros that declare requirements / 要求を宣言するマクロ
 
-| マクロ | 意味 |
+| Macro / マクロ | Meaning / 意味 |
 |-------|------|
-| `$req(id, name [, text])` | 要求（一般） |
-| `$fReq(id, name [, text])` | 機能要求 |
-| `$nfReq(id, name [, text])` | 非機能要求 |
-| `$dConstraint(id, name [, text])` | 設計制約 |
+| `$req(id, name [, text])` | Requirement (generic) / 要求（一般） |
+| `$fReq(id, name [, text])` | Functional requirement / 機能要求 |
+| `$nfReq(id, name [, text])` | Non-functional requirement / 非機能要求 |
+| `$dConstraint(id, name [, text])` | Design constraint / 設計制約 |
+
+`text` is an optional supplementary description.
 
 `text` は省略可能な補足説明です。
 
-### 関係を宣言するマクロ
+### Macros that declare relationships / 関係を宣言するマクロ
 
-| マクロ | 意味 |
+| Macro / マクロ | Meaning / 意味 |
 |-------|------|
-| `$contain(parent, child)` | 包含（親が子を含む） |
-| `$derive(supplier, client)` | 派生 |
-| `$refine(client, element)` | 詳細化 |
-| `$satisfy(req, design)` | 充足（設計が要求を満たす） |
-| `$verify(req, test)` | 検証（テストが要求を確認する） |
-| `$trace(a, b)` | 追跡（一般的な関連） |
-| `$copy(original, copy)` | 複製 |
+| `$contain(parent, child)` | Containment (the parent contains the child) / 包含（親が子を含む） |
+| `$derive(supplier, client)` | Derive / 派生 |
+| `$refine(client, element)` | Refine / 詳細化 |
+| `$satisfy(req, design)` | Satisfy (the design satisfies the requirement) / 充足（設計が要求を満たす） |
+| `$verify(req, test)` | Verify (the test confirms the requirement) / 検証（テストが要求を確認する） |
+| `$trace(a, b)` | Trace (a generic association) / 追跡（一般的な関連） |
+| `$copy(original, copy)` | Copy / 複製 |
 
-### 例
+### Example / 例
 
 ```plantuml
 @startuml
@@ -64,10 +72,14 @@ $satisfy(SR-010, UR-001)
 @enduml
 ```
 
+Not supported: bare `class` declarations or raw relationship arrows, direct use of the `requirement` keyword, and class-diagram structures other than requirements. For the exact syntax, the full text is given below under **“Grammar definition (EBNF)”**.
+
 対応しないもの：素の `class` 宣言や生の関係矢印、`requirement` キーワードの直接利用、
 要求以外のクラス図構造。正確な構文は、下記の **「文法定義（EBNF）」** に全文を載せています。
 
-### レビュー状態は PlantUML コメントで表現
+### Review state is expressed with PlantUML comments / レビュー状態は PlantUML コメントで表現
+
+Review states such as “hide this requirement for now,” “treat this as deleted,” and “attach a note” are expressed not with dedicated macros but with **PlantUML comments** (`' @modellogue ...`). This way, the source can be passed directly to the PlantUML Server and still render as an ordinary requirement diagram.
 
 「この要求は今は隠す」「これは削除扱い」「注記を付ける」といったレビュー上の状態は、
 専用マクロではなく **PlantUML コメント**（`' @modellogue ...`）で表現されます。
@@ -75,9 +87,13 @@ $satisfy(SR-010, UR-001)
 
 ---
 
-## 文法定義（EBNF）
+## Grammar definition (EBNF) / 文法定義（EBNF）
+
+This is the **formal definition** of the syntax ModelLogue accepts for this model type. Any construct not listed here is rejected as a syntax error with a line number. The full text is reproduced below as is, so you can copy and use it.
 
 このモデル型で ModelLogue が受け付ける構文の**正式な定義**です。ここに載っていない構文は、行番号付きの構文エラーとして拒否されます。全文は下記にそのまま掲載しているので、コピーして使えます。
+
+**How to use**: Paste this definition block directly to the AI and tell it “generate PlantUML following this grammar,” and you are more likely to get output that stays within the subset. ModelLogue itself uses the same definition in its instructions to the AI.
 
 **使い方**: この定義ブロックをそのまま AI に貼り付け、「この文法に従って PlantUML を生成して」と伝えると、サブセットから外れない出力を得やすくなります。ModelLogue 自身も、同じ定義を AI への指示に使っています。
 
@@ -410,23 +426,27 @@ any_char_except_gt
 (*     a follow-up version.                                    *)
 ```
 
-## AI との対話
+## Dialogue with the AI / AI との対話
+
+In requirement diagrams, exchange with the AI is done via **CSV**. This is because the list of requirements is the substance, and the diagram is positioned as a visualization mechanically derived from it.
 
 要求図では、AI との受け渡しは **CSV** で行います。要求の一覧（リスト）が本体であり、
 図はそこから機械的に導かれる可視化だ、という位置づけのためです。
 
-- 要求から生成するときは、Requirements タブに要求文を書いて **Generate Model**。
-- レビュー中は「SR-010 を 2 つの機能要求に分解して」等と指示すると、AI が ```` ```csv ```` ブロックで
+- To generate from requirements, write the requirement text in the Requirements tab and press **Generate Model**. / 要求から生成するときは、Requirements タブに要求文を書いて **Generate Model**。
+- During a review, when you instruct e.g. “decompose SR-010 into two functional requirements,” the AI returns the requirement list in a ```` ```csv ```` block. ModelLogue parses it and automatically generates canonical PlantUML — including the preamble, macro calls, and review-state comments — and reflects it into the diagram. / レビュー中は「SR-010 を 2 つの機能要求に分解して」等と指示すると、AI が ```` ```csv ```` ブロックで
   要求リストを返します。ModelLogue はそれをパースし、プリアンブル＋マクロ呼び出し＋レビュー状態コメントを
   含む正規の PlantUML を自動生成して図に反映します。
 
-### 提案の反映（自動）と自動マーカー
+### Applying proposals (automatic) and automatic markers / 提案の反映（自動）と自動マーカー
 
-- 要求図の提案は **自動で反映** されます（状態遷移図のような Apply ボタン付きの提案ビューは出ません）。
-- 変更箇所は図の上に **自動マーカー** で示されます。**追加＝緑の実線**、**変更＝橙の破線**。
-- 反映は図ツールバーの **↶ Undo / ↷ Redo** で戻せます。
+- Requirement-diagram proposals are **applied automatically** (there is no proposal view with an Apply button as in state machines). / 要求図の提案は **自動で反映** されます（状態遷移図のような Apply ボタン付きの提案ビューは出ません）。
+- Changed parts are shown on the diagram with **automatic markers**: **added = solid green**, **changed = dashed orange**. / 変更箇所は図の上に **自動マーカー** で示されます。**追加＝緑の実線**、**変更＝橙の破線**。
+- An apply can be reverted with **↶ Undo / ↷ Redo** on the diagram toolbar. / 反映は図ツールバーの **↶ Undo / ↷ Redo** で戻せます。
 
-### 反映時の取りこぼし確認（ガードレール）
+### Drop-out check on apply (guardrail) / 反映時の取りこぼし確認（ガードレール）
+
+If the AI's CSV reply **silently drops** a requirement row that was present just before, the apply is paused and a confirmation modal is shown. Check the dropped requirement IDs, and if it is as intended press **Apply anyway**; otherwise you can cancel the apply with **Cancel**. This protects you from unexpectedly losing a review target.
 
 AI の CSV 返信が、直前まであった要求の行を **黙って落として** しまった場合、反映を一時停止して
 確認モーダルを表示します。落ちた要求 ID を確認し、意図どおりなら **Apply anyway**、そうでなければ
@@ -434,35 +454,43 @@ AI の CSV 返信が、直前まであった要求の行を **黙って落とし
 
 ---
 
-## 分析タブ
+## Analysis tabs / 分析タブ
+
+Following the shared Requirements and Source tabs, this type shows the following tabs.
 
 Requirements・Source の共通タブに続いて、この型では次のタブが並びます。
 
-### Requirement list（要求一覧）
+### Requirement list / 要求一覧
+
+Check the declared requirements in a list. The requirement list is the master, and the diagram is its visualization.
 
 宣言された要求を一覧で確認します。要求リストが正本であり、図はその可視化という関係にあります。
 
-### Traceability（トレーサビリティ）
+### Traceability / トレーサビリティ
+
+A matrix that gives an overview of the relationships among requirements (containment, derive, refine, satisfy, verify, trace). Check the connections between higher-level and lower-level requirements and the coverage of verification and satisfaction.
 
 要求どうしの関係（包含・派生・詳細化・充足・検証・追跡）を俯瞰するマトリクスです。
 上位要求と下位要求のつながり、検証・充足の網羅状況を確認します。
 
-### Orphans（孤立要求）
+### Orphans / 孤立要求
+
+A list of **requirements not connected to anything**, appearing in no relationship. Use it to find forgotten decompositions and missing traces.
 
 どの関係にも現れない、**どこともつながっていない要求** の一覧です。
 分解し忘れ・トレース漏れの発見に使います。
 
 ---
 
-## この型のレビューの進め方（目安）
+## How to proceed with a review of this type (a guide) / この型のレビューの進め方（目安）
 
-1. Requirements に要求を書き **Generate Model**、または Source にマクロで直接記述。
-2. **Traceability** で、上位・下位のつながりや充足・検証の網羅を確認。
-3. **Orphans** で孤立した要求がないかを確認。
-4. 分解・追記をチャットで AI に指示 → 自動反映（緑／橙のマーカーで差分を確認）。
-5. 気になる箇所にマーカーを描く。
-6. **Save & finish** で結論を選んで証跡を保存。
+1. Write the requirements in Requirements and press **Generate Model**, or write them directly with macros in Source. / Requirements に要求を書き **Generate Model**、または Source にマクロで直接記述。
+2. In **Traceability**, check the higher/lower connections and the coverage of satisfaction and verification. / **Traceability** で、上位・下位のつながりや充足・検証の網羅を確認。
+3. In **Orphans**, check whether there are any isolated requirements. / **Orphans** で孤立した要求がないかを確認。
+4. Instruct the AI in chat to decompose or add → automatic apply (check the diff with the green/orange markers). / 分解・追記をチャットで AI に指示 → 自動反映（緑／橙のマーカーで差分を確認）。
+5. Draw markers on points of concern. / 気になる箇所にマーカーを描く。
+6. Choose a conclusion with **Save & finish** and save the evidence. / **Save & finish** で結論を選んで証跡を保存。
 
 ---
 
-← [マニュアルのトップに戻る](index.md) ｜ 他の型：[状態遷移図](state-machine.md) ／ [プロセス図](process.md)
+← [Back to the manual top / マニュアルのトップに戻る](index.md) ｜ Other types / 他の型：[State machine / 状態遷移図](state-machine.md) ／ [Process / プロセス図](process.md)
