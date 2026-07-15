@@ -13,13 +13,14 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# --- Serve the static landing (/) + the SPA (/app) + reverse-proxy the APIs ---
+# --- Serve the SPA (/app) + reverse-proxy the APIs; the site root is a mount ---
 FROM caddy:2-alpine
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 # The SPA is built with base /app/, so it lives under /srv/app.
 COPY --from=build /app/dist /srv/app
-# Simple static landing page at the site root (real content added later).
-COPY deploy/landing/index.html /srv/index.html
+# The site root (/) is NOT part of this tool: it is co-located content, bind-
+# mounted at /srv/sites/<name> by the server-only docker-compose.override.yml
+# and deployed from its own repo. Only the Caddy route above knows about it.
 # Self-destroying worker at /sw.js that retires the app's old root-scoped SW.
-COPY deploy/landing/sw.js /srv/sw.js
+COPY deploy/sw.js /srv/sw.js
 EXPOSE 80

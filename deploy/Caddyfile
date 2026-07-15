@@ -91,7 +91,7 @@
 
 	# Retire the app's OLD root-scoped service worker: serve a self-destroying
 	# /sw.js with no-cache so legacy clients revalidate, update to it, and clean
-	# up (see deploy/landing/sw.js). New clients never register a worker here.
+	# up (see deploy/sw.js). New clients never register a worker here.
 	handle /sw.js {
 		root * /srv
 		header Cache-Control "no-cache, no-store, must-revalidate"
@@ -116,10 +116,14 @@
 		file_server
 	}
 
-	# Static landing page at the site root (everything else). /srv/index.html is
-	# the landing; the SPA's own shell is /srv/app/index.html above.
+	# Co-located static content at the site root (everything else). This is NOT
+	# part of the tool: it is bind-mounted read-only from /opt/sites/<name> by
+	# the server-only docker-compose.override.yml, and deployed from its own
+	# repo with the restricted rsync-only content key — never through this repo
+	# (same rule as /neoceg and /pict above). This route is the only file here
+	# that knows about it. The SPA's own shell is /srv/app/index.html above.
 	handle {
-		root * /srv
+		root * /srv/sites/modellogue-site
 		try_files {path} /index.html
 		file_server
 	}

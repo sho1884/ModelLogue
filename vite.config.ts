@@ -36,9 +36,9 @@ const backendProxy = {
 
 // https://vite.dev/config/
 export default defineConfig({
-  // The SPA is served under /app; a static landing page lives at the site root
-  // (see deploy/Caddyfile + deploy/landing). base makes all built asset URLs,
-  // the manifest, and the service worker resolve under /app/.
+  // The SPA is served under /app; the site root serves co-located content that
+  // is not part of this tool (see deploy/Caddyfile). base makes all built asset
+  // URLs, the manifest, and the service worker resolve under /app/.
   base: '/app/',
   plugins: [
     react(),
