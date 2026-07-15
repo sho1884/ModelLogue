@@ -32,3 +32,25 @@ export interface MatrixData {
   /** [rowIndex][colIndex] cell values, or null when empty. */
   cells: (string | null)[][];
 }
+
+/**
+ * SR-020: what a cell with no transition renders as, wherever the matrix is
+ * shown to a *human* — on screen and in the HTML clipboard payload that
+ * spreadsheets/Word import. A blank cell reads as "someone forgot to fill
+ * this in"; `-` says "there is deliberately no transition here", which is
+ * the negative-test target (UR-013, nswitch §7.2).
+ *
+ * ASCII on purpose (locale-safe; survives a paste into any tool).
+ *
+ * This does NOT apply to the canonical CSV. There an empty cell *is* the
+ * encoding for "no transition" (nswitch §4.2.2), and the CLI derives its
+ * INV tests from it — writing `-` there makes it parse as a target state
+ * named "-" and the CLI rejects the file. Machine format, different layer:
+ * see `transitionTableSerializer.modelToCanonicalCsv`.
+ */
+export const EMPTY_CELL_DISPLAY = '-';
+
+/** True when a matrix cell carries no transition. */
+export function isEmptyCell(cell: string | null): boolean {
+  return cell == null || cell === '';
+}

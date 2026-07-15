@@ -1,4 +1,5 @@
 import type { MatrixData } from '../../types/matrix';
+import { EMPTY_CELL_DISPLAY, isEmptyCell } from '../../types/matrix';
 import type { StateMachineModel } from '../../modelTypes/state-machine/model';
 import { ExportActions } from '../ExportActions';
 import { matrixToHtml } from '../../engines/matrixSerializer';
@@ -99,25 +100,30 @@ export function MatrixView({ matrix, model, title }: MatrixViewProps) {
                 >
                   {row.label}
                 </td>
-                {matrix.cells[ri].map((cell, ci) => (
-                  <td
-                    key={ci}
-                    // SR-020: never leave an empty cell blank. A cell with no
-                    // transition is an invalid/forbidden transition, shown as
-                    // `-` (locale-safe ASCII) — the negative-test target
-                    // (UR-013, nswitch §7.2).
-                    title={
-                      cell
-                        ? undefined
-                        : 'No transition — invalid/forbidden (negative-test target)'
-                    }
-                    className={`border border-gray-300 px-2 py-1 text-center ${
-                      cell ? 'text-gray-800' : 'text-gray-300'
-                    } ${row.isComposite ? 'bg-gray-50' : ''}`}
-                  >
-                    {cell || '-'}
-                  </td>
-                ))}
+                {matrix.cells[ri].map((cell, ci) => {
+                  // SR-020: never leave an empty cell blank. A cell with no
+                  // transition is an invalid/forbidden transition, shown as
+                  // `-` — the negative-test target (UR-013, nswitch §7.2).
+                  // The marker and the predicate are shared with the HTML
+                  // clipboard payload (types/matrix), so the two human-facing
+                  // renderings cannot drift apart again.
+                  const empty = isEmptyCell(cell);
+                  return (
+                    <td
+                      key={ci}
+                      title={
+                        empty
+                          ? 'No transition — invalid/forbidden (negative-test target)'
+                          : undefined
+                      }
+                      className={`border border-gray-300 px-2 py-1 text-center ${
+                        empty ? 'text-gray-300' : 'text-gray-800'
+                      } ${row.isComposite ? 'bg-gray-50' : ''}`}
+                    >
+                      {empty ? EMPTY_CELL_DISPLAY : cell}
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}

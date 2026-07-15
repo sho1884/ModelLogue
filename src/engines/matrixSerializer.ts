@@ -10,6 +10,7 @@
 // the interchange format shared with the modellogue-nswitch CLI.
 
 import type { MatrixData } from '../types/matrix';
+import { EMPTY_CELL_DISPLAY, isEmptyCell } from '../types/matrix';
 
 function htmlEscape(s: string): string {
   return s
@@ -46,8 +47,15 @@ export function matrixToHtml(matrix: MatrixData, title: string): string {
         }text-align:left;">` +
         `${indentChars(row.level)}${htmlEscape(row.label)}` +
         `</th>`;
+      // SR-020: an empty cell renders as `-` here exactly as it does on
+      // screen — this payload is the human-facing table (Excel / Sheets /
+      // Word), so it must say the same thing the reviewer saw. The plain-text
+      // payload beside it is the canonical CSV, where empty stays empty.
       const dataCells = matrix.cells[ri]
-        .map((c) => `<td>${c == null ? '' : htmlEscape(c)}</td>`)
+        .map(
+          (c) =>
+            `<td>${isEmptyCell(c) ? EMPTY_CELL_DISPLAY : htmlEscape(c as string)}</td>`
+        )
         .join('');
       return `<tr>${labelCell}${dataCells}</tr>`;
     })

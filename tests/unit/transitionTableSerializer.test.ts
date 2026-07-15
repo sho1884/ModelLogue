@@ -15,6 +15,31 @@ function parseOrThrow(source: string): StateMachineModel {
 }
 
 describe('transitionTableSerializer (SR-101 v7.3)', () => {
+  // Guard rail. The on-screen matrix and the HTML clipboard payload render a
+  // cell with no transition as `-` (SR-020) — those are read by humans. This
+  // CSV is read by the modellogue-nswitch CLI, where an EMPTY cell *is* the
+  // encoding for "no transition" (§4.2.2) and is what the INV (negative) tests
+  // are derived from. Writing the display marker here parses as a target state
+  // named "-" and the CLI rejects the whole file:
+  //   Error: CSV: state 'Idle' event 'stop': target '-' is not a declared state
+  // So: if a bug report says "the matrix shows `-` but the CSV is still
+  // blank", the CSV is correct. Do not "fix" it here.
+  it('empty cells stay EMPTY — the display marker must never leak in (§4.2.2)', () => {
+    const model = parseOrThrow(`@startuml
+[*] --> Idle
+Idle --> Running : go
+Running --> Idle : stop
+@enduml`);
+    const csv = modelToCanonicalCsv(model);
+    expect(csv).not.toContain('-');
+    const findRow = (id: string) =>
+      csv.split('\r\n').find((l) => l.startsWith(`${id},`));
+    // Idle has no `stop` transition; Running has no `go`. Both are the
+    // negative-test targets, and both are encoded as nothing at all.
+    expect(findRow('Idle')).toBe('Idle,,,normal,Y,Running,');
+    expect(findRow('Running')).toBe('Running,,,normal,,,Idle');
+  });
+
   it('flat model: matches the §4.2.6 canonical example', () => {
     const model = parseOrThrow(`@startuml
 [*] --> Idle

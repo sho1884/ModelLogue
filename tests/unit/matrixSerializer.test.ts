@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { matrixToHtml } from '../../src/engines/matrixSerializer';
 import type { MatrixData } from '../../src/types/matrix';
+import { EMPTY_CELL_DISPLAY } from '../../src/types/matrix';
 
 const sample: MatrixData = {
   rows: [
@@ -34,4 +35,33 @@ describe('matrixSerializer (SR-101)', () => {
     expect(html).toContain('<td>A &quot;next&quot;</td>');
   });
 
+  // SR-020 / UR-013. This payload is what a spreadsheet or Word receives, so
+  // it is a *human*-facing rendering and must say what the screen says: `-`,
+  // not blank. It shipped blank while the on-screen table said `-`, because
+  // the two rendered the marker independently and only one was updated.
+  it('HTML: an empty cell renders as `-`, matching the on-screen table', () => {
+    const html = matrixToHtml(sample, 'State / Event');
+    expect(html).not.toContain('<td></td>');
+    // sample has three empty cells (null) — all must carry the marker.
+    expect(html.match(/<td>-<\/td>/g)).toHaveLength(3);
+  });
+
+  it('HTML: treats an empty-string cell as empty too, not as a value', () => {
+    const withBlank: MatrixData = {
+      ...sample,
+      cells: [
+        ['', 'X'],
+        ['A', null],
+        [null, 'A "next"'],
+      ],
+    };
+    const html = matrixToHtml(withBlank, 'State / Event');
+    expect(html).not.toContain('<td></td>');
+    expect(html.match(/<td>-<\/td>/g)).toHaveLength(3);
+  });
+
+  it('HTML: the marker is the shared constant, so it cannot drift from the view', () => {
+    const html = matrixToHtml(sample, 'State / Event');
+    expect(html).toContain(`<td>${EMPTY_CELL_DISPLAY}</td>`);
+  });
 });
