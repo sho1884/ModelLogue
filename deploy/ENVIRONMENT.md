@@ -33,38 +33,70 @@ SSH の例：
 ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
 ```
 
+### 鍵は2種類ある（用途で使い分ける）
+
+| 鍵 | 接続先 | できること |
+|---|---|---|
+| `id_ed25519_modellogue` | `root@` | 何でも。**ツールのデプロイ専用**（compose の build/up が要るため） |
+| `id_ed25519_modellogue_site` | `site@`（uid 1500） | **`/opt/sites` への rsync だけ**。シェル不可・他パス不可・読み出し不可 |
+
+コンテンツ（静的サイト）を置くのに root は要りません。`site@` 側は
+`/home/site/.ssh/authorized_keys` の
+`command="/usr/bin/rrsync -wo /opt/sites",restrict` で拘束されています。
+コンテンツを増やしても、この鍵はそのまま使えます（`/opt/sites/<name>` が増えるだけ）。
+
+> **uid は 1500 固定です。** コンテナ（n8n・neoceg-api・pict）はホストから見て
+> **uid 1000** で動き、`/opt/modellogue` と `/opt/neoceg` も uid 1000 所有です。
+> `useradd` は既定で最小の空き uid（＝1000）を取るため、`-u` を省くと新ユーザーが
+> それらを所有し、n8n と同一 uid になります。ユーザーを足すときは必ず高い uid を明示。
+
 > **新しく参加する人へ**: 自分の SSH 公開鍵をサーバの `~/.ssh/authorized_keys` に追加してもらい、
 > さらに自分のメールアドレスを Cloudflare Access のポリシー（AI を使える人の一覧）に追加してもらってください。
 > この2つが済めば、あなたも SSH と AI 利用ができます。
 
 ---
 
-## 動いているもの（Docker コンテナ 7 個）
+## 動いているもの（Docker コンテナ 8 個）
 
 `docker ps` で見えるはずのもの。すべて `/opt/modellogue` の docker compose で管理されています。
 
 | コンテナ | 役割 | 公開ポート |
 |---|---|---|
-| `modellogue-web-1` | Caddy。SPA を配信し、`/plantuml` `/nswitch` `/pict` `/n8n` `/auth` を各コンテナへ中継 | `127.0.0.1:8088`（外部非公開） |
+| `modellogue-web-1` | Caddy。SPA(`/app`) を配信し、`/plantuml` `/nswitch` `/pict` `/neoceg` `/n8n` `/auth` を各コンテナへ中継。サイトのルート(`/`) は `/opt/sites/modellogue-site` の `:ro` マウントを配信（相乗りコンテンツ） | `127.0.0.1:8088`（外部非公開） |
 | `modellogue-n8n-1` | AI 中継。**OpenAI の API キーを保持**。エディタは非公開 | なし（ホスト非公開・内部のみ） |
 | `modellogue-auth-verify-1` | Cloudflare Access の署名を検証（origin 側の二重ゲート、fail-closed） | なし |
 | `modellogue-cloudflared-1` | Cloudflare Tunnel。外からはこれ経由でしか届かない | なし（外向き接続のみ） |
 | `modellogue-plantuml-1` | PlantUML サーバ（SVG 生成）。秘密なし | なし |
 | `modellogue-nswitch-api-1` | N-switch テスト生成。秘密なし | なし |
 | `modellogue-pict-service-1` | **姉妹プロジェクト NeoCombi の PICT デモ API**（相乗り）。秘密なし | なし |
+| `modellogue-neoceg-api-1` | **姉妹プロジェクト NeoCEG の原因結果グラフ デモ API**（相乗り）。秘密なし | なし |
 
 - **外から開いているポートは SSH(22) だけ**。Web は Cloudflare Tunnel 経由でのみ到達します。ポートを新規に開けないこと。
 
-### 相乗りの姉妹プロジェクト・デモ API（パスベース）
+### 相乗りしているもの（この箱は ModelLogue 専用ではない）
 
-この箱は ModelLogue 専用ではなく、**姉妹プロジェクトの CLI デモ API を同居**させています（`modellogue.com/<prefix>` で公開・非ゲート）。現状：
+**この箱には色々載りますが、このリポジトリは ModelLogue というツールのものです。**
+相乗りするものの実体は、すべて `/opt/modellogue` の**外**にあり、このリポジトリに入る
+のは **Caddy のルート1箇所だけ**です。現状：
 
-| prefix | 中身 | ソースの場所 | サービス定義 | ルート |
+| path | 中身 | 実体の場所 | サービス定義 | ルート |
 |---|---|---|---|---|
-| `/pict` | NeoCombi の PICT ラッパ（`/health`・`/generate?order=N`・`/decision-table`） | **`/opt/pict-service`**（`/opt/modellogue` の外＝`deploy.sh` の rsync --delete で消えない） | `docker-compose.override.yml`（サーバ専用） | `deploy/Caddyfile` の `handle_path /pict/*` |
+| `/pict` | NeoCombi の PICT デモ API（`/health`・`/generate?order=N`・`/decision-table`） | `/opt/pict-service` | `override.yml`（サーバ専用） | `handle_path /pict/*` |
+| `/neoceg` | NeoCEG の原因結果グラフ デモ API（serve モード） | `/opt/neoceg` | `override.yml`（サーバ専用） | `handle_path /neoceg/*` |
+| `/`（サイトのルート） | **modellogue.com のランディングページ**。静的コンテンツ。リポジトリは別（`ModelLogue-Site`）で、自前の `deploy.sh` を持つ | `/opt/sites/modellogue-site` | `override.yml` の `web.volumes`（`:ro` bind） | `handle {}`（catch-all） |
 
-- 追加するときの型：**ソースを `/opt/<name>` に置く → `override.yml` に build サービスを足す → `deploy/Caddyfile` に `handle_path /<prefix>/*` を足す → 公開・非ゲート（秘密が無い前提）**。
-- これらは `deploy.sh` を壊しません（ソースは modellogue ツリー外、サービス定義は rsync 除外の override、ルートは repo の Caddyfile）。
+- **CLI をデモ API として足す型** → `deploy-cli-demo` スキル。
+- **静的コンテンツを足す型** → `deploy-site-content` スキル。`site@` の制限鍵で
+  `/opt/sites/<name>` に rsync し、`override.yml` で `:ro` マウント、Caddy にルート。
+- どちらも `deploy.sh` を壊しません（実体は modellogue ツリー外、定義は rsync 除外の
+  override、ルートだけが repo の Caddyfile）。
+
+> **ここに `cp` してはいけません。** 2026-07-12、別フォルダで作ったランディングページが
+> `deploy/landing/` にコピーされ、web イメージに焼き込まれ、作業ツリーから直接デプロイ
+> されました。結果、**本番がどのリポジトリにも存在しないソースで3日間動き**、次にクリーンな
+> clone から `deploy.sh` を叩けば `rsync --delete` がサイトを暫定版に巻き戻すところでした
+> （しかも暫定版でも `GET / -> 200` なので、deploy.sh は成功と表示します）。
+> 上の表の型に従えば、この事故は構造的に起きません。
 
 ---
 
