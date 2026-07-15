@@ -4,12 +4,79 @@ import pytest
 from modellogue_nswitch.parse_csv import CsvParseError, parse_csv
 
 
+def _events_of(model, source):
+    """The events with an outgoing transition from `source`."""
+    return sorted(t.event for t in model.transitions if t.source_state_id == source)
+
+
+# §4.2.2 no-transition markers. The point of the rule is that this tool's input
+# is NOT only its own output: a state transition table arrives from a person in
+# a spreadsheet or from another MBT tool, and blank is the least likely thing
+# any of them wrote. Every form below must land on the identical model — the
+# absence of the transition — because §7.2 derives the INV negative tests from
+# exactly that absence.
+@pytest.mark.parametrize(
+    "marker,why",
+    [
+        ("-", "canonical (U+002D)"),
+        ("", "pre-v8.1 canonical — must keep parsing forever"),
+        ("—", "em dash: what a spreadsheet autocorrects `-` into"),
+        ("–", "en dash: ditto"),
+        ("×", "hand-written tables"),
+        ("x", "hand-written tables"),
+        ("X", "case-insensitive"),
+        ("N/A", "hand-written tables"),
+        ("n/a", "case-insensitive"),
+        ("NA", "hand-written tables"),
+        (" - ", "trimmed before matching"),
+    ],
+)
+def test_no_transition_markers_all_mean_no_transition(marker, why):
+    text = (
+        "state,label,parent,type,initial,go,stop\n"
+        f"Idle,,,normal,Y,Running,{marker}\n"
+        f"Running,,,normal,,{marker},Idle\n"
+    )
+    m = parse_csv(text)
+    # `Idle` fires only on `go`; `Running` only on `stop`. The marker cells
+    # produced nothing at all — not a transition to a state named "-".
+    assert _events_of(m, "Idle") == ["go"], why
+    assert _events_of(m, "Running") == ["stop"], why
+    assert not any(t.target_state_id == marker.strip() for t in m.transitions), why
+
+
+def test_marker_lookalike_inside_a_state_id_is_not_a_marker():
+    # `-` is a legal character in a state id. Only a WHOLE cell is a marker, so
+    # a target that merely contains one must survive.
+    text = (
+        "state,label,parent,type,initial,go,stop\n"
+        "Idle,,,normal,Y,Well-Formed,-\n"
+        "Well-Formed,,,normal,,-,Idle\n"
+    )
+    m = parse_csv(text)
+    go = [t for t in m.transitions if t.source_state_id == "Idle" and t.event == "go"]
+    assert len(go) == 1
+    assert go[0].target_state_id == "Well-Formed"
+
+
+def test_marker_mixed_into_a_multi_transition_cell_is_an_error():
+    # A cell cannot both have and not have transitions, so `-` beside real
+    # targets is a typo, not a marker. Fail loudly rather than silently drop it.
+    text = (
+        "state,label,parent,type,initial,go,stop\n"
+        "Idle,,,normal,Y,Running; -,-\n"
+        "Running,,,normal,,-,Idle\n"
+    )
+    with pytest.raises(CsvParseError, match="is not a declared state"):
+        parse_csv(text)
+
+
 def test_flat_example_section_4_2_6():
     text = (
         "state,label,parent,type,initial,start,stop,fault,reset\n"
-        "Idle,待機,,normal,Y,Active,,,\n"
-        "Active,動作,,normal,,,Idle,Failure,[*]\n"
-        "Failure,故障,,normal,,,,,Idle\n"
+        "Idle,待機,,normal,Y,Active,-,-,-\n"
+        "Active,動作,,normal,,-,Idle,Failure,[*]\n"
+        "Failure,故障,,normal,,-,-,-,Idle\n"
     )
     m = parse_csv(text)
     real_ids = sorted(s.id for s in m.states if s.type in ("normal", "composite"))

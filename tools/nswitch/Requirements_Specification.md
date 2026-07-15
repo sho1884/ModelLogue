@@ -192,7 +192,7 @@ The first five columns are fixed and MUST appear in this exact order.
 
 Columns 6 and onward are event columns, one per event. Column header = event name. Each cell encodes the transitions fired on that (state, event) pair:
 
-- **Empty cell**: no transition.
+- **`-`**: **no transition** — this (state, event) pair is invalid/forbidden. This is the negative-test target (§7.2) and what `--invalid` enumerates.
 - **`target`**: transition to the state whose id is `target`.
 - **`target [guard]`**: transition with a guard.
 - **`target / action`**: transition with an action.
@@ -201,6 +201,42 @@ Columns 6 and onward are event columns, one per event. Column header = event nam
 - **`t1 [g1] / a1; t2 [g2] / a2`** (semicolon-separated): multiple transitions fired on the same event (typical when guards are mutually exclusive).
 
 Spaces around the `;`, `[`, `]`, `/` separators are tolerated but not required.
+
+##### No-transition markers — writers emit `-`, readers accept the field
+
+A state transition table is read by people, not only by tools: this CSV is opened
+in a spreadsheet, reviewed, and hand-edited (§4.2.5 already assumes exactly that).
+An **empty** cell is ambiguous to a reader — "forbidden here" and "nobody filled
+this in yet" look identical — and conventional state transition tables, whatever
+tool produced them, mark the forbidden cells rather than leave them blank. So:
+
+- **Writers MUST emit `-`** for no transition. It is ASCII (locale-safe, survives
+  any spreadsheet round-trip) and matches what ModelLogue shows on screen and in
+  its HTML clipboard payload (SR-020), so the same table reads the same way
+  everywhere.
+- **Readers MUST treat all of the following as "no transition"**, because a table
+  authored elsewhere — by a person in Excel, or by another MBT tool — will use
+  whichever its author preferred:
+
+  | Accepted | |
+  |---|---|
+  | empty cell | the pre-v8.1 canonical form; still emitted by older ModelLogue |
+  | `-` | canonical (hyphen-minus, U+002D) |
+  | `—` / `–` | em dash / en dash — what a spreadsheet's autocorrect turns `-` into |
+  | `×` / `x` / `X` | common in hand-written tables |
+  | `N/A` / `n/a` / `NA` | ditto |
+
+  Matching is on the trimmed cell, case-insensitive. A marker is only ever a
+  *whole* cell: `-` inside `t1; -; t2` is an error, not a marker, because a cell
+  cannot both have and not have transitions.
+
+This is the §4.2.5 rule applied to the table body: **readers lenient, writers
+strict.** Accepting a marker is not the same as blessing it — writers still emit
+exactly one form, so files this tool produces are byte-stable.
+
+> **Compatibility.** Empty stays readable forever; no existing file is
+> invalidated by this rule. The change is one-way: a v8.1 writer's `-` needs a
+> v8.1 reader. Files produced before v8.1 (empty cells) are read by both.
 
 #### 4.2.3 Pseudo-state convention — no rows for `[*]`
 
@@ -238,24 +274,33 @@ Readers SHOULD match the first five columns by **name**, not position, so a spre
 
 ```csv
 state,label,parent,type,initial,start,stop,fault,reset
-Idle,待機,,normal,Y,Active,,,
-Active,動作,,normal,,,Idle,Failure,[*]
-Failure,故障,,normal,,,,,Idle
+Idle,待機,,normal,Y,Active,-,-,-
+Active,動作,,normal,,-,Idle,Failure,[*]
+Failure,故障,,normal,,-,-,-,Idle
 ```
 
 Reading:
 - `Idle` is top-level initial; has display label `待機`.
 - `Active --stop--> Idle`, `Active --fault--> Failure`, `Active --reset--> (top-level final)`.
 - `Failure --reset--> Idle`.
+- Every `-` is a forbidden (state, event) pair — e.g. `stop` in `Idle` — and each
+  one becomes an `INV` negative Test under `--invalid` (§7.2).
+
+Note that only the **event** columns take `-`. The empty cells in `label`,
+`parent` and `initial` are not markers: their emptiness is itself the value
+(§4.2.1 — "label empty ⇒ same as `state`", "parent empty ⇒ top-level", "initial
+empty ⇒ not the layer's initial"). Those columns are metadata about the state;
+the event columns are the table body, and a blank in a table body is the thing
+this rule exists to eliminate.
 
 #### 4.2.7 Example — with one composite
 
 ```csv
 state,label,parent,type,initial,start,stop,pause,resume
-Idle,,,normal,Y,Operating,,,
-Operating,,,composite,,,Idle,,
-Running,,Operating,normal,Y,,,Paused,
-Paused,,Operating,normal,,,,,Running
+Idle,,,normal,Y,Operating,-,-,-
+Operating,,,composite,,-,Idle,-,-
+Running,,Operating,normal,Y,-,-,Paused,-
+Paused,,Operating,normal,,-,-,-,Running
 ```
 
 Reading:

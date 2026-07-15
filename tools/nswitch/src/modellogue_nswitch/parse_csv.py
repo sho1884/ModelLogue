@@ -16,6 +16,32 @@ class CsvParseError(ValueError):
 
 
 REQUIRED_COLUMNS = ("state", "label", "parent", "type", "initial")
+
+# §4.2.2: an event cell saying "no transition". Writers emit `-`; readers take
+# the field, because the table may have been authored in a spreadsheet or by
+# another MBT tool that marks forbidden cells its own way. Empty is included:
+# it is the pre-v8.1 canonical form and must keep parsing forever.
+#
+# Compared case-insensitively against the trimmed cell. A marker is only ever a
+# WHOLE cell — see _split_semicolons callers: `t1; -; t2` is an error, not a
+# marker, because a cell cannot both have and not have transitions.
+_NO_TRANSITION_MARKERS = frozenset(
+    {
+        "",  # pre-v8.1 canonical
+        "-",  # canonical (U+002D)
+        "—",  # em dash — spreadsheet autocorrect turns `-` into this
+        "–",  # en dash — ditto
+        "×",  # × multiplication sign
+        "x",
+        "n/a",
+        "na",
+    }
+)
+
+
+def _is_no_transition(cell: str) -> bool:
+    """True when an event cell means "this transition is forbidden" (§4.2.2)."""
+    return cell.strip().casefold() in _NO_TRANSITION_MARKERS
 _INITIAL_CELL = re.compile(
     r"^Y(?:\s*\[([^\]]*)\])?(?:\s*/\s*(.+))?$"
 )
@@ -160,7 +186,11 @@ def parse_csv(text: str) -> StateMachineModel:
         source_layer = fixed["parent"] or None
         for ev_name, raw_cell in zip(events, event_values):
             raw_cell = raw_cell.strip()
-            if not raw_cell:
+            # §4.2.2: `-` (and the markers a foreign table may use, and the
+            # pre-v8.1 empty cell) all mean the same thing — no transition, so
+            # nothing to emit. The absence IS the negative Test; §7.2 derives
+            # the INV cases from the (state, event) pairs missing here.
+            if _is_no_transition(raw_cell):
                 continue
             for piece in _split_semicolons(raw_cell):
                 piece = piece.strip()

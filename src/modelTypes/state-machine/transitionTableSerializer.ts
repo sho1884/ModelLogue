@@ -15,6 +15,22 @@
 
 import type { StateMachineModel, Transition } from './model';
 
+/**
+ * §4.2.2: what an event cell says when the (state, event) pair is forbidden.
+ *
+ * This file is a *writer*, so it emits exactly one form — the canonical `-`.
+ * (nswitch's reader also accepts empty, `—`, `×`, `N/A` … because a table can
+ * arrive from a spreadsheet or another tool. Leniency belongs there, not here:
+ * files this function produces are byte-stable.)
+ *
+ * The character deliberately matches SR-020's on-screen marker, so the same
+ * table reads the same way on screen, pasted into Excel, and in the .csv —
+ * that identity is a requirement, not a coincidence, and a test pins it. They
+ * stay separate constants because they answer to different specs: change this
+ * one and you have changed a wire format that modellogue-nswitch parses.
+ */
+const CSV_NO_TRANSITION = '-';
+
 function csvCell(s: string): string {
   if (/[",\r\n]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
@@ -88,7 +104,10 @@ export function modelToCanonicalCsv(model: StateMachineModel): string {
     const perEvent = eventCells.get(s.id);
     for (const ev of model.events) {
       const list = perEvent?.get(ev) ?? [];
-      row.push(list.join('; '));
+      // §4.2.2: a forbidden pair is marked, never left blank. A blank in a
+      // table body reads as "not filled in yet" to whoever opens the .csv in
+      // a spreadsheet — and that is most readers, not just the CLI.
+      row.push(list.length === 0 ? CSV_NO_TRANSITION : list.join('; '));
     }
     lines.push(row.map(csvCell).join(','));
   }

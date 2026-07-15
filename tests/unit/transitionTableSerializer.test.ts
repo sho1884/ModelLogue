@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { modelToCanonicalCsv } from '../../src/modelTypes/state-machine/transitionTableSerializer';
 import { parse } from '../../src/modelTypes/state-machine/parser';
 import type { StateMachineModel } from '../../src/modelTypes/state-machine/model';
+import { EMPTY_CELL_DISPLAY } from '../../src/types/matrix';
 
 function parseOrThrow(source: string): StateMachineModel {
   const { model, errors } = parse(source);
@@ -15,29 +16,56 @@ function parseOrThrow(source: string): StateMachineModel {
 }
 
 describe('transitionTableSerializer (SR-101 v7.3)', () => {
-  // Guard rail. The on-screen matrix and the HTML clipboard payload render a
-  // cell with no transition as `-` (SR-020) — those are read by humans. This
-  // CSV is read by the modellogue-nswitch CLI, where an EMPTY cell *is* the
-  // encoding for "no transition" (§4.2.2) and is what the INV (negative) tests
-  // are derived from. Writing the display marker here parses as a target state
-  // named "-" and the CLI rejects the whole file:
-  //   Error: CSV: state 'Idle' event 'stop': target '-' is not a declared state
-  // So: if a bug report says "the matrix shows `-` but the CSV is still
-  // blank", the CSV is correct. Do not "fix" it here.
-  it('empty cells stay EMPTY — the display marker must never leak in (§4.2.2)', () => {
+  // §4.2.2. A forbidden (state, event) pair is MARKED, not left blank. The
+  // .csv is not a private channel to the CLI: it gets opened in a spreadsheet
+  // and read by a person, and a blank in a table body reads as "nobody filled
+  // this in", which is the exact ambiguity SR-020 removes from the screen.
+  // Writers emit one form (`-`); nswitch's reader additionally accepts empty,
+  // `—`, `×`, `N/A` … for tables authored elsewhere.
+  it('a forbidden (state, event) pair is marked `-`, never left blank (§4.2.2)', () => {
     const model = parseOrThrow(`@startuml
 [*] --> Idle
 Idle --> Running : go
 Running --> Idle : stop
 @enduml`);
     const csv = modelToCanonicalCsv(model);
-    expect(csv).not.toContain('-');
     const findRow = (id: string) =>
       csv.split('\r\n').find((l) => l.startsWith(`${id},`));
-    // Idle has no `stop` transition; Running has no `go`. Both are the
-    // negative-test targets, and both are encoded as nothing at all.
-    expect(findRow('Idle')).toBe('Idle,,,normal,Y,Running,');
-    expect(findRow('Running')).toBe('Running,,,normal,,,Idle');
+    // Idle has no `stop`; Running has no `go`. Both are negative-test targets.
+    expect(findRow('Idle')).toBe('Idle,,,normal,Y,Running,-');
+    expect(findRow('Running')).toBe('Running,,,normal,,-,Idle');
+  });
+
+  it('only the table body is marked — empty metadata columns keep meaning absence', () => {
+    // §4.2.1: label empty ⇒ same as `state`; parent empty ⇒ top-level; initial
+    // empty ⇒ not the layer's initial. Those blanks ARE the value, so a marker
+    // there would be a lie (and would name a parent state "-").
+    const model = parseOrThrow(`@startuml
+[*] --> Idle
+Idle --> Running : go
+Running --> Idle : stop
+@enduml`);
+    const row = modelToCanonicalCsv(model)
+      .split('\r\n')
+      .find((l) => l.startsWith('Running,'))!;
+    const [state, label, parent, type, initial] = row.split(',');
+    expect(state).toBe('Running');
+    expect(label).toBe(''); // label == id
+    expect(parent).toBe(''); // top-level
+    expect(type).toBe('normal');
+    expect(initial).toBe(''); // not the initial target
+  });
+
+  it('the CSV marker and the on-screen marker are the same character', () => {
+    // Not a coincidence: the requirement is that the same table reads the same
+    // way on screen, pasted into Excel, and in the .csv. They are separate
+    // constants (one is a wire format, one is a UI rule) so this pins them.
+    const model = parseOrThrow(`@startuml
+[*] --> Idle
+Idle --> Running : go
+Running --> Idle : stop
+@enduml`);
+    expect(modelToCanonicalCsv(model)).toContain(`,${EMPTY_CELL_DISPLAY}`);
   });
 
   it('flat model: matches the §4.2.6 canonical example', () => {
@@ -61,9 +89,9 @@ Failure --> Idle : reset
     // assert content by finding each row.
     const findRow = (id: string) =>
       lines.find((l) => l.startsWith(`${id},`));
-    expect(findRow('Idle')).toBe('Idle,待機,,normal,Y,Active,,,');
-    expect(findRow('Active')).toBe('Active,動作,,normal,,,Idle,Failure,[*]');
-    expect(findRow('Failure')).toBe('Failure,故障,,normal,,,,,Idle');
+    expect(findRow('Idle')).toBe('Idle,待機,,normal,Y,Active,-,-,-');
+    expect(findRow('Active')).toBe('Active,動作,,normal,,-,Idle,Failure,[*]');
+    expect(findRow('Failure')).toBe('Failure,故障,,normal,,-,-,-,Idle');
   });
 
   it('composite model: matches the §4.2.7 canonical example (event order = discovery)', () => {
@@ -87,10 +115,10 @@ Operating --> Idle : stop
     );
     const findRow = (id: string) =>
       lines.find((l) => l.startsWith(`${id},`));
-    expect(findRow('Idle')).toBe('Idle,,,normal,Y,Operating,,,');
-    expect(findRow('Operating')).toBe('Operating,,,composite,,,,,Idle');
-    expect(findRow('Running')).toBe('Running,,Operating,normal,Y,,Paused,,');
-    expect(findRow('Paused')).toBe('Paused,,Operating,normal,,,,Running,');
+    expect(findRow('Idle')).toBe('Idle,,,normal,Y,Operating,-,-,-');
+    expect(findRow('Operating')).toBe('Operating,,,composite,,-,-,-,Idle');
+    expect(findRow('Running')).toBe('Running,,Operating,normal,Y,-,Paused,-,-');
+    expect(findRow('Paused')).toBe('Paused,,Operating,normal,,-,-,Running,-');
   });
 
   it('renders guards and actions in event cells', () => {
@@ -104,7 +132,7 @@ Active --> [*] : done
       .split('\r\n')
       .find((l) => l.startsWith('Idle,'));
     expect(idleRow).toBe(
-      'Idle,,,normal,Y,"Active [cnt>0] / log(""go"")",'
+      'Idle,,,normal,Y,"Active [cnt>0] / log(""go"")",-'
     );
   });
 
