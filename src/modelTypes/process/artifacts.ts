@@ -7,6 +7,17 @@
 
 import type { ProcessModel, ProcessNode, ProcessTask } from './model';
 import { walkProcessNodes } from './model';
+import { EMPTY_CELL_DISPLAY } from '../../types/matrix';
+
+/**
+ * An artifact with no producer (or no consumer) is a real finding — a document
+ * nobody creates, or one nobody reads. Leaving the cell blank hides it behind
+ * "probably not filled in yet"; the marker states it. Same rule, same
+ * character, wherever a table body has nothing to say (SR-020).
+ */
+function orNone(values: string[]): string {
+  return values.length === 0 ? EMPTY_CELL_DISPLAY : values.join('; ');
+}
 
 /**
  * Find the first-reachable task(s) inside a body list. When a label
@@ -134,7 +145,7 @@ export function artifactsToCsv(rows: ArtifactRow[]): string {
   const lines = [CSV_HEADER.map(csvCell).join(',')];
   for (const r of rows) {
     lines.push(
-      [r.name, r.producers.join('; '), r.consumers.join('; ')]
+      [r.name, orNone(r.producers), orNone(r.consumers)]
         .map(csvCell)
         .join(',')
     );
@@ -149,7 +160,7 @@ export function artifactsToHtml(rows: ArtifactRow[]): string {
     rows
       .map(
         (r) =>
-          `<tr><td>${r.name}</td><td>${r.producers.join('; ')}</td><td>${r.consumers.join('; ')}</td></tr>`
+          `<tr><td>${r.name}</td><td>${orNone(r.producers)}</td><td>${orNone(r.consumers)}</td></tr>`
       )
       .join('') +
     '</tbody>';

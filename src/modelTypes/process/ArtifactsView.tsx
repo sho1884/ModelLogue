@@ -12,6 +12,7 @@ import {
   collectArtifacts,
 } from './artifacts';
 import type { ProcessModel } from './model';
+import { EMPTY_CELL_DISPLAY } from '../../types/matrix';
 
 function isProcessModel(m: unknown): m is ProcessModel {
   return !!(m && typeof m === 'object' && 'rootBody' in (m as object));
@@ -89,14 +90,14 @@ export function ArtifactsView() {
                 </td>
                 <td className="border border-gray-300 px-2 py-1 text-gray-700">
                   {r.producers.length === 0 ? (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-400">{EMPTY_CELL_DISPLAY}</span>
                   ) : (
                     r.producers.join('; ')
                   )}
                 </td>
                 <td className="border border-gray-300 px-2 py-1 text-gray-700">
                   {r.consumers.length === 0 ? (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-400">{EMPTY_CELL_DISPLAY}</span>
                   ) : (
                     r.consumers.join('; ')
                   )}

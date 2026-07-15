@@ -9,6 +9,17 @@
 
 import type { ProcessModel, ProcessTask } from './model';
 import { walkProcessNodes } from './model';
+import { EMPTY_CELL_DISPLAY } from '../../types/matrix';
+
+/**
+ * A lane with no hand-offs is a real finding — work that never passes to or
+ * from anyone. Leaving the cell blank hides it behind "probably not filled in
+ * yet"; the marker states it. Same rule, same character, wherever a table body
+ * has nothing to say (SR-020).
+ */
+function orNone(values: string[]): string {
+  return values.length === 0 ? EMPTY_CELL_DISPLAY : values.join('; ');
+}
 
 export interface HandOff {
   fromTask: string;
@@ -113,9 +124,9 @@ export function rolesToCsv(rows: RoleRow[]): string {
     lines.push(
       [
         r.lane,
-        r.tasks.join('; '),
-        r.outgoingHandOffs.map((h) => formatHandOff(h, 'out')).join('; '),
-        r.incomingHandOffs.map((h) => formatHandOff(h, 'in')).join('; '),
+        orNone(r.tasks),
+        orNone(r.outgoingHandOffs.map((h) => formatHandOff(h, 'out'))),
+        orNone(r.incomingHandOffs.map((h) => formatHandOff(h, 'in'))),
       ]
         .map(csvCell)
         .join(',')
@@ -131,7 +142,7 @@ export function rolesToHtml(rows: RoleRow[]): string {
     rows
       .map(
         (r) =>
-          `<tr><td>${r.lane}</td><td>${r.tasks.join('; ')}</td><td>${r.outgoingHandOffs.map((h) => formatHandOff(h, 'out')).join('; ')}</td><td>${r.incomingHandOffs.map((h) => formatHandOff(h, 'in')).join('; ')}</td></tr>`
+          `<tr><td>${r.lane}</td><td>${orNone(r.tasks)}</td><td>${orNone(r.outgoingHandOffs.map((h) => formatHandOff(h, 'out')))}</td><td>${orNone(r.incomingHandOffs.map((h) => formatHandOff(h, 'in')))}</td></tr>`
       )
       .join('') +
     '</tbody>';

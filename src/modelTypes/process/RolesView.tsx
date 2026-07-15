@@ -8,6 +8,7 @@ import { copyHtmlAndText } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
 import { collectRoles, rolesToCsv, rolesToHtml } from './roles';
 import type { ProcessModel } from './model';
+import { EMPTY_CELL_DISPLAY } from '../../types/matrix';
 
 function isProcessModel(m: unknown): m is ProcessModel {
   return !!(m && typeof m === 'object' && 'rootBody' in (m as object));
@@ -77,7 +78,7 @@ export function RolesView() {
                 </td>
                 <td className="border border-gray-300 px-2 py-1 text-gray-600">
                   {r.outgoingHandOffs.length === 0 ? (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-400">{EMPTY_CELL_DISPLAY}</span>
                   ) : (
                     <ul className="list-disc pl-4">
                       {r.outgoingHandOffs.map((h, i) => (
@@ -96,7 +97,7 @@ export function RolesView() {
                 </td>
                 <td className="border border-gray-300 px-2 py-1 text-gray-600">
                   {r.incomingHandOffs.length === 0 ? (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-400">{EMPTY_CELL_DISPLAY}</span>
                   ) : (
                     <ul className="list-disc pl-4">
                       {r.incomingHandOffs.map((h, i) => (
