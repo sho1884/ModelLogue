@@ -55,18 +55,46 @@ echo "          while the old container releases the port — so retry once afte
 echo "          a short pause; expect a brief blip)"
 $SSH "$SERVER" "cd $REMOTE_DIR && ($COMPOSE up -d || { echo '   port still busy, retrying in 5s...'; sleep 5; $COMPOSE up -d; })"
 
+# Services that MOUNT their source (docker-compose.prod.yml: `./tools/<x>:/app:ro`)
+# instead of baking it into an image. `up -d` only recreates a container when its
+# *config* changes, and a rsync'd source file is not config — so these keep
+# serving the code they loaded at startup, from a file that no longer exists on
+# disk. The deploy then passes: the site is up, the gate still answers, and
+# nothing reports that half the box ignored the release.
+#
+# Seen for real: an nswitch parser fix rsynced fine, `docker exec grep` found the
+# new line inside the container, and the API still returned the old error for
+# four more days' uptime. `restart` re-execs the process, which is all it takes.
+#
+# auth-verify is on this list too, and it is the AI gate — stale security code
+# is the version of this you do not want to find out about later.
+echo "==> 4b/5 Restart the source-mounted services (their code is not in an image)"
+$SSH "$SERVER" "cd $REMOTE_DIR && $COMPOSE restart nswitch-api auth-verify"
+
 echo "==> 5/5  Verify"
 echo "     --- containers ---"
 $SSH "$SERVER" "docker ps --format '{{.Names}}\t{{.Status}}' | grep modellogue"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/")
 gate=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SITE_URL/n8n/webhook/modellogue-chat" \
   -H 'Content-Type: application/json' -d '{}')
+# The site root is co-located content, not this repo (see ENVIRONMENT.md), so
+# a 200 on / says nothing about the app or the APIs. Ask each thing that this
+# deploy actually touched to do its job, not just to answer.
+app=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/app/")
+nsw=$(curl -s "$SITE_URL/nswitch/health" | head -c 200)
 echo "     --- endpoints ---"
 echo "     GET  $SITE_URL/             -> $code   (want 200)"
+echo "     GET  $SITE_URL/app/         -> $app   (want 200 = the SPA this repo builds)"
 echo "     POST /n8n/webhook (no auth) -> $gate   (want 302 or 403 = AI still gated)"
+echo "     GET  /nswitch/health        -> $nsw"
 
 fail=0
 [ "$code" = "200" ] || { echo "!! Site is not healthy (expected 200)."; fail=1; }
+[ "$app" = "200" ] || { echo "!! The app at /app is not healthy (expected 200)."; fail=1; }
+case "$nsw" in
+  *'"status"'*'"ok"'*) ;;
+  *) echo "!! nswitch is not answering (it mounts its source — did the restart above run?)."; fail=1 ;;
+esac
 case "$gate" in
   302|403) ;;
   200) echo "!! AI gate is OPEN (got 200) — unauthenticated calls can reach AI. Investigate before leaving."; fail=1 ;;
