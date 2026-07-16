@@ -84,6 +84,7 @@ ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
 | `/pict` | NeoCombi の PICT デモ API（`/health`・`/generate?order=N`・`/decision-table`） | `/opt/pict-service` | `override.yml`（サーバ専用） | `handle_path /pict/*` |
 | `/neoceg` | NeoCEG の原因結果グラフ デモ API（serve モード） | `/opt/neoceg` | `override.yml`（サーバ専用） | `handle_path /neoceg/*` |
 | `/`（サイトのルート） | **modellogue.com のランディングページ**。静的コンテンツ。リポジトリは別（`ModelLogue-Site`）で、自前の `deploy.sh` を持つ | `/opt/sites/modellogue-site` | `override.yml` の `web.volumes`（`:ro` bind） | `handle {}`（catch-all） |
+| `/checkout-benchmark` | **KASANE STORE 注文・決済ベンチマーク**。テスト設計練習用の純静的な模擬決済サイト（Cookie無し・外部通信無し）。リポジトリは別（`github.com/sho1884/checkout-benchmark`）で、自前の `deploy.sh` を持つ | `/opt/sites/checkout-benchmark` | `override.yml` の `web.volumes`（`:ro` bind） | `handle_path /checkout-benchmark/*`（+ 末尾スラッシュ308リダイレクト、CSP等ヘッダーをCaddyで付与） |
 
 - **CLI をデモ API として足す型** → `deploy-cli-demo` スキル。
 - **静的コンテンツを足す型** → `deploy-site-content` スキル。`site@` の制限鍵で
