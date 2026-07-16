@@ -41,6 +41,39 @@
 		reverse_proxy neoceg-api:8091
 	}
 
+	# Sister-project static content, co-located on this shared box (path-based).
+	# KASANE STORE checkout benchmark: a purely static MOCK checkout/payment site
+	# for data-driven & combinatorial test practice. Public; no gate. It sets no
+	# cookies, makes no network requests (CSP connect-src 'none'), and holds no
+	# secrets. Bind-mounted read-only from /opt/sites/checkout-benchmark by the
+	# server-only docker-compose.override.yml; deployed from its own repo
+	# (github.com/sho1884/checkout-benchmark) with the restricted rsync-only
+	# content key — never through this repo. This route is the only file here that
+	# knows about it. The site's own SERVER-SECURITY.md requires frame-ancestors /
+	# X-Frame-Options as real HTTP headers (a <meta> CSP cannot set them), so we
+	# reproduce its _headers here.
+	# Canonical trailing slash: /checkout-benchmark -> /checkout-benchmark/ so
+	# the page's relative asset paths resolve. Three explicit args
+	# (matcher, destination, code) — a two-arg `redir /path/ 308` would parse the
+	# leading-slash destination as the matcher and set "Location: 308".
+	redir /checkout-benchmark /checkout-benchmark/ 308
+	handle_path /checkout-benchmark/* {
+		root * /srv/sites/checkout-benchmark
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'"
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+			Referrer-Policy no-referrer
+			Permissions-Policy "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), screen-wake-lock=(), usb=(), web-share=(), xr-spatial-tracking=()"
+			Cross-Origin-Opener-Policy same-origin
+			Cross-Origin-Embedder-Policy require-corp
+			Cross-Origin-Resource-Policy same-origin
+			Cache-Control no-cache
+			-Server
+		}
+		file_server
+	}
+
 	# SR-136/137: identity probe for the front-end AI gate. Reports the
 	# operator's authenticated identity as seen by the edge auth gate
 	# (Cloudflare Access sets Cf-Access-Authenticated-User-Email once it has
