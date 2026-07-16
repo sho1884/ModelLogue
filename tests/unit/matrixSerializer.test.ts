@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matrixToHtml } from '../../src/engines/matrixSerializer';
+import { matrixToHtml, matrixToCsv } from '../../src/engines/matrixSerializer';
 import type { MatrixData } from '../../src/types/matrix';
 import { EMPTY_CELL_DISPLAY } from '../../src/types/matrix';
 
@@ -63,5 +63,35 @@ describe('matrixSerializer (SR-101)', () => {
   it('HTML: the marker is the shared constant, so it cannot drift from the view', () => {
     const html = matrixToHtml(sample, 'State / Event');
     expect(html).toContain(`<td>${EMPTY_CELL_DISPLAY}</td>`);
+  });
+});
+
+describe('matrixToCsv (grid CSV for the PreState×PostState tab)', () => {
+  it('serializes the visible grid: corner title, headers, one row each', () => {
+    const csv = matrixToCsv(sample, 'From \\ To');
+    const lines = csv.split('\r\n');
+    expect(lines[0]).toBe('From \\ To,start,"go,now"'); // header comma-quoted
+    expect(lines[1]).toBe('Composite,-,X'); // null cell → marker
+    expect(lines[2]).toBe('A,A,-');
+    expect(lines[3]).toBe('B,-,"A ""next"""'); // quote escaping
+  });
+
+  it('uses the same empty-cell marker as the screen and the HTML', () => {
+    // The three renderings of one table must agree. Feed a matrix that is all
+    // empty and every body cell must be the marker, never blank.
+    const empty: MatrixData = {
+      rows: [{ stateId: 'A', label: 'A', level: 0, isComposite: false }],
+      columnHeaders: ['e'],
+      cells: [[null]],
+    };
+    expect(matrixToCsv(empty, 'T')).toBe(`T,e\r\nA,${EMPTY_CELL_DISPLAY}`);
+  });
+
+  it('is NOT the canonical CSV — no state/label/parent/type/initial header', () => {
+    // Guards the whole point of this function: the state×state grid must not
+    // masquerade as the nswitch interchange format.
+    expect(matrixToCsv(sample, 'From \\ To')).not.toContain(
+      'state,label,parent,type,initial'
+    );
   });
 });

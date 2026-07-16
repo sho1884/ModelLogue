@@ -12,6 +12,35 @@
 import type { MatrixData } from '../types/matrix';
 import { EMPTY_CELL_DISPLAY, isEmptyCell } from '../types/matrix';
 
+function csvCell(s: string): string {
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Serialize the matrix as a faithful grid CSV — the visible table, one row per
+ * row, `-` for a forbidden cell (SR-020), RFC 4180 quoting, CRLF.
+ *
+ * This is NOT the canonical state-transition-table CSV: that format
+ * (`transitionTableSerializer`) is inherently state×event — its columns are
+ * fixed as state,label,parent,type,initial,<events> and it round-trips with
+ * modellogue-nswitch. It has no meaning for the PreState×PostState view, whose
+ * axes are both states. So that tab exports THIS grid: what the user sees,
+ * pivoted exactly as shown, for a spreadsheet — not a tool interchange.
+ *
+ * Composite indentation (a display-only affordance) is dropped; a CSV cell is
+ * the plain label.
+ */
+export function matrixToCsv(matrix: MatrixData, title: string): string {
+  const header = [title, ...matrix.columnHeaders].map(csvCell).join(',');
+  const rows = matrix.rows.map((row, ri) => {
+    const cells = matrix.cells[ri].map((c) =>
+      isEmptyCell(c) ? EMPTY_CELL_DISPLAY : (c as string)
+    );
+    return [row.label, ...cells].map(csvCell).join(',');
+  });
+  return [header, ...rows].join('\r\n');
+}
+
 function htmlEscape(s: string): string {
   return s
     .replace(/&/g, '&amp;')

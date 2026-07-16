@@ -97,4 +97,31 @@ test('Copy and Save .csv carry the table, marker and all', async ({
   expect(fileText, 'downloaded file is empty').not.toBe('');
   expect(fileText, 'the file and the clipboard disagree').toBe(plain);
   expect(download.suggestedFilename()).toMatch(/transitions.*\.csv$/);
+
+  // --- the two matrix tabs must export DIFFERENT files ---
+  // They show different tables (State×Event vs PreState×PostState) but used to
+  // download the same canonical CSV, because the download was derived from the
+  // model and ignored which matrix was on screen.
+  await page.getByRole('button', { name: /State×State/ }).click();
+  await expect(page.locator('table').first()).toBeVisible();
+
+  const dl2 = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Save \.csv/ }).first().click();
+  const download2 = await dl2;
+  const stream2 = await download2.createReadStream();
+  const chunks2: Buffer[] = [];
+  for await (const c of stream2) chunks2.push(c as Buffer);
+  const fileText2 = Buffer.concat(chunks2).toString('utf-8');
+
+  expect(fileText2, 'State×State download is empty').not.toBe('');
+  expect(
+    fileText2,
+    'the two tabs downloaded the same file — the bug'
+  ).not.toBe(fileText);
+  // The State×State grid is not the nswitch interchange format.
+  expect(fileText2).not.toContain('state,label,parent,type,initial');
+  expect(
+    download2.suggestedFilename(),
+    'the two downloads even share a filename'
+  ).not.toBe(download.suggestedFilename());
 });

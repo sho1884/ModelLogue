@@ -1,31 +1,40 @@
 import type { MatrixData } from '../../types/matrix';
 import { EMPTY_CELL_DISPLAY, isEmptyCell } from '../../types/matrix';
-import type { StateMachineModel } from '../../modelTypes/state-machine/model';
 import { ExportActions } from '../ExportActions';
 import { matrixToHtml } from '../../engines/matrixSerializer';
-import { modelToCanonicalCsv } from '../../modelTypes/state-machine/transitionTableSerializer';
 import { copyHtmlAndText } from '../../services/clipboard';
 import { downloadTextFile, sessionFilename } from '../../services/download';
 import { useSessionStore } from '../../stores/sessionStore';
 
 interface MatrixViewProps {
   matrix: MatrixData | null;
-  /**
-   * The parsed state machine model. Used for canonical CSV export (SR-101
-   * v7.3). The on-screen matrix view is driven by `matrix`; file download
-   * and plain-text clipboard payload are driven by the model so both tabs
-   * emit the same tool-interchange artifact.
-   */
-  model: StateMachineModel | null;
   title: string;
+  /**
+   * The plain-text / .csv export payload for THIS tab (SR-101: "export each
+   * matrix from its tab"). Each tab passes its own, because the two matrices
+   * are different artifacts: State×Event exports the canonical
+   * state-transition-table CSV (round-trips with modellogue-nswitch), while
+   * PreState×PostState — whose axes are both states — has no canonical form
+   * and exports a faithful grid CSV of what is shown. Deriving one CSV from
+   * the model for both tabs is exactly how they used to download identically.
+   */
+  exportCsv: string;
+  /** Filename suffix, so the two tabs' downloads are also distinguishable. */
+  exportSuffix: string;
+  /** Tooltip describing what the .csv is, since it now differs per tab. */
+  saveTitle: string;
 }
-
-const EXPORT_SUFFIX = 'transitions';
 
 // Pixels of left padding per indentation level (hybrid pattern).
 const INDENT_PX = 18;
 
-export function MatrixView({ matrix, model, title }: MatrixViewProps) {
+export function MatrixView({
+  matrix,
+  title,
+  exportCsv,
+  exportSuffix,
+  saveTitle,
+}: MatrixViewProps) {
   const sessionName = useSessionStore((s) => s.sessionName);
 
   if (!matrix || matrix.rows.length === 0) {
@@ -36,25 +45,23 @@ export function MatrixView({ matrix, model, title }: MatrixViewProps) {
     );
   }
 
-  const canonicalCsv = model ? modelToCanonicalCsv(model) : '';
-
   return (
     <div className="flex flex-col h-full">
       <div className="px-2 py-1 bg-gray-50 border-b border-gray-200 flex items-center justify-end shrink-0">
         <ExportActions
           onCopy={() =>
-            copyHtmlAndText(matrixToHtml(matrix, title), canonicalCsv)
+            copyHtmlAndText(matrixToHtml(matrix, title), exportCsv)
           }
           onSave={() =>
             downloadTextFile(
-              sessionFilename(sessionName, EXPORT_SUFFIX, 'csv'),
-              canonicalCsv,
+              sessionFilename(sessionName, exportSuffix, 'csv'),
+              exportCsv,
               'text/csv'
             )
           }
-          copyTitle="Copy as a table. HTML payload is the matrix for Excel / Sheets / Word; plain-text payload is the canonical state-transition-table CSV for repos, AI prompts, and test-generation tools."
+          copyTitle="Copy as a table. HTML payload is the matrix for Excel / Sheets / Word; plain-text payload is the CSV for repos, AI prompts, and tools."
           saveLabel="Save .csv"
-          saveTitle="Download the canonical state-transition-table CSV (RFC 4180, shared format with modellogue-nswitch)"
+          saveTitle={saveTitle}
         />
       </div>
       <div className="overflow-auto flex-1 p-2">
