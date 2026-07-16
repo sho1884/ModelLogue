@@ -9,6 +9,9 @@ dist/
 .env.local
 .env.*.local
 
+# Deploy target with the real server IP / key (never commit)
+deploy/server.local.sh
+
 # IDE
 .vscode/
 .idea/

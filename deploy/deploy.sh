@@ -17,8 +17,16 @@
 
 set -euo pipefail
 
-# --- Where we deploy to (defaults = the current live box) --------------------
-SERVER="${SERVER:-root@162.43.92.10}"
+# --- Where we deploy to ------------------------------------------------------
+# The real server IP and key are NOT committed. Put them in an untracked
+# deploy/server.local.sh (gitignored; copy deploy/server.local.sh.example),
+# which this script sources if present. Or just export them for one run:
+#   SERVER=root@1.2.3.4 SSH_KEY=~/.ssh/mykey ./deploy/deploy.sh
+if [ -f "$(dirname "$0")/server.local.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$(dirname "$0")/server.local.sh"
+fi
+SERVER="${SERVER:-root@<SERVER_IP>}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_modellogue}"
 REMOTE_DIR="${REMOTE_DIR:-/opt/modellogue}"
 SITE_URL="${SITE_URL:-https://modellogue.com}"

@@ -1,0 +1,15 @@
+# Local, UNTRACKED deploy target for deploy/deploy.sh.
+#
+# Copy this file to deploy/server.local.sh (which is gitignored) and fill in
+# the real values for your box. deploy.sh sources server.local.sh if it exists,
+# so the real server IP / key never live in the committed repo.
+#
+#   cp deploy/server.local.sh.example deploy/server.local.sh
+#   $EDITOR deploy/server.local.sh
+#
+# These are shell exports, sourced by deploy.sh.
+
+export SERVER="root@<SERVER_IP>"
+export SSH_KEY="$HOME/.ssh/id_ed25519_modellogue"
+# export REMOTE_DIR="/opt/modellogue"
+# export SITE_URL="https://modellogue.com"

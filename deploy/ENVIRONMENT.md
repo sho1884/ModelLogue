@@ -23,14 +23,14 @@
 |---|---|
 | プロバイダ | **XServer VPS**（2GB プラン）※ Hetzner ではありません |
 | OS | Ubuntu 24.04 |
-| サーバ IP | `162.43.92.10` |
+| サーバ IP | `<SERVER_IP>`（実値は公開リポジトリに置かない。非追跡の `deploy/server.local.sh` に格納） |
 | SSH | 鍵認証のみ（パスワード不可）。例では鍵ファイル名 `id_ed25519_modellogue` |
 | コード置き場 | `/opt/modellogue` |
 | コードの入り方 | **git ではありません**。手元のリポジトリから `rsync` で同期します（`git pull` は効きません） |
 
 SSH の例：
 ```bash
-ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
+ssh -i ~/.ssh/id_ed25519_modellogue root@<SERVER_IP>
 ```
 
 ### 鍵は2種類ある（用途で使い分ける）
@@ -108,10 +108,10 @@ ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10
 - ワークフロー名は `modellogue-chat`。n8n エディタは Web に晒しておらず、**ホストポートも公開していません**（毎デプロイで起きていた 5678 のポート競合を根絶し、露出も無くすため。アプリは Docker ネットワーク内で n8n を叩くのでホスト公開は不要）。override.yml で `n8n.ports: !override []` により無効化。エディタを触るときは n8n コンテナの IP へ直接 SSH フォワード：
   ```bash
   # 1) n8n コンテナの IP を取得
-  ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10 \
+  ssh -i ~/.ssh/id_ed25519_modellogue root@<SERVER_IP> \
     "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' modellogue-n8n-1"
   # 2) その IP へフォワード（<ip> を置換）→ 手元のブラウザで http://localhost:5678
-  ssh -i ~/.ssh/id_ed25519_modellogue -L 5678:<ip>:5678 root@162.43.92.10
+  ssh -i ~/.ssh/id_ed25519_modellogue -L 5678:<ip>:5678 root@<SERVER_IP>
   ```
   > **DNS の教訓**：n8n が外部（OpenAI 等）を解決できず `EAI_AGAIN` を出すときは、コンテナの `/etc/resolv.conf` が `127.0.0.53`（ホストの stub）になっている疑い。他コンテナと同じ `127.0.0.11`（Docker 埋め込み DNS）になるよう **n8n を作り直す**と直る（`… up -d --force-recreate n8n`）。
 
@@ -185,10 +185,10 @@ SERVER=root@<new-ip> SSH_KEY=~/.ssh/<key> ./deploy/deploy.sh
 
 ```bash
 # 状態
-ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10 'docker ps --format "{{.Names}}\t{{.Status}}"'
+ssh -i ~/.ssh/id_ed25519_modellogue root@<SERVER_IP> 'docker ps --format "{{.Names}}\t{{.Status}}"'
 
 # ログ（例: web）
-ssh -i ~/.ssh/id_ed25519_modellogue root@162.43.92.10 \
+ssh -i ~/.ssh/id_ed25519_modellogue root@<SERVER_IP> \
   'cd /opt/modellogue && docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.override.yml logs --tail=100 web'
 
 # 公開URLとゲートの手動チェック
