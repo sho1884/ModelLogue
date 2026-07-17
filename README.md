@@ -10,6 +10,10 @@
 > disposable "volatile canvas" and the human–AI **review dialogue** as the real
 > design asset.
 
+![ModelLogue のレビュー画面：状態遷移図・マトリクス・N-switch テストケース・AI対話を一画面で](Doc/manual/assets/Screenshot_Stopwatch1.png)
+
+<sub>左に図（マーカー描画可）、下に状態遷移マトリクスと N-switch テストケース、右に AI との設計レビュー対話。図は使い捨て、対話ログが資産。</sub>
+
 ---
 
 ## コンセプト
@@ -31,6 +35,32 @@
 
 モデル型はセッションごとに固定され、`src/modelTypes/<type>/` 配下の追加で 4 型目以降も導入できる構造です
 （[ADR-012](Doc/adr/ADR-012-model-type-plugin-architecture.yaml)）。
+
+## ⌨️ CLI: N-switch テストケース生成（GUI 不要）
+
+状態遷移図から **N-switch カバレッジのテストケース**を生成する部分は、GUI と独立した
+**スタンドアロンの Python CLI**（[tools/nswitch/](tools/nswitch/)）としても使えます。
+PlantUML ソースまたは状態遷移表 CSV を入力に、テストケース CSV を標準出力へ吐きます。
+
+```bash
+pip install ./tools/nswitch
+
+# 状態遷移図 → 1-switch テストケース CSV
+modellogue-nswitch machine.puml -n 1
+
+# 2-switch ＋ 無効遷移の負のテストも
+modellogue-nswitch machine.puml -n 2 --invalid -o tests.csv
+
+# シナリオ形式で、スコープ名を付けて
+modellogue-nswitch machine.puml --scenarios --name Stopwatch
+
+# HTTP API として常駐（GUI や CI から呼ぶ。docker compose でも起動）
+modellogue-nswitch serve --port 8090
+```
+
+`-n` は 0 / 1 / 2（既定 1）。入力形式（`puml` / `csv`）は自動判別、`--format` で明示も可能。
+インストールせずに動かす場合は `cd tools/nswitch && PYTHONPATH=src python -m modellogue_nswitch ...`。
+契約の詳細は [tools/nswitch/Requirements_Specification.md](tools/nswitch/Requirements_Specification.md)（ADR-010）。
 
 ## アーキテクチャ
 
