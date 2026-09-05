@@ -17,6 +17,12 @@ The result of a review is preserved in the evidence JSON saved via **Save & fini
 
 レビューの成果は、**Save & finish** で保存する証跡 JSON に残ります。そこには、最終的に合意したモデルのソース、反映のたびの版の履歴、そこに至る対話ログ、マーカー、結論が入ります。図に付けるマーカーは指摘を書き留めるための一時的な注釈で、図の画像には書き出されません。
 
+## Links / リンク
+
+- **Application / アプリケーション**: [modellogue.com/app](https://modellogue.com/app) — the live app; sign in to use the AI / 公開中のアプリ。AI を使うにはサインイン
+- **Source code / ソースコード**: [github.com/sho1884/ModelLogue](https://github.com/sho1884/ModelLogue) — MIT License; issues and pull requests welcome / MIT ライセンス。Issue・Pull Request 歓迎
+- **Sibling tools / 姉妹ツール**: [NeoCEG](https://sho1884.github.io/public-files/NeoCEG/) ・ [NeoCombi](https://sho1884.github.io/public-files/NeoCombi/) — see the last section of this page / 本ページ末尾の節を参照
+
 ## How this manual is organized / このマニュアルの構成
 
 Common usage is on this page; the model-type-specific ways to write and read each model are split into separate pages.
@@ -278,3 +284,29 @@ At the very bottom, the connection state of the **PlantUML Server** (diagram gen
 - Review states and transitions → [State machine / 状態遷移図](state-machine.md) / 状態と遷移をレビューする
 - Review requirements and traceability → [Requirement / 要求図](requirement.md) / 要求とトレーサビリティをレビューする
 - Review business flows and procedures → [Process / プロセス図](process.md) / 業務フロー・手続きをレビューする
+
+---
+
+## Sibling tools / 姉妹ツール
+
+ModelLogue is one of **three tools** that share a text design source and one coherent architecture,
+introduced together at **[modellogue.com](https://modellogue.com/)**.
+
+ModelLogue は、テキストの設計ソースと統一感のある構成思想でつながる**3つのツール**の一つです。
+まとめて **[modellogue.com](https://modellogue.com/)** で紹介しています。
+
+| Tool / ツール | What it makes explicit / 何を明示するか | Manual / マニュアル | Source / ソース |
+|---|---|---|---|
+| **ModelLogue** (this tool / 本ツール) | State machines, SysML requirement and process diagrams, designed and reviewed in dialogue with AI; N-switch tests from a state machine / 状態遷移・SysML の要求図とプロセス図を AI との対話で設計・レビュー。状態遷移から N スイッチテストを生成 | this manual / 本マニュアル | [GitHub](https://github.com/sho1884/ModelLogue) |
+| [NeoCEG](https://neo-ceg.vercel.app/) | The logic that derives an outcome, as a cause-effect graph → decision table / 結果を導く論理を、原因結果グラフ → デシジョンテーブルとして | [Docs / ドキュメント](https://sho1884.github.io/public-files/NeoCEG/) | [GitHub](https://github.com/sho1884/NeoCEG) |
+| [NeoCombi](https://neo-combi.vercel.app/) | The input space and the combinations worth trying / 入力空間と、試すべき組み合わせ | [Docs / ドキュメント](https://sho1884.github.io/public-files/NeoCombi/) | [GitHub](https://github.com/sho1884/NeoCombi) |
+
+All three treat a **text source as the design artifact** and publish its grammar as an EBNF specification, so an AI can write a first draft that you then review in the tool — the same working style as the [grammar definitions](state-machine.md) in this manual. All three are MIT-licensed and free to use.
+
+3つとも **テキストのソースを設計の実体** として扱い、その文法を EBNF 仕様として公開しています。AI に下書きを書かせ、ツール上でレビューするという進め方は共通です（本マニュアルの[文法定義](state-machine.md)と同じ考え方）。いずれも MIT ライセンスで無償で使えます。
+
+### Where the handover happens / どこで引き継ぐか
+
+- A **transition guard** that hides real decision logic (several conditions combined) is where NeoCEG takes over: model the logic as a cause-effect graph and get the decision table. / 遷移の **ガード条件** に複数条件の論理が隠れているときは NeoCEG の出番です。論理を原因結果グラフで表し、デシジョンテーブルを得ます。
+- **Test cases**: a state machine yields N-switch cases in this tool ([Test cases tab](state-machine.md)); the input space of a screen or an API yields pairwise sets in NeoCombi. / **テストケース**：状態遷移からは本ツールで N-switch を（[Test cases タブ](state-machine.md)）、画面や API の入力空間からは NeoCombi でペアワイズを得ます。
+- The [process diagram](process.md) shows *who does what in what order*; NeoCEG and NeoCombi cover *what a single decision or a single input space contains*. / [プロセス図](process.md)は「誰が・何を・どの順で」を、NeoCEG と NeoCombi は「ひとつの判断・ひとつの入力空間の中身」を扱います。
