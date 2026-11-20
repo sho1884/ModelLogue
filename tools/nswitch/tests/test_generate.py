@@ -22,8 +22,8 @@ LOOP = (
 def test_tests_csv_is_columnar():
     result = generate(parse_puml(SIMPLE), n=0)
     header = tests_to_csv(result.tests).split("\n")[0]
-    # 0-switch = single transition => one (event, reached) step.
-    assert header == "seq,id,start,event_1,reached_1,scenarios"
+    # 0-switch = single transition => one (event, guard, action, reached) step.
+    assert header == "seq,id,start,event_1,guard_1,action_1,reached_1,scenarios"
 
 
 def test_ids_use_scope_and_type():
@@ -107,8 +107,8 @@ def test_scenarios_csv_and_cross_reference():
     result = generate(parse_puml(LOOP), n=1)
     assert result.scenarios
     sc_header = scenarios_to_csv(result.scenarios).split("\n")[0]
-    assert sc_header.startswith("seq,id,start,event_1,reached_1")
-    assert sc_header.endswith(",covers")
+    assert sc_header.startswith("seq,id,start,event_1,guard_1,action_1,reached_1")
+    assert sc_header.endswith(",covers,preconditions")
     # Cross-reference is populated in both directions.
     assert any(t.scenarios for t in result.tests)
     assert any(s.covers for s in result.scenarios)

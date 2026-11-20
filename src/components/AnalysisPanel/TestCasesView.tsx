@@ -1,14 +1,17 @@
 // SR-103: Display N-switch Tests (verification patterns — primary) and
 // Scenarios (executable walks that cover them — secondary), fed by the
 // modellogue-nswitch HTTP API. Output is columnar (§6): one column per
-// (event, reached) step, for machine processing. SR-102: Copy / Save with a
-// Tests|Scenarios toggle that switches both the on-screen table and the
-// export target. Reactive to the current source; errors surface in-place.
+// (event, guard, action, reached) step, for machine processing. SR-102: Copy /
+// Save with a Tests|Scenarios toggle that switches both the on-screen table and
+// the export target. Reactive to the current source; errors surface in-place.
+// Guards are shown, never evaluated (nswitch §7.4.1, ADR-019): a Scenario that
+// passes through a guarded step states the guard it assumes, and that guard
+// cell is highlighted.
 
 import type { ReactNode } from 'react';
 import { useTestCasesStore } from '../../stores/testCasesStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import type { CoverageMode, Scenario, Step, Test } from '../../types/testCase';
+import type { CoverageMode, Precondition, Scenario, Step, Test } from '../../types/testCase';
 import { ExportActions } from '../ExportActions';
 import {
   scenariosToCsv,
@@ -177,6 +180,9 @@ export function TestCasesView() {
       {result && result.uncovered.length > 0 && (
         <UncoveredBanner uncovered={result.uncovered} />
       )}
+      {result && view === 'scenarios' && hasData && (
+        <PreconditionsBanner scenarios={result.scenarios} />
+      )}
 
       {/* Table body: tests or scenarios */}
       <div
@@ -209,21 +215,43 @@ const TH =
   'border border-gray-300 bg-gray-100 px-2 py-1 text-left font-medium text-gray-600 whitespace-nowrap';
 const TD = 'border border-gray-300 px-2 py-1 whitespace-nowrap';
 
-// Columnar header cells: #, id, start, (event_i, reached_i)…, tail.
-function stepHeaders(k: number, tail: string): string[] {
+// Columnar header cells: #, id, start, (event_i, guard_i, action_i, reached_i)…, tail.
+function stepHeaders(k: number, ...tail: string[]): string[] {
   const h = ['#', 'id', 'start'];
-  for (let i = 1; i <= k; i++) h.push(`event_${i}`, `reached_${i}`);
-  h.push(tail);
+  for (let i = 1; i <= k; i++) h.push(`event_${i}`, `guard_${i}`, `action_${i}`, `reached_${i}`);
+  h.push(...tail);
   return h;
 }
 
-function StepCells({ steps, k }: { steps: Step[]; k: number }) {
+// `assumed` holds the 1-based step numbers whose guard the row assumes to hold
+// (Scenario preconditions); those guard cells are highlighted.
+function StepCells({
+  steps,
+  k,
+  assumed,
+}: {
+  steps: Step[];
+  k: number;
+  assumed?: ReadonlySet<number>;
+}) {
   const cells: ReactNode[] = [];
   for (let i = 0; i < k; i++) {
     const s = steps[i];
+    const guard = s?.guard ?? '';
+    const isAssumed = guard !== '' && (assumed?.has(i + 1) ?? false);
     cells.push(
       <td key={`e${i}`} className={`${TD} font-mono text-gray-800`}>
         {s ? s.event : ''}
+      </td>,
+      <td
+        key={`g${i}`}
+        className={`${TD} font-mono ${isAssumed ? 'bg-amber-100 text-amber-900 font-semibold' : 'text-gray-700'}`}
+        title={isAssumed ? `Precondition: this guard must hold at step ${i + 1}` : undefined}
+      >
+        {guard ? `[${guard}]` : ''}
+      </td>,
+      <td key={`a${i}`} className={`${TD} text-gray-700`}>
+        {s?.action ?? ''}
       </td>,
       <td key={`r${i}`} className={`${TD} font-mono text-gray-800`}>
         {s ? s.reached : ''}
@@ -231,6 +259,20 @@ function StepCells({ steps, k }: { steps: Step[]; k: number }) {
     );
   }
   return <>{cells}</>;
+}
+
+// "Precondition: step 4 [guard] holds" — one line per guarded step.
+function PreconditionsCell({ pre }: { pre: Precondition[] | undefined }) {
+  const list = pre ?? [];
+  return (
+    <td className={`${TD} text-amber-900`}>
+      {list.map((p) => (
+        <div key={p.step}>
+          Precondition: step {p.step} <span className="font-mono">[{p.guard}]</span> holds
+        </div>
+      ))}
+    </td>
+  );
 }
 
 function TestsTable({ tests }: { tests: Test[] }) {
@@ -298,7 +340,7 @@ function InvTestsTable({ tests }: { tests: Test[] }) {
 
 function ScenariosTable({ scenarios }: { scenarios: Scenario[] }) {
   const k = maxSteps(scenarios);
-  const headers = stepHeaders(k, 'covers');
+  const headers = stepHeaders(k, 'covers', 'preconditions');
   return (
     <table className="text-xs border-collapse">
       <thead>
@@ -316,14 +358,39 @@ function ScenariosTable({ scenarios }: { scenarios: Scenario[] }) {
             <td className={`${TD} text-right text-gray-500`}>{i + 1}</td>
             <td className={`${TD} font-mono text-gray-800`}>{s.id}</td>
             <td className={`${TD} font-mono text-gray-800`}>{s.start}</td>
-            <StepCells steps={s.steps} k={k} />
+            <StepCells
+              steps={s.steps}
+              k={k}
+              assumed={new Set((s.preconditions ?? []).map((p) => p.step))}
+            />
             <td className={`${TD} font-mono text-emerald-700`}>
               {s.covers.join('; ')}
             </td>
+            <PreconditionsCell pre={s.preconditions} />
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+// Shown above the Scenarios table when any walk passes through a guarded step.
+// The generator does not evaluate guards (nswitch §7.4.1, ADR-019), so the
+// tester has to make each listed guard true — and a guard that depends on
+// history may make a walk impossible.
+function PreconditionsBanner({ scenarios }: { scenarios: Scenario[] }) {
+  const n = scenarios.filter((s) => (s.preconditions ?? []).length > 0).length;
+  if (n === 0) return null;
+  return (
+    <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 shrink-0">
+      <strong className="font-semibold">
+        {n} scenario{n === 1 ? '' : 's'} assume{n === 1 ? 's' : ''} guards hold.
+      </strong>{' '}
+      Guards are not evaluated: make each highlighted guard true at its step
+      before running. If what happened earlier in the walk makes a guard
+      impossible there, the scenario cannot be run as written — model that
+      condition as a separate state instead of a guard.
+    </div>
   );
 }
 

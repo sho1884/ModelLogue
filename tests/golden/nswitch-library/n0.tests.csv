@@ -1,0 +1,6 @@
+seq,id,start,event_1,guard_1,action_1,reached_1,scenarios
+1,lib-0S-001,利用停止,(),,,(*),lib-SC-001;lib-SC-002;lib-SC-003
+2,lib-0S-002,在庫,貸出,,,貸出中,lib-SC-001;lib-SC-002;lib-SC-003
+3,lib-0S-003,貸出中,返却,期限経過済,,利用停止,lib-SC-001;lib-SC-002;lib-SC-003
+4,lib-0S-004,貸出中,返却,期限内,,在庫,lib-SC-002
+5,lib-0S-005,貸出中,返却期限経過,,延滞を記録する,貸出中,lib-SC-003

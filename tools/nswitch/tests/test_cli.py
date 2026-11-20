@@ -36,7 +36,7 @@ def test_cli_puml_file_produces_test_case_csv(tmp_path: Path):
     r = _run([str(puml)])
     assert r.returncode == 0
     # Columnar Tests CSV (§6.1); default n=1 → (event_i, reached_i) pairs.
-    assert r.stdout.splitlines()[0].startswith("seq,id,start,event_1,reached_1")
+    assert r.stdout.splitlines()[0].startswith("seq,id,start,event_1,guard_1,action_1,reached_1")
 
 
 def test_cli_invalid_flag_emits_negative_tests():
@@ -102,7 +102,7 @@ def test_cli_scenarios_mode():
     )
     r = _run(["--scenarios"], stdin=puml)
     assert r.returncode == 0
-    assert r.stdout.startswith("seq,id,start,event_1,reached_1")
+    assert r.stdout.startswith("seq,id,start,event_1,guard_1,action_1,reached_1")
 
 
 def test_cli_output_file_writes_csv(tmp_path: Path):

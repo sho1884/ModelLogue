@@ -2,9 +2,20 @@
 // Mirrors the JSON shape in tools/nswitch/Requirements_Specification.md
 // §1.1 (Tests / Scenarios, ids) and §6 (columnar output).
 
+// One transition of a Test or Scenario. `guard` / `action` are the text written
+// on the transition ("" when it has none). Guards are shown, never evaluated
+// (nswitch §7.4.1, ADR-019).
 export interface Step {
   event: string;
+  guard: string;
+  action: string;
   reached: string;
+}
+
+// A guard a Scenario assumes to hold at one of its steps (`step` is 1-based).
+export interface Precondition {
+  step: number;
+  guard: string;
 }
 
 // A Test = one verification pattern (§1.1). Positive N-switch chain (0S/1S/2S)
@@ -29,6 +40,7 @@ export interface Scenario {
   start: string;
   steps: Step[];
   covers: string[]; // Test ids exercised
+  preconditions: Precondition[]; // guarded steps, in step order; [] when none
 }
 
 export interface UncoveredChainTransition {

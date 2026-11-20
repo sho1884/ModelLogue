@@ -3,7 +3,11 @@
 Builds **Tests** (the coverage patterns to verify — primary) and **Scenarios**
 (executable walks that cover them — secondary), per §1.1 / §6 of
 ``Requirements_Specification.md``. Output is columnar (§6): one column per
-`(event, reached)` step, not a packed string.
+`(event, guard, action, reached)` step, not a packed string.
+
+Guards are shown, never evaluated (§7.4.1, ADR-019): walks are built from how
+transitions connect, every step carries its guard and action as written, and a
+Scenario lists the guarded steps it assumes in ``preconditions``.
 
 The path-algebra / cover algorithm in ``algorithm.py`` is unchanged: the
 required chains are the positive Tests, the invalid cells are the negative
@@ -29,7 +33,17 @@ from .model import StateMachineModel, Transition
 @dataclass(slots=True)
 class Step:
     event: str
+    guard: str  # guard text without the brackets; "" when the transition has none
+    action: str  # "" when the transition has none
     reached: str
+
+
+@dataclass(slots=True)
+class Precondition:
+    """A guard a Scenario assumes to hold at one of its steps (§6.2, §7.4.1)."""
+
+    step: int  # 1-based step number within the Scenario
+    guard: str
 
 
 @dataclass(slots=True)
@@ -57,6 +71,9 @@ class Scenario:
     start: str
     steps: list[Step]
     covers: list[str] = field(default_factory=list)  # positive Test ids
+    # Guarded steps this walk passes through, in step order. The generator does
+    # not evaluate guards, so these are what the tester must make true.
+    preconditions: list[Precondition] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -75,7 +92,19 @@ def _event_of(t: Transition) -> str:
 
 
 def _steps_of(seq: tuple[Transition, ...]) -> list[Step]:
-    return [Step(event=_event_of(t), reached=t.target_state_id) for t in seq]
+    return [
+        Step(
+            event=_event_of(t),
+            guard=t.guard or "",
+            action=t.action or "",
+            reached=t.target_state_id,
+        )
+        for t in seq
+    ]
+
+
+def _preconditions_of(steps: list[Step]) -> list[Precondition]:
+    return [Precondition(step=i, guard=s.guard) for i, s in enumerate(steps, start=1) if s.guard]
 
 
 def _scope_of(layer: Layer, name: str) -> str:
@@ -118,14 +147,20 @@ def _display_walk(
 
     strip the leading initial-marker step so the walk begins at the first real
     state (the initial marker is not a state), then render every state via
-    :func:`_display_state` (labels; final -> ``(*)``). Events are unchanged.
+    :func:`_display_state` (labels; final -> ``(*)``). Events, guards and
+    actions are unchanged.
     """
     if start == layer.initial_id and steps:
         start = steps[0].reached  # target of the (dropped) entry transition
         steps = steps[1:]
     d_start = _display_state(start, layer, label_of)
     d_steps = [
-        Step(event=s.event, reached=_display_state(s.reached, layer, label_of))
+        Step(
+            event=s.event,
+            guard=s.guard,
+            action=s.action,
+            reached=_display_state(s.reached, layer, label_of),
+        )
         for s in steps
     ]
     return d_start, d_steps
@@ -189,7 +224,13 @@ def generate(
                 tp.start, _steps_of(tp.transitions), layer, label_of
             )
             scenarios.append(
-                Scenario(id=f"{scope}-SC-{i:03d}", scope=scope, start=d_start, steps=d_steps)
+                Scenario(
+                    id=f"{scope}-SC-{i:03d}",
+                    scope=scope,
+                    start=d_start,
+                    steps=d_steps,
+                    preconditions=_preconditions_of(d_steps),
+                )
             )
 
         # Positive Tests — one per required chain **over real transitions**.
@@ -253,6 +294,29 @@ def _max_steps(items) -> int:
     return max((len(x.steps) for x in items), default=0)
 
 
+def _step_header(k: int) -> list[str]:
+    header: list[str] = []
+    for i in range(1, k + 1):
+        header += [f"event_{i}", f"guard_{i}", f"action_{i}", f"reached_{i}"]
+    return header
+
+
+def _step_cells(steps: list[Step], k: int) -> list[str]:
+    cells: list[str] = []
+    for i in range(k):
+        if i < len(steps):
+            st = steps[i]
+            cells += [st.event, st.guard, st.action, st.reached]
+        else:
+            cells += ["", "", "", ""]
+    return cells
+
+
+def preconditions_cell(pre: list[Precondition]) -> str:
+    """`<step>:[<guard>]`, semicolon-separated, in step order (§6.2)."""
+    return ";".join(f"{p.step}:[{p.guard}]" for p in pre)
+
+
 def tests_to_csv(tests: list[Test]) -> str:
     """§6.1. Homogeneous per call: all positive (columnar) or all INV."""
     buf = io.StringIO()
@@ -266,20 +330,9 @@ def tests_to_csv(tests: list[Test]) -> str:
         return buf.getvalue()
 
     k = _max_steps(tests)  # uniform within a positive level
-    header = ["seq", "id", "start"]
-    for i in range(1, k + 1):
-        header += [f"event_{i}", f"reached_{i}"]
-    header.append("scenarios")
-    writer.writerow(header)
+    writer.writerow(["seq", "id", "start", *_step_header(k), "scenarios"])
     for seq, t in enumerate(tests, start=1):
-        row = [seq, t.id, t.start]
-        for i in range(k):
-            if i < len(t.steps):
-                row += [t.steps[i].event, t.steps[i].reached]
-            else:
-                row += ["", ""]
-        row.append(";".join(t.scenarios))
-        writer.writerow(row)
+        writer.writerow([seq, t.id, t.start, *_step_cells(t.steps, k), ";".join(t.scenarios)])
     return buf.getvalue()
 
 
@@ -288,20 +341,18 @@ def scenarios_to_csv(scenarios: list[Scenario]) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     k = _max_steps(scenarios)
-    header = ["seq", "id", "start"]
-    for i in range(1, k + 1):
-        header += [f"event_{i}", f"reached_{i}"]
-    header.append("covers")
-    writer.writerow(header)
+    writer.writerow(["seq", "id", "start", *_step_header(k), "covers", "preconditions"])
     for seq, s in enumerate(scenarios, start=1):
-        row = [seq, s.id, s.start]
-        for i in range(k):
-            if i < len(s.steps):
-                row += [s.steps[i].event, s.steps[i].reached]
-            else:
-                row += ["", ""]
-        row.append(";".join(s.covers))
-        writer.writerow(row)
+        writer.writerow(
+            [
+                seq,
+                s.id,
+                s.start,
+                *_step_cells(s.steps, k),
+                ";".join(s.covers),
+                preconditions_cell(s.preconditions),
+            ]
+        )
     return buf.getvalue()
 
 
@@ -333,6 +384,7 @@ def result_to_dict(result: GenerationResult) -> dict:
 
 __all__ = [
     "Step",
+    "Precondition",
     "Test",
     "Scenario",
     "GenerationResult",

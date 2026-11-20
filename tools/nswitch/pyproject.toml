@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modellogue-nswitch"
-version = "0.1.0"
+version = "0.2.0"
 description = "N-switch coverage test case generator for PlantUML state machines"
 readme = "Requirements_Specification.md"
 requires-python = ">=3.10"

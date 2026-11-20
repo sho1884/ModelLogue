@@ -1,0 +1,243 @@
+{
+  "tests": [
+    {
+      "id": "lib-0S-001",
+      "type": "0S",
+      "scope": "lib",
+      "start": "利用停止",
+      "steps": [
+        {
+          "event": "()",
+          "guard": "",
+          "action": "",
+          "reached": "(*)"
+        }
+      ],
+      "event": "",
+      "expect": "",
+      "scenarios": [
+        "lib-SC-001",
+        "lib-SC-002",
+        "lib-SC-003"
+      ]
+    },
+    {
+      "id": "lib-0S-002",
+      "type": "0S",
+      "scope": "lib",
+      "start": "在庫",
+      "steps": [
+        {
+          "event": "貸出",
+          "guard": "",
+          "action": "",
+          "reached": "貸出中"
+        }
+      ],
+      "event": "",
+      "expect": "",
+      "scenarios": [
+        "lib-SC-001",
+        "lib-SC-002",
+        "lib-SC-003"
+      ]
+    },
+    {
+      "id": "lib-0S-003",
+      "type": "0S",
+      "scope": "lib",
+      "start": "貸出中",
+      "steps": [
+        {
+          "event": "返却",
+          "guard": "期限経過済",
+          "action": "",
+          "reached": "利用停止"
+        }
+      ],
+      "event": "",
+      "expect": "",
+      "scenarios": [
+        "lib-SC-001",
+        "lib-SC-002",
+        "lib-SC-003"
+      ]
+    },
+    {
+      "id": "lib-0S-004",
+      "type": "0S",
+      "scope": "lib",
+      "start": "貸出中",
+      "steps": [
+        {
+          "event": "返却",
+          "guard": "期限内",
+          "action": "",
+          "reached": "在庫"
+        }
+      ],
+      "event": "",
+      "expect": "",
+      "scenarios": [
+        "lib-SC-002"
+      ]
+    },
+    {
+      "id": "lib-0S-005",
+      "type": "0S",
+      "scope": "lib",
+      "start": "貸出中",
+      "steps": [
+        {
+          "event": "返却期限経過",
+          "guard": "",
+          "action": "延滞を記録する",
+          "reached": "貸出中"
+        }
+      ],
+      "event": "",
+      "expect": "",
+      "scenarios": [
+        "lib-SC-003"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "lib-SC-001",
+      "scope": "lib",
+      "start": "在庫",
+      "steps": [
+        {
+          "event": "貸出",
+          "guard": "",
+          "action": "",
+          "reached": "貸出中"
+        },
+        {
+          "event": "返却",
+          "guard": "期限経過済",
+          "action": "",
+          "reached": "利用停止"
+        },
+        {
+          "event": "()",
+          "guard": "",
+          "action": "",
+          "reached": "(*)"
+        }
+      ],
+      "covers": [
+        "lib-0S-001",
+        "lib-0S-002",
+        "lib-0S-003"
+      ],
+      "preconditions": [
+        {
+          "step": 2,
+          "guard": "期限経過済"
+        }
+      ]
+    },
+    {
+      "id": "lib-SC-002",
+      "scope": "lib",
+      "start": "在庫",
+      "steps": [
+        {
+          "event": "貸出",
+          "guard": "",
+          "action": "",
+          "reached": "貸出中"
+        },
+        {
+          "event": "返却",
+          "guard": "期限内",
+          "action": "",
+          "reached": "在庫"
+        },
+        {
+          "event": "貸出",
+          "guard": "",
+          "action": "",
+          "reached": "貸出中"
+        },
+        {
+          "event": "返却",
+          "guard": "期限経過済",
+          "action": "",
+          "reached": "利用停止"
+        },
+        {
+          "event": "()",
+          "guard": "",
+          "action": "",
+          "reached": "(*)"
+        }
+      ],
+      "covers": [
+        "lib-0S-001",
+        "lib-0S-002",
+        "lib-0S-003",
+        "lib-0S-004"
+      ],
+      "preconditions": [
+        {
+          "step": 2,
+          "guard": "期限内"
+        },
+        {
+          "step": 4,
+          "guard": "期限経過済"
+        }
+      ]
+    },
+    {
+      "id": "lib-SC-003",
+      "scope": "lib",
+      "start": "在庫",
+      "steps": [
+        {
+          "event": "貸出",
+          "guard": "",
+          "action": "",
+          "reached": "貸出中"
+        },
+        {
+          "event": "返却期限経過",
+          "guard": "",
+          "action": "延滞を記録する",
+          "reached": "貸出中"
+        },
+        {
+          "event": "返却",
+          "guard": "期限経過済",
+          "action": "",
+          "reached": "利用停止"
+        },
+        {
+          "event": "()",
+          "guard": "",
+          "action": "",
+          "reached": "(*)"
+        }
+      ],
+      "covers": [
+        "lib-0S-001",
+        "lib-0S-002",
+        "lib-0S-003",
+        "lib-0S-005"
+      ],
+      "preconditions": [
+        {
+          "step": 3,
+          "guard": "期限経過済"
+        }
+      ]
+    }
+  ],
+  "uncovered": [],
+  "scopes": [
+    "lib"
+  ]
+}

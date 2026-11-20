@@ -1,0 +1,4 @@
+seq,id,start,event_1,guard_1,action_1,reached_1,event_2,guard_2,action_2,reached_2,event_3,guard_3,action_3,reached_3,event_4,guard_4,action_4,reached_4,event_5,guard_5,action_5,reached_5,covers,preconditions
+1,lib-SC-001,在庫,貸出,,,貸出中,返却,期限経過済,,利用停止,(),,,(*),,,,,,,,,lib-0S-001;lib-0S-002;lib-0S-003,2:[期限経過済]
+2,lib-SC-002,在庫,貸出,,,貸出中,返却,期限内,,在庫,貸出,,,貸出中,返却,期限経過済,,利用停止,(),,,(*),lib-0S-001;lib-0S-002;lib-0S-003;lib-0S-004,2:[期限内];4:[期限経過済]
+3,lib-SC-003,在庫,貸出,,,貸出中,返却期限経過,,延滞を記録する,貸出中,返却,期限経過済,,利用停止,(),,,(*),,,,,lib-0S-001;lib-0S-002;lib-0S-003;lib-0S-005,3:[期限経過済]
