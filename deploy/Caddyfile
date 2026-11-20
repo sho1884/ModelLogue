@@ -107,9 +107,10 @@
 	# pattern and the same headers as /medical-underwriting: no cookies, no
 	# network requests, no secrets. Bind-mounted :ro from
 	# /opt/sites/policy-servicing by the server-only override.yml; deployed from
-	# its own PRIVATE repo (it contains the exercise answer model) with the
-	# restricted rsync-only content key. This route is the only file here that
-	# knows about it.
+	# the policy-servicing/ folder of the same PRIVATE repo as
+	# /medical-underwriting (github.com/sho1884/medical-underwriting — it contains
+	# the exercise answer models) with the restricted rsync-only content key, as
+	# a separate tree. This route is the only file here that knows about it.
 	redir /policy-servicing /policy-servicing/ 308
 	handle_path /policy-servicing/* {
 		root * /srv/sites/policy-servicing
