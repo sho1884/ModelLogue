@@ -266,6 +266,9 @@ You can load a published sample review with a single link and check its diagram,
 - **Stopwatch (start / lap)** (a record of reviewing a two-button stopwatch as a state machine; an example that groups “計測中” as a composite state) / **ストップウォッチ（スタート／ラップ）**（2 つのボタンだけのストップウォッチを状態遷移図でレビューした記録。「計測中」を複合状態でまとめた例）
     - Open in the app / アプリで開く: [open on modellogue.com →](https://modellogue.com/app/?file=https://sho1884.github.io/public-files/ModelLogue/Samples/stopwatch.json)
     - View the JSON directly / JSON を直接見る: [stopwatch.json](https://sho1884.github.io/public-files/ModelLogue/Samples/stopwatch.json)
+- **Life-insurance policy servicing (grace period, lapse, reinstatement)** (the normative model written together with the business rules of a fictional exercise site; it uses no guards and splits states where the deadlines or the history matter. The rules are in the [business rules spec](https://modellogue.com/policy-servicing/guide.html), and the [simulator](https://modellogue.com/policy-servicing/) lets you check each transition) / **生命保険の契約保全（払込猶予・失効・復活）**（架空の演習用サイトの業務ルールと同時に作った規範モデル。ガードを使わず、期日や経緯で振る舞いが変わるところは状態を分けて表した例。業務ルールは [業務ルール仕様書](https://modellogue.com/policy-servicing/guide.html)、各遷移は [シミュレーター](https://modellogue.com/policy-servicing/) で確かめられます）
+    - Open in the app / アプリで開く: [open on modellogue.com →](https://modellogue.com/app/?file=https://sho1884.github.io/public-files/ModelLogue/Samples/policy-servicing.json)
+    - View the JSON directly / JSON を直接見る: [policy-servicing.json](https://sho1884.github.io/public-files/ModelLogue/Samples/policy-servicing.json)
 
 “Open in the app” opens directly on the live [modellogue.com/app](https://modellogue.com/app) (the app is under **`/app`**, not the site root). If you host it at a different address, read `https://modellogue.com/app` as that address. A `.json` you saved locally can also be opened from **“Open saved review…”** in the header. More samples are planned.
 
