@@ -3,11 +3,11 @@
 | Item / 項目 | Content / 内容 |
 |------|---------|
 | Document / 文書 | Requirements Specification — N-switch coverage test case generator |
-| Version | 0.7 |
+| Version | 0.8 |
 | Created | 2026-04-21 |
-| Status / 状態 | Implemented in v0.1.0 at `tools/nswitch/src/modellogue_nswitch/` — batch CLI **and** HTTP API (`serve` subcommand, §9.2) both shipped. The HTTP mode is what ModelLogue's Test cases tab (SR-103) calls for reactive N-switch regeneration. |
+| Status / 状態 | Implemented in v0.2.0 at `tools/nswitch/src/modellogue_nswitch/` — batch CLI **and** HTTP API (`serve` subcommand, §9.2) both shipped. The HTTP mode is what ModelLogue's Test cases tab (SR-103) calls for reactive N-switch regeneration. |
 | Language / 実装言語 | **Python** (3.10+) |
-| Related ADR | ADR-009 (one-level composite states), ADR-010 (auxiliary services in the same repo), ADR-011 (strict formats and deterministic conversion) |
+| Related ADR | ADR-009 (one-level composite states), ADR-010 (auxiliary services in the same repo), ADR-011 (strict formats and deterministic conversion), ADR-019 (guards are shown, not evaluated) |
 | Canonical CSV | §4.2 defines the **project-wide canonical state-transition-table CSV**. ModelLogue's SR-101 export is required to emit this same format so artifacts round-trip between the GUI, this CLI, and version control. |
 
 ---
@@ -23,7 +23,7 @@ ModelLogue とは独立に動くテスト生成 CLI。入力は **PlantUML サ�
 A **Test** is one thing to verify. A **Scenario** is one executable walk that verifies several *positive* Tests at once. The Test is primary (what you want to check); the Scenario is the minimal-cover walk that realizes many positive Tests, offered so the whole suite can be driven in few runs.
 
 - **Tests** (primary; default view in the GUI). Two kinds:
-  - **Positive** — one per required N-switch chain `A^(N+1)` (§7.2): a single transition (`0S`), a transition pair (`1S`), or a triple (`2S`). "Starting at the chain's start state, take these transitions, expect the reached states."
+  - **Positive** — one per required N-switch chain `A^(N+1)` (§7.2): a single transition (`0S`), a transition pair (`1S`), or a triple (`2S`). "Starting at the chain's start state, take these transitions, expect the reached states." Each step carries the transition's guard and action as written in the model (§6, §7.4.1).
   - **Negative / invalid** (`INV`) — one per invalid transition (an empty state-table cell, §7.2). A negative Test's **condition** is exactly `(state, forbidden event) → no transition`: "in this state, the forbidden event must cause no transition." It carries **only** those three facts — not a path, not a walk. How to reach the state is a *procedure* for the downstream runner, not part of the test condition, so it is not emitted. Negatives are single-cell patterns; they are **not** 0-switch positives and must never be mixed into the 0S set.
 - **Scenarios** (`SC`; secondary, **positive only**). Greedy initial→final (or cycle-closing) walks that each cover multiple **positive** Tests (§7.4). A forbidden transition cannot be traversed, so it cannot sit on a walk: **negative Tests have no scenarios, and none can be constructed for them.** With `--invalid` (negatives only), the tool emits **zero** Scenarios.
 
@@ -52,6 +52,7 @@ Examples: `untitled-1S-001`, `untitled-INV-001`, `untitled-SC-001`, `Operating-1
 ### Non-goals / スコープ外
 
 - **Full oracle generation**: for *positive* (valid-transition) tests the tool emits sequences to exercise, not expected outputs — pairing rich oracles is the downstream framework's job. *Negative* (invalid-transition) tests are the deliberate exception: they carry the minimal expectation that the invalid event causes **no improper state change**, because that assertion is the whole point of exercising an invalid cell (§7.2).
+- **Guard evaluation**: guards are free text; the tool never decides whether one holds. Paths are built from how transitions connect, and every guard on a path is reported as a precondition instead (§7.4.1, ADR-019).
 - **Layout / image output**: text and CSV only. Visual rendering stays in the GUI.
 - **Beyond the ADR-009 subset**: orthogonal regions, nested composites beyond one level, history pseudo-states, and dot-notation entry are rejected at input.
 - **Arbitrary N**: only N ∈ {0, 1, 2} is supported (see §3). Higher N yields combinatorial blow-up with little practical benefit for review-scale models.
@@ -368,7 +369,7 @@ RFC 4180 CSV, UTF-8, LF line endings. Two outputs: **Tests** (§6.1, primary) an
 
 ### 6.1 Tests CSV (default)
 
-One row per **Test** (§1.1) — the primary artifact. **Machine-friendly columnar layout**: the `start` state, then each `(event, reached)` step in its **own columns** — no packed `A--e-->B` string. One consistent label `reached` = the state reached by that event (the last `reached` is *not* specially named — no "next" / "end"). Columns are uniform within a level, so a data-driven runner reads column *k* directly and a spreadsheet can sort/filter per step. Headers are English.
+One row per **Test** (§1.1) — the primary artifact. **Machine-friendly columnar layout**: the `start` state, then each `(event, guard, action, reached)` step in its **own columns** — no packed `A--e-->B` string. One consistent label `reached` = the state reached by that event (the last `reached` is *not* specially named — no "next" / "end"). Columns are uniform within a level, so a data-driven runner reads column *k* directly and a spreadsheet can sort/filter per step. Headers are English.
 
 **Positive Tests** — a level-N Test is N+1 **real** consecutive transitions (a chain that would begin at the machine-entry marker is not a Test; §7.5), so all rows at a level are uniform:
 
@@ -377,15 +378,23 @@ One row per **Test** (§1.1) — the primary artifact. **Machine-friendly column
 | `seq` | 1-based row number within the file (= the running count). |
 | `id` | `<scope>-<type>-<NNN>` (§1.1), e.g. `untitled-2S-001`. |
 | `start` | Diagram label of the real state the Test starts at (never the initial marker — that is not a state, and no Test begins there). |
-| `event_i`, `reached_i` | for i = 1 … N+1: the i-th event and the state it reaches (diagram label, or `(*)` for the final marker). |
+| `event_i`, `guard_i`, `action_i`, `reached_i` | for i = 1 … N+1: the i-th transition's event, its guard text (without the brackets) and action text as written in the model — empty when the transition has none — and the state it reaches (diagram label, or `(*)` for the final marker). The guard and action columns are **always present**, also for a model with no guards or actions, so the column layout depends only on N (ADR-019). |
 | `scenarios` | Semicolon-separated Scenario ids (§6.2) that exercise this Test. |
 
-Example (2-switch = 3 transitions → `event_1..3` / `reached_1..3`; labels shown, final as `(*)`):
+Example (2-switch = 3 transitions → `event_1..3` / `guard_1..3` / `action_1..3` / `reached_1..3`; labels shown, final as `(*)`):
 
 ```csv
-seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,scenarios
-1,untitled-2S-001,待機,start,動作,fault,故障,reset,待機,untitled-SC-001
-2,untitled-2S-002,待機,start,動作,stop,待機,start,動作,untitled-SC-002
+seq,id,start,event_1,guard_1,action_1,reached_1,event_2,guard_2,action_2,reached_2,event_3,guard_3,action_3,reached_3,scenarios
+1,untitled-2S-001,待機,start,,,動作,fault,,記録する,故障,reset,,,待機,untitled-SC-001
+2,untitled-2S-002,待機,start,,,動作,stop,残件なし,,待機,start,,,動作,untitled-SC-002
+```
+
+Two transitions that leave the same state on the same event and differ only by guard are two Tests that differ in `guard_i` (and usually `reached_i`):
+
+```csv
+seq,id,start,event_1,guard_1,action_1,reached_1,scenarios
+13,untitled-0S-013,払込猶予,入金,一部,入金額を返金する,払込猶予,untitled-SC-013
+14,untitled-0S-014,払込猶予,入金,全額,未払保険料を0にする,有効,untitled-SC-014
 ```
 
 **Negative Tests (`INV`)** — a fixed, separate shape (one per invalid cell; §7.2). Selecting `INV` yields negative Tests **only** — positive `0S` Tests are never mixed in (they are a different type; §1.1). A negative Test is a pure `(state, forbidden event) → no-transition` condition; it carries no path and references no Scenario (§1.1).
@@ -405,20 +414,21 @@ seq,id,start,event,expect
 
 ### 6.2 Scenarios CSV (secondary)
 
-One row per **Scenario** (§1.1) — a greedy walk (from the first real state to the final marker, or cycle-closing) covering several positive Tests (§7.4). Secondary output; negatives never appear here. Same columnar `(event, reached)` layout as positive Tests, but walks vary in length, so trailing `event_i` / `reached_i` cells are empty for shorter walks.
+One row per **Scenario** (§1.1) — a greedy walk (from the first real state to the final marker, or cycle-closing) covering several positive Tests (§7.4). Secondary output; negatives never appear here. Same columnar `(event, guard, action, reached)` layout as positive Tests, but walks vary in length, so trailing step cells are empty for shorter walks.
 
 | Column | Meaning |
 |---|---|
 | `seq` | 1-based row number. |
 | `id` | `<scope>-SC-<NNN>`. |
 | `start` | Diagram label of the **first real state** the walk begins at (the initial marker and its entry step are not emitted; §7.5). |
-| `event_i`, `reached_i` | the i-th step; `reached` is a diagram label or `(*)` for the final marker; empty past the walk's length. |
+| `event_i`, `guard_i`, `action_i`, `reached_i` | the i-th step, as in §6.1; `reached` is a diagram label or `(*)` for the final marker; all four empty past the walk's length. |
 | `covers` | Semicolon-separated Test ids this Scenario exercises. |
+| `preconditions` | The guards this walk **assumes to hold**, one `<i>:[<guard>]` per guarded step `i` (1-based), semicolon-separated in step order — e.g. `4:[復活可能期間満了済]`. Empty when the walk has no guarded step. The tool does not evaluate guards (§7.4.1), so before running the Scenario the tester must make each listed guard true at that step; a guard that history makes impossible there means the walk is not executable as written. |
 
 ```csv
-seq,id,start,event_1,reached_1,event_2,reached_2,event_3,reached_3,covers
-1,untitled-SC-001,待機,start,動作,fault,故障,,,untitled-0S-001;untitled-1S-001
-2,untitled-SC-002,待機,start,動作,stop,待機,,,untitled-0S-002;untitled-1S-002
+seq,id,start,event_1,guard_1,action_1,reached_1,event_2,guard_2,action_2,reached_2,event_3,guard_3,action_3,reached_3,covers,preconditions
+1,untitled-SC-001,待機,start,,,動作,fault,,記録する,故障,,,,,untitled-0S-001;untitled-1S-001,
+2,untitled-SC-002,待機,start,,,動作,stop,残件なし,,待機,,,,,untitled-0S-002;untitled-1S-002,2:[残件なし]
 ```
 
 ### 6.3 Canonicality / 決定論
@@ -427,7 +437,7 @@ For the same input and the same option values, the tool produces **byte-identica
 
 - Tests ordered by `(scope, type, seq)`; scopes sort outermost-first then composite ids alphabetically; within a `(scope, type)`, `seq`/`NNN` follow the canonical chain order (the required chains are enumerated by canonical chain string).
 - Scenarios ordered by `(scope, seq)`, in construction order.
-- A Test's `scenarios` list and a Scenario's `covers` list are sorted by id.
+- A Test's `scenarios` list and a Scenario's `covers` list are sorted by id; a Scenario's `preconditions` are in step order.
 
 This satisfies ADR-011: CI diffs on generated artifacts are meaningful.
 
@@ -533,6 +543,40 @@ Here there is no transition to `[*]_final`. Default behavior: generate cyclic te
 3. Emit a `negative` test with exactly three facts: `start` = `S`, `event` = `E`, `expect` = `no-transition`. No `sequence`, no path, no Scenario reference.
 
 Negative construction is **deterministic and reachability-bounded**: only invalid cells whose source state is reachable produce a test. Because a forbidden event cannot be traversed, a negative Test cannot sit on any walk, so **no Scenario is produced for it** — with `--invalid` (negatives only) the Scenario set is empty. Invalid cells add no chains to `A` and do not change positive N-switch output.
+
+### 7.4.1 Guards are shown, not evaluated / ガードは評価しない (ADR-019)
+
+Guards are free text (`[` … `]`). The tool cannot tell what a guard means, nor whether it is a condition on the **current input** (`[全額]`, `[残高が足りる]`) or on the **history** of the walk (`[期限を経過している]`, `[謝絶されていない]`). Therefore:
+
+- **Path construction ignores guards.** Chains (§7.2) and Scenario walks (§7.4) are built from how transitions connect, exactly as for unguarded transitions. Two transitions that share a source and an event but differ by guard are two separate transitions and two separate Tests.
+- **Every guard is reported.** Each step of a Test or Scenario carries its guard and action (§6.1, §6.2). Each Scenario lists, in `preconditions`, every guarded step it passes through — the conditions the tester must make true for the walk to be executable.
+- **What the output cannot show.** If a guard depends on history, some generated walks may be impossible to execute (the guard cannot hold at that step), and a transition may end up with **no executable Scenario at all**. The tool cannot detect this. The `preconditions` column is a prompt to check, not a proof that the walk works.
+
+**Modeling guideline / モデリングの指針.** To keep generated Scenarios executable:
+
+- Use a guard for a condition decided by **the input at that moment** (the amount paid, the balance at transfer time).
+- Express a condition decided by **what happened before** (a deadline has passed, an application was declined, how many transfers failed) by **splitting the state**, not by a guard.
+
+Example. A loan becomes overdue when its due date passes; returning an overdue item suspends the borrower. Written with history-dependent guards, the walk `貸出中 --返却 [期限経過済]--> 利用停止` is generated without the `返却期限経過` step that makes the guard true, so it cannot be executed as written:
+
+```plantuml
+' Guards on history — avoid
+貸出中 --> 貸出中 : 返却期限経過 / 延滞を記録する
+貸出中 --> 在庫 : 返却 [期限内]
+貸出中 --> 利用停止 : 返却 [期限経過済]
+```
+
+Splitting the state removes the guards; every generated walk is executable:
+
+```plantuml
+' History as states — prefer
+貸出中 --> 延滞中 : 返却期限経過 / 延滞を記録する
+貸出中 --> 在庫 : 返却
+延滞中 --> 在庫 : 返却 [延滞料を支払う]
+延滞中 --> 利用停止 : 返却 [延滞料を支払わない]
+```
+
+The last two lines keep guards: they depend on what the borrower does at the time of return (the current input), not on the history of the walk.
 
 ### 7.5 Pseudo-state spelling conventions
 
@@ -667,8 +711,8 @@ Fields:
       "scope": "order",
       "start": "A",
       "steps": [
-        { "event": "go", "reached": "B" },
-        { "event": "done", "reached": "(*)" }
+        { "event": "go", "guard": "ready", "action": "", "reached": "B" },
+        { "event": "done", "guard": "", "action": "notify", "reached": "(*)" }
       ],
       "event": "",
       "expect": "",
@@ -691,10 +735,11 @@ Fields:
       "scope": "order",
       "start": "A",
       "steps": [
-        { "event": "go", "reached": "B" },
-        { "event": "done", "reached": "(*)" }
+        { "event": "go", "guard": "ready", "action": "", "reached": "B" },
+        { "event": "done", "guard": "", "action": "notify", "reached": "(*)" }
       ],
-      "covers": ["order-1S-001"]
+      "covers": ["order-1S-001"],
+      "preconditions": [ { "step": 1, "guard": "ready" } ]
     }
   ],
   "uncovered": [],
@@ -704,8 +749,8 @@ Fields:
 
 The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is a JSON transport on top of the Python API (§1.1, Tests / Scenarios), so behaviour is identical.
 
-- **`tests[]`** — one verification pattern each. A **positive** N-switch Test (`type` = `0S` / `1S` / `2S`) carries the covered chain as `steps[]` (`{event, reached}`, where `reached` is `(*)` for the final state) plus the `scenarios[]` that exercise it; its `event` / `expect` stay empty. A **negative** Test (`type` = `INV`, emitted only when `invalid: true`) has empty `steps` and instead names the forbidden `event` injected at `start` with `expect: "no-transition"` (§7.2). Ids are `<scope>-<type>-<NNN>`.
-- **`scenarios[]`** — executable walks, each covering one or more positive Tests via `covers[]`. Ids are `<scope>-SC-<NNN>`. (Negative `INV` Tests have no scenarios.)
+- **`tests[]`** — one verification pattern each. A **positive** N-switch Test (`type` = `0S` / `1S` / `2S`) carries the covered chain as `steps[]` (`{event, guard, action, reached}`; `guard` / `action` are `""` when the transition has none, `reached` is `(*)` for the final state) plus the `scenarios[]` that exercise it; its `event` / `expect` stay empty. A **negative** Test (`type` = `INV`, emitted only when `invalid: true`) has empty `steps` and instead names the forbidden `event` injected at `start` with `expect: "no-transition"` (§7.2). Ids are `<scope>-<type>-<NNN>`.
+- **`scenarios[]`** — walks, each covering one or more positive Tests via `covers[]`, with the guards they assume in `preconditions[]` (`{step, guard}`, `step` 1-based, in step order; empty when unguarded — §7.4.1). Ids are `<scope>-SC-<NNN>`. (Negative `INV` Tests have no scenarios.)
 - **`uncovered[]`** — chains that can neither reach a final state nor close a cycle within `max_cycle_unroll` (§7.3). Each entry is `{ "scope", "chain": [{ "source", "target", "event", "guard", "action" }], "reason" }`. This is a warning surfaced in the payload, **not** an error — the HTTP status stays `200` (§9.2.4). Empty when everything is covered.
 - **`scopes[]`** — the scope names present: the outermost machine plus any nested composites (§1.1).
 
@@ -750,7 +795,7 @@ app's same-origin `/nswitch` prefix.
 
 ```bash
 curl https://modellogue.com/nswitch/health
-# → {"status": "ok", "version": "0.1.0"}
+# → {"status": "ok", "version": "0.2.0"}
 ```
 
 **Generate 1-switch tests from a PlantUML state machine:**
@@ -771,13 +816,15 @@ Response (the current **Tests + Scenarios** shape, §1.1; trimmed):
 {
   "tests": [
     { "id": "smoke-1S-001", "type": "1S", "scope": "smoke", "start": "A",
-      "steps": [ {"event": "go", "reached": "B"}, {"event": "done", "reached": "(*)"} ],
+      "steps": [ {"event": "go", "guard": "", "action": "", "reached": "B"},
+                 {"event": "done", "guard": "", "action": "", "reached": "(*)"} ],
       "scenarios": ["smoke-SC-001"] }
   ],
   "scenarios": [
     { "id": "smoke-SC-001", "scope": "smoke", "start": "A",
-      "steps": [ {"event": "go", "reached": "B"}, {"event": "done", "reached": "(*)"} ],
-      "covers": ["smoke-1S-001"] }
+      "steps": [ {"event": "go", "guard": "", "action": "", "reached": "B"},
+                 {"event": "done", "guard": "", "action": "", "reached": "(*)"} ],
+      "covers": ["smoke-1S-001"], "preconditions": [] }
   ],
   "uncovered": [],
   "scopes": ["smoke"]

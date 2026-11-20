@@ -4,7 +4,7 @@
 # Rule scenarios: Context → Action → Outcome (not Gherkin)
 
 version: "8.0"
-last_updated: "2026-07-04"
+last_updated: "2026-11-20"
 
 # Version 7.5 highlights (planned, not yet implemented):
 #   - UR-014 (new): "Review a requirement diagram" — a second model
@@ -925,10 +925,22 @@ artifact_export:
       State×Event matrix shows as `-` (SR-020) are exactly the INV Tests.
       nswitch's positive algorithm is unchanged; this is a
       presentation + selection reframe.
+
+      ADR-019 (guards are shown, not evaluated): the generator builds
+      walks from how transitions connect and never decides whether a
+      guard holds. Every step therefore carries its guard and action
+      (`event_i, guard_i, action_i, reached_i`, nswitch §6), and each
+      Scenario lists the guarded steps it passes through
+      (`preconditions`, nswitch §7.4.1) so the tester knows what must be
+      made true before running it. Whether a walk is executable when a
+      guard depends on history is not detectable; the user manual
+      therefore carries the modeling guideline (guards for conditions on
+      the current input; split the state for conditions on history).
     acceptance_criteria:
-      - "A 'Test cases' tab appears after State×State and shows Tests by default in a machine-friendly COLUMNAR table: `seq`, `id` (`<scope>-<type>-NNN`), then `start` and each `(event, reached)` step in its own columns (English headers; the last reached state is not specially named). INV Tests use a fixed shape (`seq`, `id`, `start`, `event`, `expect`=`no-transition`)"
+      - "A 'Test cases' tab appears after State×State and shows Tests by default in a machine-friendly COLUMNAR table: `seq`, `id` (`<scope>-<type>-NNN`), then `start` and each `(event, guard, action, reached)` step in its own columns (English headers; the last reached state is not specially named; guard / action columns are always present and empty when the transition has none — ADR-019). INV Tests use a fixed shape (`seq`, `id`, `start`, `event`, `expect`=`no-transition`)"
       - "A coverage-mode selector picks the Test set in place: `0-switch` / `1-switch` / `2-switch` (positive; default `1-switch`) and `Invalid`; `Invalid` shows negative Tests ONLY — positive 0-switch is never mixed in"
       - "A Tests / Scenarios toggle switches to the secondary Scenarios view: the one-stroke initial→final walks, each listing the Test ids it covers; negatives never appear as or within a Scenario"
+      - "A Scenario that passes through a guarded step states which step and which guard it assumes, as a sentence (e.g. 'Precondition: step 4 [復活可能期間満了済] holds' / 「前提：ステップ4 の [復活可能期間満了済] が成り立つこと」), and the guard cells concerned are highlighted; its CSV row carries the same as `preconditions` (`4:[…]`, `;`-separated). A Scenario with no guarded step shows no precondition"
       - "ModelLogue passes the session name to the service so ids read as `<session>-<type>-NNN`; an unnamed session yields `untitled-...`"
       - "Negative Tests are visually distinct from positive (badge / colour), so a forbidden-transition test is not mistaken for a coverage pattern"
       - "The tab prominently shows the current count (number of Tests in the Tests view, number of Scenarios in the Scenarios view) — the count is not inferable from ids since they reset per (scope, type)"

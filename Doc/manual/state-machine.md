@@ -56,6 +56,36 @@ The exact syntax is given in full under **“Grammar definition (EBNF)”** belo
 正確な構文は、下記の **「文法定義（EBNF）」** に全文を載せています
 （ヘッダーの **「Download grammar」** でも同じものをダウンロードできます）。
 
+### When to use a guard / ガードの使いどころ
+
+ModelLogue **does not evaluate guards**. The test generator (**Test cases**) builds paths only from how transitions connect, and it cannot tell whether a guard holds at a given point. It shows every guard on a path instead (see **Test cases** below). To keep the generated scenarios executable, follow these two rules.
+
+ModelLogue は**ガードを評価しません**。テスト生成（**Test cases**）は遷移のつながりだけで経路を組み、ガードがその時点で成り立つかどうかは判断できません。そのかわり、経路上のガードをすべて表示します（下の **Test cases** を参照）。生成されたシナリオを実行できるものにするため、次の2つを守ってください。
+
+- Use a guard for a condition decided by **the input at that moment** (the amount paid, the balance on the transfer day). / ガードは、**その時点の入力値**で決まる条件に使う（払い込んだ金額、振替日の残高など）。
+- Express a condition decided by **what happened before** (a deadline has passed, an application was declined, how many times something failed) by **splitting the state**, not with a guard. / **過去の経緯**で決まる条件（期限が過ぎたか、謝絶されたか、何回失敗したか）は、ガードではなく**状態を分けて**表す。
+
+Example: a loan becomes overdue when its due date passes, and returning an overdue item suspends the borrower. With guards on history, the generator can produce a scenario that returns the item "after the due date" without ever passing the due date, and such a scenario cannot be executed.
+
+例：返却期限を過ぎると延滞になり、延滞中に返却すると利用停止になる図書館の貸出。経緯をガードで書くと、「期限経過済」の返却を、期限経過の遷移を通らずに行うシナリオが生成されることがあり、そのシナリオは実行できません。
+
+```plantuml
+' Avoid: guards that depend on history / 避ける：経緯で決まるガード
+貸出中 --> 貸出中 : 返却期限経過 / 延滞を記録する
+貸出中 --> 在庫 : 返却 [期限内]
+貸出中 --> 利用停止 : 返却 [期限経過済]
+```
+
+```plantuml
+' Prefer: the history as a state / 推奨：経緯を状態で表す
+貸出中 --> 延滞中 : 返却期限経過 / 延滞を記録する
+貸出中 --> 在庫 : 返却
+延滞中 --> 在庫 : 返却 [延滞料を支払う]
+延滞中 --> 利用停止 : 返却 [延滞料を支払わない]
+```
+
+The last two lines keep guards because they depend on what the borrower does at the time of return. / 最後の2行は、返却時の利用者の行動（入力）で決まる条件なのでガードのままです。
+
 ---
 
 ## Grammar definition (EBNF) / 文法定義（EBNF）
@@ -274,9 +304,13 @@ From the state machine model, it automatically generates test cases according to
 - **Switch the display** / **表示の切り替え**
   - **Tests** … a list of verification patterns (test cases). / **Tests** … 検証パターン（テストケース）の一覧。
   - **Scenarios** … a list in scenario form (there are no scenarios in Invalid mode). / **Scenarios** … シナリオ形式の一覧（Invalid モードにはシナリオはありません）。
+- Each step shows its **event, guard, action, and reached state** (`event_i`, `guard_i`, `action_i`, `reached_i`). The action is what you check as the expected result, together with the reached state. The guard and action columns are always present and stay empty when the transition has none. / 各ステップに **イベント・ガード・アクション・到達状態** を表示します（`event_i`・`guard_i`・`action_i`・`reached_i`）。アクションは、到達状態とあわせて期待結果として確認する内容です。ガードとアクションの列は常にあり、その遷移にない場合は空欄です。
+- **Preconditions of a scenario** / **シナリオの前提**: the generator does not evaluate guards (see “When to use a guard” above). A scenario that passes through a guarded step shows which guard it assumes, e.g. “Precondition: step 4 [期限経過済] holds”, and the guard cell is highlighted. Before running the scenario, make that guard true at that step. If the history of the walk makes the guard impossible there, the scenario cannot be executed as written; consider splitting the state. In CSV this is the `preconditions` column (`4:[期限経過済]`, separated by `;`). / 生成器はガードを評価しません（上の「ガードの使いどころ」を参照）。ガード付きのステップを通るシナリオには、「前提：ステップ4 の [期限経過済] が成り立つこと」のように、どのステップのどのガードを前提にしているかを表示し、そのガードのセルを強調します。実行する前に、そのステップでそのガードが成り立つようにしてください。それまでの経緯からガードが成り立ちえない場合、そのシナリオは書かれたとおりには実行できません。状態を分けることを検討してください。CSV では `preconditions` 列（`4:[期限経過済]`、複数は `;` 区切り）です。
 - The list can be **downloaded as CSV**. The coverage level is included in the file name. / 一覧は **CSV でダウンロード** できます。ファイル名にカバレッジ水準が入ります。
 
 > Test cases are generated when the model has at least one state and the source has no parse errors. / テストケースは、モデルが最低 1 つの状態を持ち、ソースにパースエラーがないときに生成されます。
+
+> A precondition only tells you what to check. It cannot tell you that a transition has **no executable scenario at all**, which can happen when guards depend on history. Modeling such conditions as states is what prevents it. / 前提の表示は、確認すべきことを示すだけです。経緯で決まるガードがあると、ある遷移を通る**実行可能なシナリオが1本もない**ことが起こりえますが、それは表示からは分かりません。それを防ぐのは、経緯を状態で表すモデリングです。
 
 #### For developers: calling it as an API (demo environment) / 開発者向け：API として呼び出す（デモ環境）
 
@@ -289,7 +323,7 @@ The demo environment exposes the same N-switch generator as an **authentication-
 ```bash
 # 疎通確認
 curl https://modellogue.com/nswitch/health
-# → {"status": "ok", "version": "0.1.0"}
+# → {"status": "ok", "version": "0.2.0"}
 
 # PlantUML の状態遷移から 1-switch テストを生成
 curl -X POST https://modellogue.com/nswitch/generate \
