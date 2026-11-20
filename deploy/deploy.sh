@@ -49,9 +49,11 @@ rsync -az --delete -e "$SSH" \
   --exclude 'node_modules' \
   --exclude 'dist' \
   --exclude 'test-results' \
+  --exclude 'tmp' \
   --exclude '.env' \
   --exclude '.env.*' \
   --exclude 'docker-compose.override.yml' \
+  --exclude 'docker-compose.override.yml.*' \
   ./ "$SERVER:$REMOTE_DIR/"
 
 echo "==> 3/5  Rebuild the web image on the server (takes a few minutes)"

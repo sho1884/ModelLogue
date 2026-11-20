@@ -41,3 +41,6 @@ tests/e2e-live/
 
 # Throwaway probes (pre-test environment validation, not committed)
 tests/_*.mjs
+
+# Scratch area for sharing working materials (not committed)
+tmp/

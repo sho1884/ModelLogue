@@ -86,6 +86,7 @@ ssh -i ~/.ssh/id_ed25519_modellogue root@<SERVER_IP>
 | `/`（サイトのルート） | **modellogue.com のランディングページ**。静的コンテンツ。リポジトリは別（`ModelLogue-Site`）で、自前の `deploy.sh` を持つ | `/opt/sites/modellogue-site` | `override.yml` の `web.volumes`（`:ro` bind） | `handle {}`（catch-all） |
 | `/checkout-benchmark` | **KASANE STORE 注文・決済ベンチマーク**。テスト設計練習用の純静的な模擬決済サイト（Cookie無し・外部通信無し）。リポジトリは別（`github.com/sho1884/checkout-benchmark`）で、自前の `deploy.sh` を持つ | `/opt/sites/checkout-benchmark` | `override.yml` の `web.volumes`（`:ro` bind） | `handle_path /checkout-benchmark/*`（+ 末尾スラッシュ308リダイレクト、CSP等ヘッダーをCaddyで付与） |
 | `/medical-underwriting` | **ENISHI生命 医療保険引受判定 演習サイト**。原因結果グラフ法のテスト設計・自動化演習用の純静的な模擬サイト(Cookie無し・外部通信無し)。リポジトリは別(`github.com/sho1884/medical-underwriting`、**private**: 演習の正解モデルを含む)で、自前の `deploy.sh` を持つ | `/opt/sites/medical-underwriting` | `override.yml` の `web.volumes`(`:ro` bind) | `handle_path /medical-underwriting/*`(+ 末尾スラッシュ308リダイレクト、CSP等ヘッダーをCaddyで付与) |
+| `/policy-servicing` | **ENISHI生命 契約保全 演習サイト**。状態遷移テスト(ModelLogue の状態遷移図・N-switch の例題)の設計・自動化演習用の純静的な模擬シミュレーター(Cookie無し・外部通信無し)。`/medical-underwriting` の姉妹。リポジトリは別(`policy-servicing`、**private**: 演習の正解モデルを含む)で、自前の `deploy.sh` を持つ | `/opt/sites/policy-servicing` | `override.yml` の `web.volumes`(`:ro` bind) | `handle_path /policy-servicing/*`(+ 末尾スラッシュ308リダイレクト、CSP等ヘッダーをCaddyで付与) |
 
 - **CLI をデモ API として足す型** → `deploy-cli-demo` スキル。
 - **静的コンテンツを足す型** → `deploy-site-content` スキル。`site@` の制限鍵で

@@ -101,6 +101,33 @@
 		file_server
 	}
 
+	# 契約保全 演習サイト (policy-servicing): sister of /medical-underwriting — a
+	# purely static MOCK policy-servicing simulator for state-transition test
+	# design practice (the ModelLogue state-machine example). Same co-location
+	# pattern and the same headers as /medical-underwriting: no cookies, no
+	# network requests, no secrets. Bind-mounted :ro from
+	# /opt/sites/policy-servicing by the server-only override.yml; deployed from
+	# its own PRIVATE repo (it contains the exercise answer model) with the
+	# restricted rsync-only content key. This route is the only file here that
+	# knows about it.
+	redir /policy-servicing /policy-servicing/ 308
+	handle_path /policy-servicing/* {
+		root * /srv/sites/policy-servicing
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'"
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+			Referrer-Policy no-referrer
+			Permissions-Policy "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), screen-wake-lock=(), usb=(), web-share=(), xr-spatial-tracking=()"
+			Cross-Origin-Opener-Policy same-origin
+			Cross-Origin-Embedder-Policy require-corp
+			Cross-Origin-Resource-Policy same-origin
+			Cache-Control no-cache
+			-Server
+		}
+		file_server
+	}
+
 	# SR-136/137: identity probe for the front-end AI gate. Reports the
 	# operator's authenticated identity as seen by the edge auth gate
 	# (Cloudflare Access sets Cf-Access-Authenticated-User-Email once it has
