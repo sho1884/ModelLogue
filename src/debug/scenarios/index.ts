@@ -3,7 +3,7 @@ import sizeAspect from './01-size-aspect';
 import addRemoveChange from './02-add-remove-change';
 import compositeAndReask from './03-composite-and-reask';
 import nswitchLevels from './04-nswitch-levels';
-import unreachableWithinCap from './05-unreachable-within-cap';
+import unreachable from './05-unreachable';
 import compositeLayers from './06-composite-layers';
 import mainloopCycleClosure from './07-mainloop-cycle-closure';
 import requirementAddAndModify from './08-requirement-add-and-modify';
@@ -25,7 +25,7 @@ export const SCENARIOS: Scenario[] = [
   addRemoveChange,
   compositeAndReask,
   nswitchLevels,
-  unreachableWithinCap,
+  unreachable,
   compositeLayers,
   mainloopCycleClosure,
   requirementAddAndModify,

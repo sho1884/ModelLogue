@@ -227,3 +227,66 @@ Paused --> Off : RESET / 計測をリセット
     ]);
   });
 });
+
+// SR-002 rule 7: an initial transition may carry an action only (UML).
+describe('StateMachineParser — initial transition label', () => {
+  it('accepts an action on an initial transition', () => {
+    const result = parse(`@startuml
+[*] --> Idle : / init()
+Idle --> [*] : done
+@enduml`);
+    expect(result.errors).toEqual([]);
+    const init = result.model!.transitions.find((t) => t.sourceStateId === '[*]');
+    expect(init).toMatchObject({ event: null, guard: null, action: 'init()' });
+  });
+
+  it('accepts an action on a composite-internal initial transition', () => {
+    const result = parse(`@startuml
+[*] --> Op
+state Op {
+  [*] --> Running : / start_timer()
+}
+@enduml`);
+    expect(result.errors).toEqual([]);
+    const init = result.model!.transitions.find(
+      (t) => t.targetStateId === 'Running'
+    );
+    expect(init?.action).toBe('start_timer()');
+  });
+
+  it.each([
+    ['an event', '[*] --> Idle : boot'],
+    ['a guard', '[*] --> Idle : [ready]'],
+    ['an event, guard and action', '[*] --> Idle : boot [ready] / init()'],
+    ['a guard and action', '[*] --> Idle : [ready] / init()'],
+  ])('rejects %s on an initial transition with the line number', (_, line) => {
+    const result = parse(`@startuml\n${line}\nIdle --> [*] : done\n@enduml`);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].line).toBe(2);
+    expect(result.errors[0].message).toMatch(/Initial transition cannot have an event or guard/);
+  });
+
+  it('rejects an event on a composite-internal initial transition', () => {
+    const result = parse(`@startuml
+[*] --> Op
+state Op {
+  [*] --> Running : go
+}
+@enduml`);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].line).toBe(4);
+  });
+
+  it('rejects [*] --> [*]', () => {
+    const result = parse(`@startuml\n[*] --> [*]\n@enduml`);
+    expect(result.errors[0]?.line).toBe(2);
+  });
+
+  it('still allows an event, guard and action on a transition into [*]', () => {
+    const result = parse(`@startuml
+[*] --> Idle
+Idle --> [*] : quit [saved] / close()
+@enduml`);
+    expect(result.errors).toEqual([]);
+  });
+});

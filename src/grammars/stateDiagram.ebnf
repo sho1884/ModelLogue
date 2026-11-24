@@ -1,5 +1,5 @@
 (* ModelLogue PlantUML State Diagram Subset Grammar *)
-(* Version: 1.1 *)
+(* Version: 1.2 *)
 (* Reference: ADR-009 (one-level composite states only) *)
 (*                                                       *)
 (* This grammar defines the ONLY syntax that ModelLogue  *)
@@ -49,14 +49,28 @@ composite_line   = empty_line
 
 (* ===== Transitions ===== *)
 
-transition       = state_ref , whitespace , arrow , whitespace , state_ref ,
+transition       = initial_transition
+                 | state_transition ;
+
+initial_transition = initial_final , whitespace , arrow , whitespace , state_id ,
+                     [ whitespace , ":" , whitespace , initial_label ] ;
+
+state_transition = state_id , whitespace , arrow , whitespace , state_ref ,
                    [ whitespace , ":" , whitespace , transition_label ] ;
+
+(* NOTE: A transition out of the initial pseudo-state [*] may carry  *)
+(*       an action only: no event and no guard (UML 2.5.1, initial   *)
+(*       Pseudostate). It is taken as soon as its region is entered, *)
+(*       so there is no event to wait for and no alternative to      *)
+(*       guard against. [*] --> [*] is not a transition.             *)
 
 arrow            = "-->" | "->" ;
 
 state_ref        = state_id | initial_final ;
 
 initial_final    = "[*]" ;
+
+initial_label    = "/" , whitespace , action_text ;
 
 transition_label = event_name ,
                    [ whitespace , "[" , guard_text , "]" ] ,
@@ -104,6 +118,9 @@ any_char         = (* any character except newline *) ;
 (*                                                *)
 (*   - Dot-notation direct entry                  *)
 (*       X.Y  (in transitions)                    *)
+(*                                                *)
+(*   - Event or guard on an initial transition    *)
+(*       [*] --> X : ev    [*] --> X : [g]        *)
 (*                                                *)
 (*   - Entry/exit point pseudo-states             *)
 (*                                                *)

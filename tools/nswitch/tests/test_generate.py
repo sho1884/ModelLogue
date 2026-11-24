@@ -214,3 +214,58 @@ def test_csv_and_puml_equivalent():
     assert patterns(generate(parse_puml(puml), n=1)) == patterns(
         generate(parse_csv(csv_text), n=1)
     )
+
+
+# §7.3: path search stays proportional to the model's size. This model has
+# many self-loops and no final state, so the initial→final check can never
+# stop early; a search that tracks per-transition counts explodes on it.
+NO_FINAL_MANY_LOOPS = """@startuml
+[*] --> 有効
+有効 --> 有効 : 口座振替成功
+有効 --> 猶予前 : 口座振替不能
+有効 --> 解約済 : 解約申込
+有効 --> 消滅 : 死亡届受付
+猶予前 --> 有効 : 払込 [全額払込]
+猶予前 --> 有効 : 口座振替成功
+猶予前 --> 猶予後 : 口座振替不能
+猶予前 --> 解約済 : 解約申込
+猶予前 --> 消滅 : 死亡届受付
+猶予後 --> 有効 : 払込 [全額払込]
+猶予後 --> 失効可 : 猶予期間満了
+猶予後 --> 解約済 : 解約申込
+猶予後 --> 消滅 : 死亡届受付
+失効可 --> 審査内 : 復活申込 [告知と全額払込]
+失効可 --> 失効可 : 振替日到来
+失効可 --> 消滅 : 復活可能期間満了
+失効可 --> 消滅 : 死亡届受付
+失効不可 --> 失効不可 : 振替日到来
+失効不可 --> 消滅 : 復活可能期間満了
+失効不可 --> 消滅 : 死亡届受付
+審査内 --> 有効 : 審査承諾
+審査内 --> 失効不可 : 審査謝絶
+審査内 --> 失効可 : 復活申込取下げ
+審査内 --> 審査内 : 振替日到来
+審査内 --> 審査後 : 復活可能期間満了
+審査内 --> 消滅 : 死亡届受付
+審査後 --> 有効 : 審査承諾
+審査後 --> 消滅 : 審査謝絶
+審査後 --> 消滅 : 復活申込取下げ
+審査後 --> 審査後 : 振替日到来
+審査後 --> 消滅 : 死亡届受付
+@enduml
+"""
+
+
+def test_no_final_model_with_many_loops_finishes_quickly():
+    import time
+
+    model = parse_puml(NO_FINAL_MANY_LOOPS)
+    started = time.perf_counter()
+    for n in (0, 1, 2):
+        result = generate(model, n=n)
+        assert result.tests
+        assert result.uncovered == []
+    generate(model, n=0, invalid=True)
+    # Linear-time search finishes in milliseconds; the exploding search took
+    # seconds per call on this model.
+    assert time.perf_counter() - started < 1.0

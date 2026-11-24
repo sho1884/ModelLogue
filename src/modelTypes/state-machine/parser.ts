@@ -3,6 +3,8 @@
 // Supported syntax:
 //   @startuml / @enduml
 //   [*] --> StateName                       (initial transition)
+//   [*] --> StateName : / action            (initial transition; action only,
+//                                            no event or guard)
 //   StateName --> [*]                       (final transition)
 //   StateName --> StateName : event [guard] / action
 //   state "Display Name" as alias           (state with display label)
@@ -39,6 +41,9 @@ const STATE_ALIAS_PATTERN =
 
 // Bare state declaration: `state X`
 const BARE_STATE_PATTERN = /^state\s+([\w\u3040-\u9FFF]+)$/;
+
+// Label of an initial transition: action only (`/ action`).
+const INITIAL_LABEL_PATTERN = /^\/\s*(\S.*)$/;
 
 const TRANSITION_LABEL_PATTERN =
   /^([^[\]/]+?)(?:\s*\[([^\]]*)\])?\s*(?:\/\s*(.+))?$/;
@@ -200,6 +205,32 @@ export function parseStateMachine(source: string): ParseResult {
     const transMatch = raw.match(TRANSITION_PATTERN);
     if (transMatch) {
       const [, rawSrc, rawTgt, labelPart] = transMatch;
+
+      // An initial transition ([*] --> X) fires on entry to its region:
+      // it may carry an action, but never an event or a guard (UML).
+      let initialAction: string | null = null;
+      if (rawSrc === INITIAL_STATE_ID) {
+        if (rawTgt === INITIAL_STATE_ID) {
+          errors.push({
+            line: lineNum,
+            message: 'Initial transition must target a state ([*] --> [*] is not allowed)',
+          });
+          continue;
+        }
+        if (labelPart) {
+          const actionMatch = labelPart.trim().match(INITIAL_LABEL_PATTERN);
+          if (!actionMatch) {
+            errors.push({
+              line: lineNum,
+              message:
+                'Initial transition cannot have an event or guard; only an action is allowed ([*] --> X : / action)',
+            });
+            continue;
+          }
+          initialAction = actionMatch[1].trim();
+        }
+      }
+
       const src = translatePseudoState(rawSrc, 'source', currentParentId);
       const tgt = translatePseudoState(rawTgt, 'target', currentParentId);
 
@@ -222,7 +253,9 @@ export function parseStateMachine(source: string): ParseResult {
       let guard: string | null = null;
       let action: string | null = null;
 
-      if (labelPart) {
+      if (rawSrc === INITIAL_STATE_ID) {
+        action = initialAction;
+      } else if (labelPart) {
         const parsed = parseTransitionLabel(labelPart.trim());
         event = parsed.event;
         guard = parsed.guard;

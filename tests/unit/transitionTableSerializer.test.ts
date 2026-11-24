@@ -136,33 +136,17 @@ Active --> [*] : done
     );
   });
 
-  // Forward compatibility: the CSV spec §4.2.3 allows `Y [g] / a` in the
-  // `initial` column so that PlantUML's `[*] --> S : [g] / a` can round-
-  // trip. The parser does not yet emit that variant (today it treats the
-  // whole label as the event when the event part is empty), but when that
-  // parser extension lands, the serializer is already format-ready — this
-  // test locks in the cell format by feeding a hand-built model.
-  it('renders guard and action on the initial column when a synthetic model carries them', () => {
-    const model: StateMachineModel = {
-      states: [
-        { id: '[*]', label: '[*]', type: 'initial', parentId: null },
-        { id: 'Idle', label: 'Idle', type: 'normal', parentId: null },
-      ],
-      transitions: [
-        {
-          sourceStateId: '[*]',
-          targetStateId: 'Idle',
-          event: null,
-          guard: 'ready',
-          action: 'init()',
-        },
-      ],
-      events: [],
-    };
+  // §4.2.3: an initial transition may carry an action (never an event or
+  // a guard), rendered in the `initial` column as `Y / action`.
+  it('renders the action of an initial transition on the initial column', () => {
+    const model = parseOrThrow(`@startuml
+[*] --> Idle : / init()
+Idle --> [*] : done
+@enduml`);
     const csv = modelToCanonicalCsv(model);
     const lines = csv.split('\r\n');
-    expect(lines[0]).toBe('state,label,parent,type,initial');
-    expect(lines[1]).toBe('Idle,,,normal,Y [ready] / init()');
+    expect(lines[0]).toBe('state,label,parent,type,initial,done');
+    expect(lines[1]).toBe('Idle,,,normal,Y / init(),[*]');
   });
 
   it('joins multiple transitions on the same event with "; "', () => {

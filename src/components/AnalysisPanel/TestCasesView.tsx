@@ -445,8 +445,7 @@ function UncoveredBanner({
         {uncovered.length} chain
         {uncovered.length === 1 ? '' : 's'} left uncovered
       </strong>
-      {' '}(increase <code className="font-mono">max_cycle_unroll</code> or
-      reduce N):
+      {' '}(unreachable from the initial state):
       <ul className="mt-1 space-y-0.5">
         {uncovered.slice(0, 5).map((u, i) => (
           <li key={i} className="font-mono">

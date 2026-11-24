@@ -30,12 +30,13 @@ Source タブに、PlantUML の状態図サブセットで記述します。対�
 
 - States and transitions, the initial pseudo-state `[*] -->`, the final pseudo-state `--> [*]`, and state aliases / 状態と遷移、初期擬似状態 `[*] -->`、終了擬似状態 `--> [*]`、状態の別名
 - **Transitions with an event / guard / action** (`遷移 : イベント [ガード] / アクション`) / **イベント / ガード / アクション付きの遷移**（`遷移 : イベント [ガード] / アクション`）
+- An initial transition takes an action only (`[*] --> S : / アクション`) — it happens the moment its region starts, so there is no event to wait for and no guard to choose with / 初期遷移に書けるのはアクションだけ（`[*] --> S : / アクション`）。領域が始まった瞬間に起きるので、待つイベントも、選び分けるガードもない
 - **One-level composite states** (`state X { ... }`) and their internal initial transitions / **1 階層の複合状態**（`state X { ... }`）と、その内部の初期遷移
 - Group-exit transitions from a composite state, and entry transitions into a composite state / 複合状態を起点にしたグループ脱出遷移、複合状態を終点にした進入遷移
 
-Main unsupported constructs: nested nesting, orthogonal regions, history pseudo-states, dot notation, entry/exit points, styling, colors, and notes.
+Main unsupported constructs: nested nesting, orthogonal regions, history pseudo-states, dot notation, entry/exit points, an event or guard on an initial transition, styling, colors, and notes.
 
-対応しない主なもの：入れ子の入れ子、直交領域、ヒストリ擬似状態、ドット記法、entry/exit point、
+対応しない主なもの：入れ子の入れ子、直交領域、ヒストリ擬似状態、ドット記法、entry/exit point、初期遷移のイベント・ガード、
 スタイル・色・ノート。
 
 ### Example / 例
@@ -100,7 +101,7 @@ This is the **formal definition** of the syntax ModelLogue accepts for this mode
 
 ```ebnf
 (* ModelLogue PlantUML State Diagram Subset Grammar *)
-(* Version: 1.1 *)
+(* Version: 1.2 *)
 (* Reference: ADR-009 (one-level composite states only) *)
 (*                                                       *)
 (* This grammar defines the ONLY syntax that ModelLogue  *)
@@ -150,14 +151,28 @@ composite_line   = empty_line
 
 (* ===== Transitions ===== *)
 
-transition       = state_ref , whitespace , arrow , whitespace , state_ref ,
+transition       = initial_transition
+                 | state_transition ;
+
+initial_transition = initial_final , whitespace , arrow , whitespace , state_id ,
+                     [ whitespace , ":" , whitespace , initial_label ] ;
+
+state_transition = state_id , whitespace , arrow , whitespace , state_ref ,
                    [ whitespace , ":" , whitespace , transition_label ] ;
+
+(* NOTE: A transition out of the initial pseudo-state [*] may carry  *)
+(*       an action only: no event and no guard (UML 2.5.1, initial   *)
+(*       Pseudostate). It is taken as soon as its region is entered, *)
+(*       so there is no event to wait for and no alternative to      *)
+(*       guard against. [*] --> [*] is not a transition.             *)
 
 arrow            = "-->" | "->" ;
 
 state_ref        = state_id | initial_final ;
 
 initial_final    = "[*]" ;
+
+initial_label    = "/" , whitespace , action_text ;
 
 transition_label = event_name ,
                    [ whitespace , "[" , guard_text , "]" ] ,
@@ -205,6 +220,9 @@ any_char         = (* any character except newline *) ;
 (*                                                *)
 (*   - Dot-notation direct entry                  *)
 (*       X.Y  (in transitions)                    *)
+(*                                                *)
+(*   - Event or guard on an initial transition    *)
+(*       [*] --> X : ev    [*] --> X : [g]        *)
 (*                                                *)
 (*   - Entry/exit point pseudo-states             *)
 (*                                                *)

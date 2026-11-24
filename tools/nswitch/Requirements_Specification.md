@@ -3,7 +3,7 @@
 | Item / 項目 | Content / 内容 |
 |------|---------|
 | Document / 文書 | Requirements Specification — N-switch coverage test case generator |
-| Version | 0.8 |
+| Version | 0.9 |
 | Created | 2026-04-21 |
 | Status / 状態 | Implemented in v0.2.0 at `tools/nswitch/src/modellogue_nswitch/` — batch CLI **and** HTTP API (`serve` subcommand, §9.2) both shipped. The HTTP mode is what ModelLogue's Test cases tab (SR-103) calls for reactive N-switch regeneration. |
 | Language / 実装言語 | **Python** (3.10+) |
@@ -126,7 +126,6 @@ modellogue-nswitch serve [--port PORT] ...    # long-running HTTP server
 | `-o FILE`, `--output FILE` | stdout | Write output to FILE instead of stdout. |
 | `--coverage` | off | Emit coverage-report CSV (which tests cover which transitions / chains) instead of the default test-case CSV. |
 | `--layered` / `--no-layered` | `--layered` | Apply the per-composite layered strategy. With `--no-layered`, composites are treated as opaque leaf states (no child-layer tests). |
-| `--max-cycle-unroll K` | `3` | Per-test cap on how many times any single transition may be traversed during **path construction** (§7.4). Prevents combinatorial blow-up on cyclic state machines. Does NOT apply to matrix-power enumeration (§7.2), which is already bounded by N ≤ 2. |
 | `--require-final` | off | Error out (exit 2) if the model has no initial→final reachable path. Default behavior accepts cyclic / mainloop-style models and generates tests that close on a revisited state — see §7.4. |
 | `-h`, `--help` | — | Show help and exit. |
 | `--version` | — | Show version and exit. |
@@ -148,7 +147,7 @@ When invoked as `modellogue-nswitch serve [...]`, only the following options app
 | `0` | Success. |
 | `1` | Input error (parse failure, unsupported construct, file not found, invalid `-n` value, malformed CSV). |
 | `2` | Unsatisfiable coverage. Emitted only when `--require-final` is set AND the model has no initial→final path, OR when neither final-reaching nor cyclic-closure paths exist. Cyclic / mainloop-style models (no final state) are accepted by default — see §7.4. |
-| `3` | Cycle-unroll limit exceeded before all required chains could be covered. Increase `--max-cycle-unroll` or reduce `-n`. |
+| `3` | Some required chains could not be covered because they are unreachable from the initial state (§7.3). The rest of the tests are still emitted. |
 
 ---
 
@@ -187,7 +186,7 @@ The first five columns are fixed and MUST appear in this exact order.
 | 2 | `label` | yes (may be empty) | Display label. If empty, readers treat it as equal to `state`. |
 | 3 | `parent` | yes (may be empty) | Id of the enclosing composite state, or empty for top-level states. Must refer to a `state` whose `type` is `composite`. |
 | 4 | `type` | yes | One of `normal` or `composite`. The initial and final pseudo-states are **not** represented as rows; see §4.2.3. |
-| 5 | `initial` | yes | Marks this state as the target of its layer's initial pseudo-state. Empty means "not the initial target". Non-empty values follow the syntax in §4.2.3 and may carry a guard and/or action, matching PlantUML's `[*] --> S : [guard] / action`. At most one non-empty `initial` cell per distinct `parent` scope (one for top-level, one per composite). |
+| 5 | `initial` | yes | Marks this state as the target of its layer's initial pseudo-state. Empty means "not the initial target". Non-empty values follow the syntax in §4.2.3 and may carry an action, matching PlantUML's `[*] --> S : / action`. A guard is not allowed (UML; §4.2.3). At most one non-empty `initial` cell per distinct `parent` scope (one for top-level, one per composite). |
 
 #### 4.2.2 Event columns
 
@@ -248,17 +247,15 @@ Initial and final pseudo-states are **implicit** in the canonical form:
 
 Rationale: keeping `[*]` off the row axis makes the CSV smaller, lets reviewers scan states without pseudo noise, and matches how the ModelLogue internal model treats them (pseudo-states are synthesized on demand).
 
-**Initial-transition cell syntax** — the `initial` column cell carries whatever guard/action the PlantUML source attaches to the `[*] --> S` edge, using the same lexical form as event cells (§4.2.2):
+**Initial-transition cell syntax** — the `initial` column cell carries the action, if any, that the PlantUML source attaches to the `[*] --> S` edge, using the same lexical form as event cells (§4.2.2). An initial transition never has an event or a guard (UML; `stateDiagram.ebnf` v1.2): it fires as soon as its layer is entered, so there is nothing to wait for and no alternative to guard against.
 
 | Cell value | Equivalent PlantUML | Meaning |
 |---|---|---|
 | (empty) | (no initial edge to this state) | Not the layer's initial target. |
 | `Y` | `[*] --> S` | Plain initial transition, no guard or action. |
-| `Y [guard]` | `[*] --> S : [guard]` | Guarded initial transition. |
-| `Y / action` | `[*] --> S : / action` | Initial transition with an entry action (e.g. `init_vars()`). |
-| `Y [guard] / action` | `[*] --> S : [guard] / action` | Both. |
+| `Y / action` | `[*] --> S : / action` | Initial transition with an action (e.g. `init_vars()`). |
 
-The `Y` token is a constant marker — it is **not** a target state id (the target is the row itself). Readers MUST reject any other marker (`X`, `1`, `true`, …) so writers and spreadsheets converge on a single spelling.
+The `Y` token is a constant marker — it is **not** a target state id (the target is the row itself). Readers MUST reject any other marker (`X`, `1`, `true`, …) so writers and spreadsheets converge on a single spelling. Readers MUST also reject a guard in the `initial` cell (`Y [guard]`, `Y [guard] / action`), with the same error as the PlantUML parser gives for `[*] --> S : [guard]`.
 
 #### 4.2.4 Composite-state rules
 
@@ -494,13 +491,13 @@ Invalid[layer] = { (S, E) | S ∈ states, E ∈ Sigma, ∄ t: t.source = S ∧ t
 
 Every chain in `Valid[layer]` must appear in at least one positive test; every cell in `Invalid[layer]` must be exercised by one negative test. The positive side is unchanged from classic N-switch; the negative side is the "all transitions including invalid" upgrade that the derived state table exposes. No new diagram notation and no per-cell authoring is required — the machine is not changed, only used more completely.
 
-### 7.3 Cycle guard / サイクル抑制
+### 7.3 Path search / 経路探索
 
-**Scope of the cap** — `--max-cycle-unroll K` applies **only** to path construction (§7.4). Specifically, the prefix `p1` and suffix `p2` searches reject any path that traverses the same transition more than K times. The matrix-power enumeration (§7.2) is bounded by `N ≤ 2` and needs no runtime cap.
+The matrix-power enumeration (§7.2) is bounded by `N ≤ 2` and needs no runtime limit. Path construction (§7.4) needs none either:
 
-If a required chain in `Valid[layer]` cannot be embedded in any finite path respecting the cap, it is reported as **uncovered** in the coverage report (`status=unreachable-within-cap`), and the process exits with code `3` after emitting the rest of the tests.
+**Path search must stay proportional to the model's size.** `p1`, `p2` and the reachability checks (§7.4) are *shortest* paths, and a shortest path never takes the same transition twice — doing so would only add a detour. So the search is a plain breadth-first search over states, and its cost grows only with the number of states and transitions.
 
-The default `K = 3` is generous enough for realistic review-scale models under `N ≤ 2`.
+**Uncovered chains.** If a required chain in `Valid[layer]` cannot be embedded in a path — its head state is unreachable from the initial pseudo-state, or no final-reaching or cycle-closing suffix exists from its tail — it is reported as **uncovered** (`status=unreachable`), and the process exits with code `3` after emitting the rest of the tests.
 
 ### 7.4 Test case construction / テストケース生成
 
@@ -511,12 +508,12 @@ Per layer, given the positive coverage set `Valid[layer]` (§7.2):
    - Otherwise compute the set of terminators:
      - `FINAL_TERMINATORS`: reached when the path arrives at a final pseudo-state.
      - `CYCLE_TERMINATORS`: reached when the path arrives at a state already visited earlier in the same path (loop closure).
-     - Use `FINAL_TERMINATORS` when available; fall back to `CYCLE_TERMINATORS` for chains whose `p2` has no final-reaching suffix within the cycle-unroll cap.
+     - Use `FINAL_TERMINATORS` when available; fall back to `CYCLE_TERMINATORS` for chains whose `p2` has no final-reaching suffix.
 2. Sort required chains by descending length (longer chains cover more subchains), then lexicographically by the chain string.
 3. While chains remain uncovered:
    1. Pick the next uncovered chain `c`.
-   2. Find a path `P = p1 · c · p2` where `p1` starts at the layer's initial pseudo-state and `p2` ends at a terminator (per the policy above). `p1` and `p2` are greedy shortest paths in the sequence-adjacency graph of `A¹`, subject to the cycle-unroll cap.
-   3. If neither a final-reaching nor a cycle-closing `p2` exists within the cap, mark `c` uncovered (status=`unreachable-within-cap`) and continue.
+   2. Find a path `P = p1 · c · p2` where `p1` starts at the layer's initial pseudo-state and `p2` ends at a terminator (per the policy above). `p1` and `p2` are greedy shortest paths in the sequence-adjacency graph of `A¹` (§7.3).
+   3. If `p1` does not exist, or neither a final-reaching nor a cycle-closing `p2` exists, mark `c` uncovered (status=`unreachable`) and continue.
    4. Mark `c` and every N-subchain of `P` as covered.
    5. Emit `P` as a test case. In the output CSV, the `end` column for a cycle-closed test is the revisited state's id, and `covers` includes only the transitions actually on the emitted path (the revisited state is not traversed a second time).
 4. The algorithm is greedy. The result is a valid cover, not necessarily the minimum one (minimum cover is NP-hard, route-inspection-adjacent). Greedy + deterministic sort is reproducible, which is what ADR-011 requires.
@@ -539,7 +536,7 @@ Here there is no transition to `[*]_final`. Default behavior: generate cyclic te
 **Negative tests (invalid transitions).** When `--invalid` is set, after the positive cover the tool constructs one negative test per element of `Invalid[layer]` (§7.2 — every `(S, E)` with no drawn transition on `E` from `S`):
 
 1. Enumerate the invalid cells: for each state `S` (excluding pseudo-states) and each event `E ∈ Sigma`, if no transition leaves `S` on `E`, `(S, E)` is invalid.
-2. For each, confirm `S` is **reachable**: a greedy shortest path from the layer's initial pseudo-state to `S` must exist within the cycle-unroll cap. This reachability check is the *only* use of path finding here — the path itself is **not** emitted (reaching `S` is a runner procedure, not part of the test condition; §1.1). If `S` is unreachable within the cap, the cell is reported `unreachable-within-cap` (exit 3 / `uncovered`), same as a positive chain.
+2. For each, confirm `S` is **reachable**: a greedy shortest path from the layer's initial pseudo-state to `S` must exist. This reachability check is the *only* use of path finding here — the path itself is **not** emitted (reaching `S` is a runner procedure, not part of the test condition; §1.1). If `S` is unreachable, the cell is reported `unreachable` (exit 3 / `uncovered`), same as a positive chain.
 3. Emit a `negative` test with exactly three facts: `start` = `S`, `event` = `E`, `expect` = `no-transition`. No `sequence`, no path, no Scenario reference.
 
 Negative construction is **deterministic and reachability-bounded**: only invalid cells whose source state is reachable produce a test. Because a forbidden event cannot be traversed, a negative Test cannot sit on any walk, so **no Scenario is produced for it** — with `--invalid` (negatives only) the Scenario set is empty. Invalid cells add no chains to `A` and do not change positive N-switch output.
@@ -616,7 +613,7 @@ Diagnostics are written to **stderr** only. `stdout` stays clean even on errors,
 | File not found | `Error: <path>: no such file` | 1 |
 | Ambiguous format | `Error: cannot auto-detect format; use --format` | 1 |
 | No initial→final path exists | `Error: model has no path from any initial state to any final state` | 2 |
-| Cycle-unroll cap hit with uncovered chains | `Warning: <N> chain(s) left uncovered due to --max-cycle-unroll cap` plus list of uncovered elements | 3 |
+| Uncovered chains (unreachable from the initial state) | `Warning: <N> chain(s) left uncovered (unreachable)` plus list of uncovered elements | 3 |
 
 ---
 
@@ -678,7 +675,6 @@ All successful responses are JSON with `Content-Type: application/json; charset=
   "invalid": false,
   "name": "order",
   "layered": true,
-  "max_cycle_unroll": 3,
   "require_final": false
 }
 ```
@@ -697,7 +693,6 @@ Fields:
 | `invalid` | boolean | `false` | Also emit negative (`INV`) Tests, one per empty state-table cell (§7.2). Orthogonal to `n`. |
 | `name` | string | `"untitled"` | Scope name for the outermost machine; prefixes ids as `<name>-<type>-<NNN>` (§1.1). ModelLogue passes the session name. |
 | `layered` | boolean | `true` | Per §7.1. |
-| `max_cycle_unroll` | integer ≥ 1 | `3` | Per §7.3. |
 | `require_final` | boolean | `false` | Per §7.4. |
 
 #### 9.2.3 POST /generate — response (200 OK)
@@ -751,7 +746,7 @@ The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is 
 
 - **`tests[]`** — one verification pattern each. A **positive** N-switch Test (`type` = `0S` / `1S` / `2S`) carries the covered chain as `steps[]` (`{event, guard, action, reached}`; `guard` / `action` are `""` when the transition has none, `reached` is `(*)` for the final state) plus the `scenarios[]` that exercise it; its `event` / `expect` stay empty. A **negative** Test (`type` = `INV`, emitted only when `invalid: true`) has empty `steps` and instead names the forbidden `event` injected at `start` with `expect: "no-transition"` (§7.2). Ids are `<scope>-<type>-<NNN>`.
 - **`scenarios[]`** — walks, each covering one or more positive Tests via `covers[]`, with the guards they assume in `preconditions[]` (`{step, guard}`, `step` 1-based, in step order; empty when unguarded — §7.4.1). Ids are `<scope>-SC-<NNN>`. (Negative `INV` Tests have no scenarios.)
-- **`uncovered[]`** — chains that can neither reach a final state nor close a cycle within `max_cycle_unroll` (§7.3). Each entry is `{ "scope", "chain": [{ "source", "target", "event", "guard", "action" }], "reason" }`. This is a warning surfaced in the payload, **not** an error — the HTTP status stays `200` (§9.2.4). Empty when everything is covered.
+- **`uncovered[]`** — chains that cannot be embedded in a path: unreachable from the initial state, or with neither a final-reaching nor a cycle-closing continuation (§7.3). Each entry is `{ "scope", "chain": [{ "source", "target", "event", "guard", "action" }], "reason" }`. This is a warning surfaced in the payload, **not** an error — the HTTP status stays `200` (§9.2.4). Empty when everything is covered.
 - **`scopes[]`** — the scope names present: the outermost machine plus any nested composites (§1.1).
 
 #### 9.2.4 POST /generate — error responses
@@ -764,7 +759,7 @@ The shape mirrors `dataclasses.asdict(generate(...))` exactly — the server is 
 | `405` | `method_not_allowed` | Wrong HTTP method for the path. |
 | `500` | `internal_error` | Unexpected exception from the library. Logged server-side; response contains a generic message. |
 
-Uncovered chains caused by `--max-cycle-unroll` **do not** return an error — they appear in `response.uncovered` with status `"unreachable-within-cap"`. The analogue of CLI exit 3 is a warning state surfaced in the payload; the HTTP status stays `200`.
+Uncovered chains **do not** return an error — they appear in `response.uncovered` with status `"unreachable"`. The analogue of CLI exit 3 is a warning state surfaced in the payload; the HTTP status stays `200`.
 
 #### 9.2.5 CORS
 

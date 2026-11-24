@@ -103,6 +103,7 @@ This document defines requirements for ModelLogue, a model review platform for s
 | Syntax / 構文 | Meaning / 意味 | Example / 例 |
 |------|---------|---------|
 | `[*] --> S` | Initial transition / 初期遷移 | `[*] --> Idle` |
+| `[*] --> S : / action` | Initial transition with an action (no event, no guard) / アクション付き初期遷移（イベント・ガードは書けない） | `[*] --> Idle : / init()` |
 | `S --> [*]` | Final transition / 終了遷移 | `Done --> [*]` |
 | `S1 --> S2 : event` | Transition with event / イベント付き遷移 | `Idle --> Active : start` |
 | `S1 --> S2 : event [guard]` | Transition with guard / ガード付き遷移 | `Idle --> Processing : submit [valid]` |
@@ -119,6 +120,7 @@ This document defines requirements for ModelLogue, a model review platform for s
 - History pseudo-states (`[H]`, `[H*]`) / ヒストリ擬似状態
 - Dot-notation entry to a specific child (`X.Y`) / ドット記法による直接進入
 - Entry/exit point pseudo-states / entry/exit point擬似状態
+- Event or guard on an initial transition (`[*] --> S : ev`, `[*] --> S : [g]`) — UML forbids them: the initial transition fires as soon as its region is entered, so there is nothing to wait for and no alternative to guard against. Only an action is allowed / 初期遷移へのイベント・ガード — UML で禁止。初期遷移は領域に入った瞬間に起きるため、待つイベントも選び分ける条件もない。アクションだけ書ける
 
 > **複合状態の制限について**: ModelLogueは PlantUML の完全互換ではなく、レビュー目的に絞った最小サブセットをサポートする。1階層の複合状態だけをサポートすることで、設計のDRY化と状態遷移表のレイヤード戦略を実現しつつ、実装コストを抑えている。詳細は [ADR-009](../adr/ADR-009-composite-states-minimal-subset.yaml) を参照。
 
@@ -132,6 +134,7 @@ This document defines requirements for ModelLogue, a model review platform for s
 | 4 | ソースに直交領域（複合状態内の `--` 区切り）がある | パーサーが区切りに到達する | 構文エラーを報告する。サポート対象外（ADR-009） |
 | 5 | ソースにヒストリ擬似状態（`[H]` 等）がある | パーサーがヒストリマーカーに到達する | 構文エラーを報告する。サポート対象外（ADR-009） |
 | 6 | ソースにドット記法による進入（`X.Y`）がある | パーサーがドット記法に到達する | 構文エラーを報告する。サポート対象外（ADR-009） |
+| 7 | 初期遷移にイベントまたはガードが書かれている（`[*] --> S : ev`、`[*] --> S : [g]`） | パーサーがその行を解析する | 構文エラーを報告する。初期遷移に書けるのはアクション（`[*] --> S : / init()`）だけ（UML） |
 
 ### 3.2 Diagram Display / 図の表示
 

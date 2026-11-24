@@ -69,7 +69,6 @@ export async function generate(
     name: options.name ?? 'untitled',
     format: options.format,
     layered: options.layered ?? true,
-    max_cycle_unroll: options.max_cycle_unroll ?? 3,
     require_final: options.require_final ?? false,
   };
   let resp: Response;

@@ -137,7 +137,7 @@ async function run(scenario) {
 | id | label | 検証するもの |
 |---|---|---|
 | `04-nswitch-levels` | N-switch レベル切替（0/1/2） | N セレクタで required chains 件数が増えていく、View: Tests / Coverage トグル、Copy / Save で §6.1/§6.2 の CSV が出る |
-| `05-unreachable-within-cap` | Unreachable — 到達不能状態の検出 | disconnected component を含むモデルで `uncovered` バナーが出る／Coverage ビューで amber 行（status=unreachable-within-cap）が並ぶ |
+| `05-unreachable` | Unreachable — 到達不能状態の検出 | disconnected component を含むモデルで `uncovered` バナーが出る／Coverage ビューで amber 行（status=unreachable）が並ぶ |
 | `06-composite-layers` | 複合状態のレイヤ分解 | nswitch の §7.1 レイヤ分解で `top-NNN` と `Operating-NNN` の 2 系統が出る。Coverage ビュー列ヘッダも両レイヤの test_id を持つ |
 | `07-mainloop-cycle-closure` | Mainloop（終了なし）— サイクルクロージャ | `[*]_final` なしの mainloop。§7.4 の cycle closure fallback により、テストの `end` 列が通常状態になる |
 

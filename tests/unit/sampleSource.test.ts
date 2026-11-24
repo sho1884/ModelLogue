@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parse } from '../../src/modelTypes/state-machine/parser';
 
-// Sanity check that the sample source shipped in sessionStore parses cleanly.
+// Sanity check that a representative sample (ModelLogue's own review
+// process) parses cleanly.
 // The sample uses one-level composite states per ADR-009.
 const SAMPLE_SOURCE = `@startuml
 state "初版生成" as InitialGeneration {
@@ -30,7 +31,7 @@ state "合意形成" as Agreed
 state "モデル修正保留" as Postponed
 state "要求仕様の不備発覚" as SpecIssue
 
-[*] --> InitialGeneration : 要求仕様＋文法ルール
+[*] --> InitialGeneration
 InitialGeneration --> ReviewLoop
 
 ReviewLoop --> Agreed : 指摘がすべて解消された

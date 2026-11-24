@@ -142,6 +142,33 @@ def test_generate_rejects_bad_n():
         assert body["error"]["type"] == "invalid_request"
 
 
+def test_generate_rejects_unknown_field():
+    with running_server() as base:
+        status, body, _ = _post(
+            f"{base}/generate", {"source": PUML_MIN, "max_cycle_unroll": 3}
+        )
+        assert status == 400
+        assert body["error"]["type"] == "invalid_request"
+        assert "max_cycle_unroll" in body["error"]["message"]
+
+
+def test_generate_accepts_every_documented_field():
+    with running_server() as base:
+        status, _, _ = _post(
+            f"{base}/generate",
+            {
+                "source": PUML_MIN,
+                "format": "puml",
+                "n": 1,
+                "invalid": False,
+                "name": "order",
+                "layered": True,
+                "require_final": False,
+            },
+        )
+        assert status == 200
+
+
 def test_generate_rejects_bad_format():
     with running_server() as base:
         status, body, _ = _post(

@@ -70,6 +70,15 @@ class _Handler(BaseHTTPRequestHandler):
         if body is None:
             return  # error already sent
 
+        unknown = sorted(set(body) - _GENERATE_FIELDS)
+        if unknown:
+            self._send_error(
+                HTTPStatus.BAD_REQUEST,
+                "invalid_request",
+                "unknown field(s): " + ", ".join(f"`{k}`" for k in unknown),
+            )
+            return
+
         source = body.get("source")
         if not isinstance(source, str) or not source.strip():
             self._send_error(
@@ -132,15 +141,6 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
-        max_cycle_unroll = body.get("max_cycle_unroll", 3)
-        if not isinstance(max_cycle_unroll, int) or max_cycle_unroll < 1:
-            self._send_error(
-                HTTPStatus.BAD_REQUEST,
-                "invalid_request",
-                "`max_cycle_unroll` must be a positive integer",
-            )
-            return
-
         require_final = body.get("require_final", False)
         if not isinstance(require_final, bool):
             self._send_error(
@@ -170,7 +170,6 @@ class _Handler(BaseHTTPRequestHandler):
                 invalid=invalid,
                 name=name,
                 layered=layered,
-                max_cycle_unroll=max_cycle_unroll,
                 require_final=require_final,
             )
         except ValueError as e:
@@ -252,6 +251,13 @@ class _Handler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Methods", "GET, POST, OPTIONS"
         )
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+
+# Request fields accepted by POST /generate (§9.2.2). Anything else is
+# rejected as `invalid_request` (§9.2.4).
+_GENERATE_FIELDS = frozenset(
+    {"source", "format", "n", "invalid", "name", "layered", "require_final"}
+)
 
 
 class _ThreadingServer(socketserver.ThreadingMixIn, socketserver.TCPServer):

@@ -3,9 +3,8 @@ import type { Scenario } from './types';
 // Loads a model with a disconnected component (two states that are not
 // reachable from the initial pseudo-state). The coverage engine reports
 // every required chain anchored in that component as
-// `unreachable-within-cap`, because no path exists from init to the
-// chain head within the cycle-unroll budget (see
-// tools/nswitch/Requirements_Specification.md §7.4).
+// `unreachable`, because no path exists from init to the chain head
+// (see tools/nswitch/Requirements_Specification.md §7.3).
 //
 // Target: SR-103 (uncovered banner above the table) + SR-102 (coverage
 // view — amber status / reason columns). This is a common real-world
@@ -28,10 +27,10 @@ function wrap(source: string): string {
 }
 
 const scenario: Scenario = {
-  id: '05-unreachable-within-cap',
+  id: '05-unreachable',
   label: 'Unreachable — 到達不能状態の検出',
   description:
-    '初期から到達できない disconnected component (Stray / Forgotten) を含むモデル。Test cases タブ上部に黄色の "uncovered" バナーが出て、View: Coverage に切り替えると amber でハイライトされた status=unreachable-within-cap の行が並ぶ。モデリング漏れの早期発見に使える。',
+    '初期から到達できない disconnected component (Stray / Forgotten) を含むモデル。Test cases タブ上部に黄色の "uncovered" バナーが出て、View: Coverage に切り替えると amber でハイライトされた status=unreachable の行が並ぶ。モデリング漏れの早期発見に使える。',
   requirementsText:
     '到達不能状態を含むモデルのデモ。Stray / Forgotten の 2 状態は [*] から一度も到達できないので、それらを含む要求チェーンはすべて uncovered として報告される。',
   steps: [

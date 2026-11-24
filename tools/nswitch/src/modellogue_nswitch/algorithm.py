@@ -114,7 +114,6 @@ def build_tests(
     layer: Layer,
     n: int,
     *,
-    max_cycle_unroll: int,
     require_final: bool,
 ) -> LayerResult:
     """Construct a cover of Required[layer] per §7.4.
@@ -127,7 +126,6 @@ def build_tests(
         layer,
         layer.initial_id,
         {layer.final_id},
-        max_cycle_unroll=max_cycle_unroll,
     ) is not None
 
     if require_final and not final_reachable:
@@ -152,7 +150,6 @@ def build_tests(
             layer,
             layer.initial_id,
             {c[0].source_state_id},
-            max_cycle_unroll=max_cycle_unroll,
             allow_empty=True,
         )
         if p1 is None:
@@ -160,7 +157,7 @@ def build_tests(
                 Unreachable(
                     layer_name=layer.name,
                     chain=c,
-                    reason="no path from initial to chain head within cap",
+                    reason="chain head is unreachable from the initial state",
                 )
             )
             continue
@@ -174,7 +171,6 @@ def build_tests(
                 layer,
                 tail_start,
                 {layer.final_id},
-                max_cycle_unroll=max_cycle_unroll,
                 # When the tail is already at a final, the empty suffix is valid.
                 allow_empty=True,
             )
@@ -186,7 +182,6 @@ def build_tests(
                 layer,
                 tail_start,
                 visited,
-                max_cycle_unroll=max_cycle_unroll,
                 allow_empty=True,
             )
             if p2 is None:
@@ -194,7 +189,7 @@ def build_tests(
                     Unreachable(
                         layer_name=layer.name,
                         chain=c,
-                        reason="no final-reaching or cycle-closing suffix within cap",
+                        reason="no final-reaching or cycle-closing continuation",
                     )
                 )
                 continue
@@ -257,7 +252,7 @@ def invalid_cells(layer: Layer) -> list[tuple[str, str]]:
 
 
 def build_negative_tests(
-    layer: Layer, *, max_cycle_unroll: int
+    layer: Layer,
 ) -> tuple[list[NegativeTest], list[Unreachable]]:
     """One negative test per invalid cell whose source state is reachable."""
     tests: list[NegativeTest] = []
@@ -267,7 +262,6 @@ def build_negative_tests(
             layer,
             layer.initial_id,
             {state_id},
-            max_cycle_unroll=max_cycle_unroll,
             allow_empty=True,
         )
         if prefix is None:
@@ -277,7 +271,7 @@ def build_negative_tests(
                     chain=(),
                     reason=(
                         f"invalid cell {state_id}--{event}--x: "
-                        "source state unreachable within cap"
+                        "source state is unreachable from the initial state"
                     ),
                 )
             )
@@ -314,12 +308,8 @@ def _any_path(
     layer: Layer,
     source: str,
     targets: set[str],
-    *,
-    max_cycle_unroll: int,
 ) -> tuple[Transition, ...] | None:
-    return _shortest_path(
-        layer, source, targets, max_cycle_unroll=max_cycle_unroll, allow_empty=True
-    )
+    return _shortest_path(layer, source, targets, allow_empty=True)
 
 
 def _shortest_path(
@@ -327,62 +317,41 @@ def _shortest_path(
     source: str,
     targets: set[str],
     *,
-    max_cycle_unroll: int,
     allow_empty: bool = False,
 ) -> tuple[Transition, ...] | None:
-    """BFS shortest path in the transition graph, respecting the cycle cap.
+    """Breadth-first shortest path in the transition graph (§7.3).
 
-    Returns the path as a tuple of transitions, or ``None`` if no path exists
-    within ``max_cycle_unroll`` traversals of any single transition. If
-    ``source in targets`` and ``allow_empty`` is True, returns an empty tuple.
+    Returns the path as a tuple of transitions, or ``None`` if no state in
+    ``targets`` is reachable. If ``source in targets`` and ``allow_empty`` is
+    True, returns an empty tuple. A shortest path never takes a transition
+    twice, so the search visits each state at most once and its cost is
+    proportional to the number of states and transitions.
     """
     if allow_empty and source in targets:
         return ()
 
-    # Adjacency list for speed.
     adj: dict[str, list[Transition]] = defaultdict(list)
     for t in layer.transitions:
         adj[t.source_state_id].append(t)
 
-    # BFS: state = (current_state, transition_counts). We can't key the
-    # visited set by current_state alone because different paths need
-    # different cap-budgets. We use (current_state, frozenset of counts)? That
-    # explodes. A practical alternative: BFS with path-specific counts,
-    # pruning by (state, cap-profile) only approximately.
-    #
-    # For the realistic review-scale models and max_cycle_unroll in the 2–5
-    # range, exhaustive BFS up to a reasonable depth works. We bound total
-    # path length by ``|transitions| * max_cycle_unroll`` as a safety net.
-    max_len = max(1, max_cycle_unroll * max(1, len(layer.transitions)))
-
-    queue: deque[tuple[str, tuple[Transition, ...], dict[Transition, int]]]
-    queue = deque()
-    queue.append((source, (), {}))
-
-    # A per-(state, canonicalized-cap) visited set to prune. Canonicalize the
-    # cap dict by excluding zero counts. This is approximate pruning — we
-    # keep the path-length bound as the hard stop.
-    seen: set[tuple[str, frozenset[tuple[Transition, int]]]] = set()
-
+    # parent[state] = transition that first reached it (BFS tree).
+    parent: dict[str, Transition | None] = {source: None}
+    queue: deque[str] = deque([source])
     while queue:
-        node, path, counts = queue.popleft()
-        if len(path) > max_len:
-            continue
-        key = (node, frozenset(counts.items()))
-        if key in seen:
-            continue
-        seen.add(key)
-
+        node = queue.popleft()
         for t in adj.get(node, ()):
-            if counts.get(t, 0) + 1 > max_cycle_unroll:
-                continue
-            new_path = path + (t,)
-            if t.target_state_id in targets:
-                return new_path
-            new_counts = dict(counts)
-            new_counts[t] = counts.get(t, 0) + 1
-            queue.append((t.target_state_id, new_path, new_counts))
-
+            nxt = t.target_state_id
+            if nxt in targets:
+                path = [t]
+                cur = node
+                while parent[cur] is not None:
+                    step = parent[cur]
+                    path.append(step)
+                    cur = step.source_state_id
+                return tuple(reversed(path))
+            if nxt not in parent:
+                parent[nxt] = t
+                queue.append(nxt)
     return None
 
 

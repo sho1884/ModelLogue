@@ -176,7 +176,6 @@ def generate(
     invalid: bool = False,
     name: str = "untitled",
     layered: bool = True,
-    max_cycle_unroll: int = 3,
     require_final: bool = False,
 ) -> GenerationResult:
     if n not in (0, 1, 2):
@@ -195,9 +194,7 @@ def generate(
             # INV mode: negative Tests only (never mixed with positive 0S).
             # A forbidden transition can't sit on a walk, so no Scenarios exist
             # here (§1.1) — we don't even build the positive cover.
-            negs, neg_unreach = build_negative_tests(
-                layer, max_cycle_unroll=max_cycle_unroll
-            )
+            negs, neg_unreach = build_negative_tests(layer)
             uncovered.extend(neg_unreach)
             for i, nt in enumerate(negs, start=1):
                 all_tests.append(
@@ -213,9 +210,7 @@ def generate(
             continue
 
         # Positive mode: Scenarios (greedy cover walks) + positive Tests.
-        lr = build_tests(
-            layer, n, max_cycle_unroll=max_cycle_unroll, require_final=require_final
-        )
+        lr = build_tests(layer, n, require_final=require_final)
         uncovered.extend(lr.unreachable)
         scen_paths = lr.tests
         scenarios: list[Scenario] = []

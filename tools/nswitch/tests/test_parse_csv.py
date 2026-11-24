@@ -136,16 +136,28 @@ def test_label_defaults_to_id_when_empty():
     assert a.label == "A"
 
 
-def test_initial_cell_with_guard_and_action():
+def test_initial_cell_with_action():
     text = (
         "state,label,parent,type,initial,e\n"
-        "A,,,normal,Y [ready] / init(),B\n"
+        "A,,,normal,Y / init(),B\n"
         "B,,,normal,,\n"
     )
     m = parse_csv(text)
     init_t = next(t for t in m.transitions if t.source_state_id == "[*]_init")
-    assert init_t.guard == "ready"
+    assert init_t.guard is None
     assert init_t.action == "init()"
+
+
+@pytest.mark.parametrize("cell", ["Y [ready]", "Y [ready] / init()"])
+def test_initial_cell_with_guard_is_rejected(cell):
+    # §4.2.3: an initial transition carries an action only (UML).
+    text = (
+        "state,label,parent,type,initial,e\n"
+        f"A,,,normal,{cell},B\n"
+        "B,,,normal,,\n"
+    )
+    with pytest.raises(CsvParseError, match="cannot have an event or guard"):
+        parse_csv(text)
 
 
 def test_semicolon_separated_multiple_transitions():

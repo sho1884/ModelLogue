@@ -108,6 +108,37 @@ def test_rejects_dot_notation_entry():
         parse_puml("@startuml\nA --> Outer.Child : e\n@enduml\n")
 
 
+def test_initial_transition_accepts_action():
+    m = parse_puml("@startuml\n[*] --> A : / init()\nA --> [*] : done\n@enduml\n")
+    init_t = next(t for t in m.transitions if t.target_state_id == "A")
+    assert (init_t.event, init_t.guard, init_t.action) == (None, None, "init()")
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "[*] --> A : boot",
+        "[*] --> A : [ready]",
+        "[*] --> A : [ready] / init()",
+        "[*] --> A : boot [ready] / init()",
+    ],
+)
+def test_rejects_event_or_guard_on_initial_transition(line):
+    # UML: an initial transition carries an action only.
+    with pytest.raises(PumlParseError, match="cannot have an event or guard"):
+        parse_puml(f"@startuml\n{line}\nA --> [*] : done\n@enduml\n")
+
+
+def test_rejects_event_on_composite_internal_initial_transition():
+    with pytest.raises(PumlParseError, match="cannot have an event or guard"):
+        parse_puml("@startuml\n[*] --> Op\nstate Op {\n  [*] --> R : go\n}\n@enduml\n")
+
+
+def test_rejects_initial_to_initial():
+    with pytest.raises(PumlParseError):
+        parse_puml("@startuml\n[*] --> [*]\n@enduml\n")
+
+
 def test_rejects_unclosed_composite():
     with pytest.raises(PumlParseError):
         parse_puml(

@@ -76,7 +76,6 @@ export interface NswitchGenerateOptions {
   name?: string; // scope name for the outermost machine (§1.1)
   format?: 'puml' | 'csv';
   layered?: boolean;
-  max_cycle_unroll?: number;
   require_final?: boolean;
   signal?: AbortSignal;
 }

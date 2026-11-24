@@ -25,6 +25,13 @@ TRANSITION_PATTERN = re.compile(
     rf"(?P<tgt>{_PSEUDO_OR_ID})(?:\s*:\s*(?P<label>.+))?$"
 )
 
+# Label of an initial transition: action only (`/ action`).
+INITIAL_LABEL_PATTERN = re.compile(r"^/\s*(?P<action>\S.*)$")
+INITIAL_LABEL_ERROR = (
+    "initial transition cannot have an event or guard; "
+    "only an action is allowed ([*] --> X : / action)"
+)
+
 COMPOSITE_OPEN_PATTERN = re.compile(
     rf'^state\s+(?:"(?P<label>[^"]+)"\s+as\s+)?(?P<alias>{_ID})\s*\{{\s*$'
 )
@@ -155,6 +162,22 @@ def parse_puml(source: str) -> StateMachineModel:
             raw_tgt = m.group("tgt")
             label_part = m.group("label")
 
+            # An initial transition ([*] --> X) fires on entry to its region:
+            # it may carry an action, but never an event or a guard (UML).
+            initial_action: str | None = None
+            if raw_src == INITIAL_STATE_ID:
+                if raw_tgt == INITIAL_STATE_ID:
+                    raise PumlParseError(
+                        line_num,
+                        "initial transition must target a state "
+                        "([*] --> [*] is not allowed)",
+                    )
+                if label_part:
+                    am = INITIAL_LABEL_PATTERN.match(label_part.strip())
+                    if not am:
+                        raise PumlParseError(line_num, INITIAL_LABEL_ERROR)
+                    initial_action = am.group("action").strip()
+
             src = _translate_pseudo(raw_src, "source", current_parent)
             tgt = _translate_pseudo(raw_tgt, "target", current_parent)
             _ensure_state(
@@ -173,7 +196,9 @@ def parse_puml(source: str) -> StateMachineModel:
             event: str | None = None
             guard: str | None = None
             action: str | None = None
-            if label_part:
+            if raw_src == INITIAL_STATE_ID:
+                action = initial_action
+            elif label_part:
                 event, guard, action = _parse_label(label_part.strip())
 
             transitions.append(

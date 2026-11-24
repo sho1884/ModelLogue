@@ -125,15 +125,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Treat composites as opaque leaves (no child-layer tests).",
     )
     p.add_argument(
-        "--max-cycle-unroll",
-        type=int,
-        default=3,
-        help=(
-            "Per-test cap on how many times any single transition may be "
-            "traversed during path construction (§7.4). Default: 3."
-        ),
-    )
-    p.add_argument(
         "--require-final",
         action="store_true",
         help=(
@@ -197,7 +188,6 @@ def main(argv: list[str] | None = None) -> int:
             invalid=args.invalid,
             name=args.name,
             layered=args.layered,
-            max_cycle_unroll=args.max_cycle_unroll,
             require_final=args.require_final,
         )
     except ValueError as e:
@@ -224,14 +214,14 @@ def main(argv: list[str] | None = None) -> int:
 
     _write_output(args.output, csv_text)
 
-    # Warn on any remaining uncovered chains (cycle-unroll cap, etc.).
+    # Warn on any remaining uncovered chains (unreachable, §7.3).
     uncovered_non_final = [
         u for u in result.uncovered if not u.reason.startswith("--require-final:")
     ]
     if uncovered_non_final:
         print(
-            f"Warning: {len(uncovered_non_final)} chain(s) left uncovered due to "
-            "--max-cycle-unroll cap",
+            f"Warning: {len(uncovered_non_final)} chain(s) left uncovered "
+            "(unreachable)",
             file=sys.stderr,
         )
         for u in uncovered_non_final:

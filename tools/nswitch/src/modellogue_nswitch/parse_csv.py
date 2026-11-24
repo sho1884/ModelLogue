@@ -9,6 +9,7 @@ import io
 import re
 
 from .model import State, StateMachineModel, Transition
+from .parse_puml import INITIAL_LABEL_ERROR
 
 
 class CsvParseError(ValueError):
@@ -152,8 +153,12 @@ def parse_csv(text: str) -> StateMachineModel:
         if not m:
             raise CsvParseError(
                 f"state '{fixed['state']}': invalid `initial` cell "
-                f"'{raw}' (expected Y | Y [guard] | Y / action | "
-                f"Y [guard] / action)"
+                f"'{raw}' (expected Y | Y / action)"
+            )
+        if m.group(1) is not None:
+            # §4.2.3: an initial transition carries an action only.
+            raise CsvParseError(
+                f"state '{fixed['state']}': {INITIAL_LABEL_ERROR}"
             )
         layer = fixed["parent"] or None
         if layer in initial_by_layer:
@@ -161,9 +166,8 @@ def parse_csv(text: str) -> StateMachineModel:
                 f"multiple initial targets in layer "
                 f"{'top' if layer is None else layer!r}"
             )
-        guard = m.group(1).strip() if m.group(1) else None
         action = m.group(2).strip() if m.group(2) else None
-        initial_by_layer[layer] = (fixed["state"], guard, action)
+        initial_by_layer[layer] = (fixed["state"], None, action)
 
     # Synthesize initial / final pseudo-states and their transitions.
     transitions: list[Transition] = []
@@ -217,7 +221,7 @@ def parse_csv(text: str) -> StateMachineModel:
                 )
 
     # Synthesize per-layer initial pseudo-states and their outgoing transitions
-    # (events=None, with optional guard/action captured from the `initial` cell).
+    # (events=None, with an optional action captured from the `initial` cell).
     initial_ids_per_layer: dict[str | None, str] = {}
     for layer, (target, guard, action) in initial_by_layer.items():
         init_id = "[*]_init" if layer is None else f"[*]_init_{layer}"

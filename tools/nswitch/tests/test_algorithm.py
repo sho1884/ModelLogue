@@ -57,7 +57,7 @@ def test_required_chains_rejects_out_of_range_n():
 def test_build_tests_flat_model_1_switch_covers_all_chains():
     layers = decompose(_flat_model())
     top = layers[0]
-    lr = build_tests(top, n=1, max_cycle_unroll=3, require_final=False)
+    lr = build_tests(top, n=1, require_final=False)
     assert not lr.unreachable
     # One or more tests whose concatenated `covers` contain every required chain.
     assert lr.tests
@@ -72,8 +72,8 @@ def test_build_tests_flat_model_1_switch_covers_all_chains():
 def test_build_tests_determinism():
     layers = decompose(_flat_model())
     top = layers[0]
-    a = build_tests(top, n=1, max_cycle_unroll=3, require_final=False)
-    b = build_tests(top, n=1, max_cycle_unroll=3, require_final=False)
+    a = build_tests(top, n=1, require_final=False)
+    b = build_tests(top, n=1, require_final=False)
     assert [t.transitions for t in a.tests] == [t.transitions for t in b.tests]
 
 
@@ -89,7 +89,7 @@ def test_build_tests_require_final_errors_on_cyclic_only_layer():
     # No [*]_final — every test must either close on a cycle or be rejected.
     layers = decompose(model)
     top = layers[0]
-    lr = build_tests(top, n=1, max_cycle_unroll=3, require_final=True)
+    lr = build_tests(top, n=1, require_final=True)
     assert not lr.tests
     assert lr.unreachable
     assert all(
@@ -108,7 +108,7 @@ def test_build_tests_cycle_closure_fallback_for_mainloop_models():
     )
     layers = decompose(model)
     top = layers[0]
-    lr = build_tests(top, n=1, max_cycle_unroll=3, require_final=False)
+    lr = build_tests(top, n=1, require_final=False)
     # Without --require-final, the builder falls back to cycle-closure.
     assert lr.tests
     # No uncovered chains.

@@ -129,6 +129,8 @@ last_updated: "2026-11-20"
 # Supported PlantUML state diagram syntax (simplified subset):
 #   @startuml / @enduml
 #   [*] --> StateName             (initial transition)
+#   [*] --> StateName : / action  (initial transition with an action;
+#                                  no event or guard — UML)
 #   StateName --> [*]             (final transition)
 #   StateName --> StateName : event [guard] / action
 #   state "Display Name" as alias
@@ -146,6 +148,7 @@ last_updated: "2026-11-20"
 #   History pseudo-states ([H], [H*])
 #   Dot-notation entry to a specific child (CompositeName.ChildState)
 #   Entry/exit point pseudo-states
+#   Event or guard on an initial transition ([*] --> S : ev / [*] --> S : [g])
 #
 # See ADR-009 for the rationale behind this minimal composite-state subset.
 
@@ -197,6 +200,7 @@ source_editing:
       - "Track parent-child relationships in the StateMachineModel"
       - "Recognize composite-level transitions as group escape (source = composite name)"
       - "Recognize the internal initial transition ([*] --> Child) inside a composite"
+      - "An initial transition ([*] --> S, top level or inside a composite) may carry an action (`[*] --> S : / init()`) but never an event or a guard; either one is a syntax error with the line number (UML: the initial transition fires on entry to its region, so it has nothing to wait for and nothing to choose between)"
       - "Strip inline comments (' comment) before parsing; quotes inside \"...\" string literals are preserved"
       - "Skip full-line comments (lines starting with ' or #)"
       - "Silently skip non-semantic PlantUML directives that do not affect the state-machine model, so AI-generated proposals are not rejected over presentation hints the subset doesn't use. Tolerated prefixes (case-insensitive): hide / show / skinparam / !theme / !pragma / !include / !define / scale / title / caption / header / footer / mainframe / legend / end legend / note / end note / left to right direction / top to bottom direction. ADR-009's hard rejections (history, orthogonal regions, dot-notation entry, nested composites) remain errors"
@@ -224,6 +228,9 @@ source_editing:
       - context: "Source contains dot-notation entry (Composite.Child)"
         action: "Parser encounters the dot-notation reference"
         outcome: "Syntax error reported; dot-notation entry is not supported (ADR-009)"
+      - context: "Source has an initial transition with an event or a guard ([*] --> S : ev, [*] --> S : [g])"
+        action: "Parser processes the line"
+        outcome: "Syntax error reported; an initial transition may carry only an action ([*] --> S : / init()) (UML)"
 
   SR-003:
     function: "Serialize state machine model to PlantUML source"
@@ -902,7 +909,7 @@ artifact_export:
       subcommand (spec: tools/nswitch/Requirements_Specification.md §9.2),
       and the GUI adds a Test cases tab that calls that service whenever
       the PlantUML source parses cleanly. Failure modes (service down,
-      parse error, uncovered-within-cap warnings) are surfaced in-place
+      parse error, uncovered-chain warnings) are surfaced in-place
       inside the tab rather than blocking the rest of the UI.
 
       Trigger policy mirrors SR-010's SVG-fetch policy: debounce on source

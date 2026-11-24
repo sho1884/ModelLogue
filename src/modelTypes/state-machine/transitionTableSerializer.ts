@@ -47,8 +47,9 @@ function formatGuardAction(
   return g + a;
 }
 
+// An initial transition carries an action only, never a guard (§4.2.3).
 function formatInitialCell(t: Transition): string {
-  return `Y${formatGuardAction(t.guard, t.action)}`;
+  return `Y${formatGuardAction(null, t.action)}`;
 }
 
 function formatEventCell(target: string, t: Transition): string {
